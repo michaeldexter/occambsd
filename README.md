@@ -19,7 +19,6 @@ FreeBSD 13.0-ALPHA1 source code or later
 /tmp/occambsd/root		The optional virtual machine kernel directory
 /tmp/occambsd/occambsd.raw	The virtual machine disk image
 /tmp/occambsd/mnt		A mount point used during VM image creation
-
 ```
 
 bhyve load, boot, and destroy commands will be printed after build completion.
