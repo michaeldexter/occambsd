@@ -360,27 +360,22 @@ mdconfig -lv
 echo
 echo The resulting disk image is $playground/occambsd.raw
 echo
-echo Make note of these commands:
+echo Note these setup and tear-down scripts:
 echo
 
-echo kldload vmm
+echo kldload vmm > $playground/load-vmm-module.sh
+echo $playground/load-vmm-module.sh
+echo bhyveload -h $playground/root/ -m 1024 occambsd \
+	> $playground/load-from-directory.sh
+echo $playground/load-from-directory.sh
+echo bhyveload -d $playground/occambsd.raw -m 1024 occambsd \
+	> $playground/load-from-disk-image.sh
+echo $playground/load-from-disk-image.sh
+echo bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$playground/occambsd.raw -s 31,lpc -l com1,stdio occambsd \
+	> $playground/boot-occam-vm.sh
+echo $playground/boot-occam-vm.sh
+echo bhyvectl --destroy --vm=occambsd \
+	> $playground/destroy-occam-vm.sh
+echo $playground/destroy-occam-vm.sh
 echo
-
-echo Load the occambsd kernel from $playground/root/
-echo bhyveload -h $playground/root/ -m 1024 occambsd
-echo
-
-echo Load the occambsd kernel from $playground/occambsd.raw
-echo bhyveload -d $playground/occambsd.raw -m 1024 occambsd
-echo
-
-echo launch the vm with bhyve
-echo bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$playground/occambsd.raw -s 31,lpc -l com1,stdio occambsd
-
-echo
-echo Destroy the VM before launching it again
-echo bhyvectl --destroy --vm=occambsd
-echo
-
-echo Some clever jail command for $playground/jail
 exit 0
