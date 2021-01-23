@@ -15,10 +15,10 @@ FreeBSD 13.0-ALPHA1 source code or later
 
 ```
 /tmp/occambsd
-/tmp/occambsd/jail		                   A world/distribution for use with jail(8)
-/tmp/occambsd/root		                  The optional virtual machine kernel directory
-/tmp/occambsd/occambsd.raw	            The virtual machine disk image
-/tmp/occambsd/mnt		                    A mount point used during VM image creation
+/tmp/occambsd/jail                      A world/distribution for use with jail(8)
+/tmp/occambsd/root                      The optional virtual machine kernel directory
+/tmp/occambsd/occambsd.raw              The virtual machine disk image
+/tmp/occambsd/mnt                       A mount point used during VM image creation
 /tmp/occambsd/load-vmm-module.sh        A script to load the vmm.ko kernel module
 /tmp/occambsd/load-from-directory.sh    A script to load the VM kernel from the directory
 /tmp/occambsd/load-from-disk-image.sh   A script to load thd VM from disk image (pick one)
