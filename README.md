@@ -30,12 +30,10 @@ bhyve load, boot, and destroy commands will be printed after build completion.
 
 ## Build times on an EPYC 7402p
 
-buildworld:	1m15.82s
-buildkernel:	9.35s
-installworld:	14.63ss
+buildworld:	1m14.52s
+buildkernel:	12.09s
+installworld: 15.02s
 installkernel:	0.32s
-
-Total:		Approximately three minutes
 
 Boot time:	Approximately two seconds
 
