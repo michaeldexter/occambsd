@@ -440,6 +440,16 @@ growfs_enable=YES
 EOF
 
 echo
+echo Generating Xen kernel rc.conf
+        
+echo
+tee -a $playground/xen-kernel/etc/rc.conf <<EOF
+hostname="occambsd-xen"
+ifconfig_DEFAULT="DHCP inet6 accept_rtadv"
+growfs_enable=YES
+EOF
+
+echo
 echo Generating jail rc.conf
 echo
 tee -a $playground/jail/etc/rc.conf <<EOF
@@ -559,6 +569,8 @@ echo
 echo Configuring the Xen serial console
 printf "%s" "-h -S115200" >> $playground/xen-mnt/boot.config
 printf "%s" "-h -S115200" >> $playground/xen-kernel/boot.config
+echo 'xc0     "/usr/libexec/getty Pc"         xterm   onifconsole  secure' \
+	>> $playground/xen-kernel/etc/ttys
 
 # DEBUG Is it needed there?
 # tzsetup will fail on separated kernel/userland - point at userland somehow
@@ -598,7 +610,7 @@ HERE
 
 echo Generating xen-occambsd-vm.cfg
 cat << HERE > $playground/xen-occambsd.cfg
-builder = "hvm"
+type = "hvm"
 memory = 2048
 vcpus = 2
 name = "OccamBSD"
@@ -613,7 +625,7 @@ HERE
 
 echo Generating xen-occambsd-kernel.cfg
 cat << HERE > $playground/xen-occambsd-kernel.cfg
-builder = "hvm"
+type = "pvh"
 memory = 2048
 vcpus = 2
 name = "OccamBSD"
@@ -652,14 +664,18 @@ echo "bhyvectl --destroy --vm=occambsd" \
 echo $playground/destroy-occambsd-bhyve.sh
 
 echo
-echo "xl create $playground/xen-occambsd.cfg -c" \
+echo "xl create -c $playground/xen-occambsd.cfg" \
 	> $playground/boot-occambsd-xen.sh
 echo $playground/boot-occambsd-xen.sh
-echo "xl create $playground/xen-occambsd-kernel.cfg -c" \
+echo "xl create -c $playground/xen-occambsd-kernel.cfg" \
 	> $playground/boot-occambsd-xen-kernel.sh
 echo $playground/boot-occambsd-xen-kernel.sh
 echo "xl destroy OccamBSD" > $playground/destroy-occambsd-xen.sh
 echo $playground/destroy-occambsd-xen.sh
+
+# Notes while debugging
+#xl console -t pv OccamBSD
+#xl console -t serial OccamBSD
 
 echo
 echo "jail -c -f $playground/jail.conf command=/bin/sh" \
