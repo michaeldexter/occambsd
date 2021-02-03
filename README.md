@@ -16,7 +16,7 @@ FreeBSD 13.0-ALPHA3 source code or later in /usr/src
 ```
 /tmp/occambsd
 /tmp/occambsd/src.conf                      OccamBSD src.conf
-/usr/src/sys/amd64/conf/OCCAMBSD            OccamBSD kernel configuration file
+/tmp/occambsd/OCCAMBSD                      OccamBSD kernel configuration file
 
 /tmp/occambsd/bhyve-kernel                  bhyve kernel directory
 /tmp/occambsd/bhyve-mnt                     bhyve disk image mount point
