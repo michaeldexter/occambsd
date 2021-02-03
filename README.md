@@ -9,7 +9,7 @@ directory mounted at /tmp/occambsd for speed and unobtrusiveness.
 
 ## Requirements
 
-FreeBSD 13.0-ALPHA3 source code or later
+FreeBSD 13.0-ALPHA3 source code or later in /usr/src
 
 ## Layout
 
@@ -41,7 +41,24 @@ FreeBSD 13.0-ALPHA3 source code or later
 /tmp/occambsd/boot-occambsd-jail.sh         Script to boot the jail(8)
 ```
 
-bhyve load, boot, and destroy commands will be printed after build completion.
+## Usage
+
+The occambsd.sh script is position independent and can be executed anywhere on the file system:
+```
+\time -h sh occambsd.sh
+```
+All writes will be to a tmpfs mount on /usr/obj and /tmp/occambsd
+
+The script will ask for enter at each key step, allowing you to inspect the progress, along with ask a few questions.
+
+To boot the results under bhyve, run:
+```
+sh load-bhyve-vmm-module.sh
+sh load-bhyve-disk-image.sh
+sh boot-occambsd-bhyve.sh
+< explore the VM and shut down >
+sh destroy-occambsd-bhyve.sh
+```
 
 ## Build times on an EPYC 7402p
 
