@@ -38,7 +38,7 @@ FreeBSD 13.0-ALPHA3 source code or later
 
 /tmp/occambsd/jail                          Jail root directory
 /tmp/occambsd/jail.conf                     Jail configuration file
-/tmp/occambsd/boot-occambsd-jail.sh        Script to boot the jail(8)
+/tmp/occambsd/boot-occambsd-jail.sh         Script to boot the jail(8)
 ```
 
 bhyve load, boot, and destroy commands will be printed after build completion.
