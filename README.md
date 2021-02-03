@@ -62,13 +62,13 @@ sh destroy-occambsd-bhyve.sh
 
 ## Build times on an EPYC 7402p
 
-buildworld:	1m13.52s
+buildworld:	1m13.41s, 1m12.14s warm ARC
 
-buildkernel:	9.79s
+buildkernel:	12.86s, 9.79s warm ARC
 
-installworld: 15.02s
+installworld: 18.46s, 15.05s warm ARC
 
-installkernel:	0.32s
+installkernel:	0.35s, 0.32s warm ARC
 
 Boot time:	Approximately two seconds
 
