@@ -62,14 +62,16 @@ sh destroy-occambsd-bhyve.sh
 
 ## Build times on an EPYC 7402p
 
-buildworld:	1m14.52s
+buildworld:	1m13.52s
 
-buildkernel:	12.09s
+buildkernel:	9.79s
 
 installworld: 15.02s
 
 installkernel:	0.32s
 
 Boot time:	Approximately two seconds
+
+Total build and installation time for bhyve, Xen, and Jail: 3 minutes
 
 This is not a desired endorsement of GitHub
