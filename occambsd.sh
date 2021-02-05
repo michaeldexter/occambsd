@@ -522,7 +522,7 @@ echo Installing xen-guest-tools to Xen image
 pkg -r $playground/xen-mnt install -y xen-guest-tools
 echo Running pkg -r $playground/xen-mnt info
 pkg -r $playground/xen-mnt info || \
-        { echo Package installation failed ; exit 1 ; }
+	{ echo Package installation failed ; exit 1 ; }
 
 echo
 echo Running df -h | grep $bhyve_md_id
@@ -611,7 +611,7 @@ echo $playground/boot-occambsd-xen.sh
 echo "xl create -c $playground/xen-occambsd-kernel.cfg" \
 	> $playground/boot-occambsd-xen-kernel.sh
 echo $playground/boot-occambsd-xen-kernel.sh
-echo "xl shutdown OccamBSD ; xl destroy OccamBSD" > $playground/destroy-occambsd-xen.sh
+echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > $playground/destroy-occambsd-xen.sh
 echo $playground/destroy-occambsd-xen.sh
 
 # Notes while debugging
