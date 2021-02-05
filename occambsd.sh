@@ -182,8 +182,8 @@ device		acpi
 #device		virtio_balloon		# VirtIO Memory Balloon device
 
 # Luxurious options - sync with build options
-#options		 SMP		# Symmetric MultiProcessor Kernel
-#options		 INET		# InterNETworking
+#options	SMP			# Symmetric MultiProcessor Kernel
+#options	INET			# InterNETworking
 #device		iflib
 #device		em			# Intel PRO/1000 Gigabit Ethernet Family
 HERE
