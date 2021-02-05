@@ -96,7 +96,7 @@ mount -t tmpfs tmpfs /usr/obj/
 
 mount | grep tmpfs
 
-echo Generating /etc/src.conf
+echo Generating $playground/src.conf
 sh /usr/src/tools/tools/build_option_survey/listallopts.sh | grep -v WITH_ | sed 's/$/=YES/' | \
 	grep -v WITHOUT_AUTO_OBJ | \
 	grep -v WITHOUT_UNIFIED_OBJDIR | \
@@ -116,9 +116,9 @@ sh /usr/src/tools/tools/build_option_survey/listallopts.sh | grep -v WITH_ | sed
 # WITHOUT_ZONEINFO is necessary for tzsetup on VM image with a userland
 # WITHOUT_VI could come in handy
 
-[ -f /etc/src.conf ] || { echo /etc/src.conf did not generate ; exit 1 ; }
+[ -f $playground/src.conf ] || { echo $playground/src.conf did not generate ; exit 1 ; }
 
-cat /etc/src.conf
+cat $playground/src.conf
 
 echo
 echo Press the elusive ANY key to continue
@@ -516,6 +516,13 @@ echo Setting the timezone
 tzsetup -s -C $playground/bhyve-mnt UTC
 tzsetup -s -C $playground/xen-mnt UTC
 tzsetup -s -C $playground/jail UTC
+
+echo
+echo Installing xen-guest-tools to Xen image
+pkg -r $playground/xen-mnt install -y xen-guest-tools
+echo Running pkg -r $playground/xen-mnt info
+pkg -r $playground/xen-mnt info || \
+        { echo Package installation failed ; exit 1 ; }
 
 echo
 echo Running df -h | grep $bhyve_md_id
