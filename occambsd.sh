@@ -87,8 +87,7 @@ echo Making directories in $playground
 mkdir -p "$playground/bhyve-kernel/boot"
 mkdir -p "$playground/bhyve-kernel/etc"
 mkdir -p "$playground/bhyve-mnt"
-mkdir -p "$playground/xen-kernel/boot"
-mkdir -p "$playground/xen-kernel/etc"
+mkdir -p "$playground/xen-kernel/boot/kernel"
 mkdir -p "$playground/xen-mnt"
 mkdir -p "$playground/jail"
 
@@ -326,8 +325,9 @@ echo Installing the kernel to $playground/xen-mnt
 [ -f $playground/xen-mnt/boot/kernel/kernel ] || \
 	{ echo xen-mnt kernel failed to install ; exit 1 ; }
 
+# Need not be nested but the familiar location is... familiar.
 echo Installing the kernel to $playground/xen-kernel/
-\time -h make -C $src_dir installkernel KERNCONFDIR=$playground KERNCONF=OCCAMBSD DESTDIR=$playground/xen-kernel/
+cp $playground/xen-mnt/boot/kernel/kernel $playground/xen-kernel/boot/kernel/
 [ -f $playground/xen-kernel/boot/kernel/kernel ] || \
 	{ echo xen-kernel kernel failed to install ; exit 1 ; }
 
@@ -367,10 +367,6 @@ if [ "$response" = "y" ]; then
 	rm -rf A* B* C* E* F* G* H* I* J* K* L* M* N* P* R* S* T* UCT US W* Z*
 fi
 
-# DEBUG Probably far more than needed
-echo Installing distribution to $playground/xen-kernel
-\time -h make -C $src_dir distribution SRCCONF=$playground/src.conf DESTDIR=$playground/xen-kernel
-
 echo Installing distribution to $playground/jail
 \time -h make -C $src_dir distribution SRCCONF=$playground/src.conf DESTDIR=$playground/jail
 
@@ -387,33 +383,6 @@ echo Copying boot components from the mounted device to the root kernel device
 cp -rp $playground/bhyve-mnt/boot/defaults $playground/bhyve-kernel/boot/
 cp -rp $playground/bhyve-mnt/boot/lua $playground/bhyve-kernel/boot/
 cp -p $playground/bhyve-mnt/boot/device.hints $playground/bhyve-kernel/boot/
-
-cp -rp $playground/xen-mnt/boot/defaults $playground/xen-kernel/boot/
-cp -rp $playground/xen-mnt/boot/lua $playground/xen-kernel/boot/
-cp -p $playground/xen-mnt/boot/device.hints $playground/xen-kernel/boot/
-
-#echo
-#echo DEBUG directory listings
-#echo ls $playground/bhyve-mnt
-#ls $playground/bhyve-mnt
-#echo ls $playground/bhyve-mnt/boot
-#ls $playground/bhyve-mnt/boot
-#echo ls $playground/bhyve-mnt/boot/lua
-#ls $playground/bhyve-mnt/boot/lua
-#echo
-#echo ls $playground/bhyve-kernel
-#ls $playground/bhyve-kernel
-#echo ls $playground/bhyve-kernel/boot
-#ls $playground/bhyve-kernel/boot
-#echo ls $playground/bhyve-kernel/boot/lua
-#ls $playground/bhyve-kernel/boot/lua
-#echo
-#echo ls $playground/xen-kernel
-#ls $playground/xen-kernel
-#echo ls $playground/xen-kernel/boot
-#ls $playground/xen-kernel/boot
-#echo ls $playground/xen-kernel/boot/lua
-#ls $playground/xen-kernel/boot/lua
 
 echo
 echo Press the elusive ANY key to continue to configuration
@@ -434,16 +403,6 @@ echo Generating Xen rc.conf
 
 echo
 tee -a $playground/xen-mnt/etc/rc.conf <<EOF
-hostname="occambsd-xen"
-ifconfig_DEFAULT="DHCP inet6 accept_rtadv"
-growfs_enable=YES
-EOF
-
-echo
-echo Generating Xen kernel rc.conf
-        
-echo
-tee -a $playground/xen-kernel/etc/rc.conf <<EOF
 hostname="occambsd-xen"
 ifconfig_DEFAULT="DHCP inet6 accept_rtadv"
 growfs_enable=YES
@@ -488,20 +447,12 @@ echo "/dev/ada0p2	none	swap	sw	1	1" \
 cat "$playground/xen-mnt/etc/fstab" || \
 	{ echo xen-mnt fstab generation failed ; exit 1 ; }
 
-echo "/dev/ada0p3	/	ufs	rw,noatime	1	1" \
-		> "$playground/xen-kernel/etc/fstab"
-echo "/dev/ada0p2	none	swap	sw	1	1" \
-		>> "$playground/xen-kernel/etc/fstab"
-cat "$playground/xen-kernel/etc/fstab" || \
-		{ echo xen-kernel fstab generation failed ; exit 1 ; }
-
 echo
 echo Touching firstboot files
 
 echo
 touch "$playground/bhyve-mnt/firstboot"
 touch "$playground/bhyve-kernel/firstboot"
-touch "$playground/xen-kernel/firstboot"
 
 echo
 echo Generating bhyve VM image loader.conf
@@ -549,28 +500,11 @@ cat $playground/xen-mnt/boot/loader.conf || \
 	{ echo xen-mnt loader.conf generation failed ; exit 1 ; }
 
 echo
-echo Generating Xen kernel loader.conf
-
-echo
-tee -a $playground/xen-kernel/boot/loader.conf <<EOF
-kern.geom.label.disk_ident.enable="0"
-kern.geom.label.gptid.enable="0"
-autoboot_delay="3"
-bootverbose="1"
-boot_serial="YES"
-comconsole_speed="115200"
-console="comconsole"
-EOF
-
-cat $playground/xen-kernel/boot/loader.conf || \
-	{ echo xen-kernel loader.conf generation failed ; exit 1 ; }
-
-echo
 echo Configuring the Xen serial console
 printf "%s" "-h -S115200" >> $playground/xen-mnt/boot.config
-printf "%s" "-h -S115200" >> $playground/xen-kernel/boot.config
+# Needed for PVH but not HVM?
 echo 'xc0     "/usr/libexec/getty Pc"         xterm   onifconsole  secure' \
-	>> $playground/xen-kernel/etc/ttys
+	>> $playground/xen-mnt/etc/ttys
 
 # DEBUG Is it needed there?
 # tzsetup will fail on separated kernel/userland - point at userland somehow
@@ -670,7 +604,7 @@ echo $playground/boot-occambsd-xen.sh
 echo "xl create -c $playground/xen-occambsd-kernel.cfg" \
 	> $playground/boot-occambsd-xen-kernel.sh
 echo $playground/boot-occambsd-xen-kernel.sh
-echo "xl destroy OccamBSD" > $playground/destroy-occambsd-xen.sh
+echo "xl shutdown OccamBSD ; xl destroy OccamBSD" > $playground/destroy-occambsd-xen.sh
 echo $playground/destroy-occambsd-xen.sh
 
 # Notes while debugging
