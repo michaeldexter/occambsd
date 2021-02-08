@@ -11,6 +11,8 @@ directory mounted at /tmp/occambsd for speed and unobtrusiveness.
 
 FreeBSD 13.0-ALPHA3 source code or later in /usr/src
 
+Known issue with 13.0-BETA1: Cannot get past login: "getty repeating too quickly on /dev/ttyv0, sleeping 30 secs"
+
 ## Layout
 
 ```
