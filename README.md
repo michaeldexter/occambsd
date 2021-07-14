@@ -9,9 +9,7 @@ directory mounted at /tmp/occambsd for speed and unobtrusiveness.
 
 ## Requirements
 
-FreeBSD 13.0-ALPHA3 source code or later in /usr/src
-
-Known issue with 13.0-BETA1: Cannot get past login: "getty repeating too quickly on /dev/ttyv0, sleeping 30 secs"
+FreeBSD 13.0-RELEASE source code or later in /usr/src
 
 ## Layout
 
@@ -51,7 +49,7 @@ The occambsd.sh script is position independent and can be executed anywhere on t
 ```
 All writes will be to a tmpfs mount on /usr/obj and /tmp/occambsd
 
-The script will ask for enter at each key step, allowing you to inspect the progress, along with ask a few questions.
+The script will ask for enter at each key step, allowing you to inspect the progress, along with asking a few questions.
 
 To boot the results under bhyve, run:
 ```
