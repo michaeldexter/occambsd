@@ -195,9 +195,9 @@ echo
 echo Press the elusive ANY key to continue to buildworld
 read anykey
 
-echo Building world with
-echo make -j$buildjobs buildworld SRCCONF=$playground/src.conf
-\time -h make -C $src_dir -j$buildjobs buildworld || {
+echo Building world
+\time -h make -C $src_dir -j$buildjobs SRCCONF=$playground/src.conf buildworld \
+        || {
 	echo buildworld failed
 	exit 1
 }
@@ -206,8 +206,7 @@ echo
 echo Press the elusive ANY key to continue to buildkernel
 read anykey
 
-echo Building the kernel with
-echo make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$playground KERNCONF=OCCAMBSD
+echo Building kernel
 \time -h make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$playground KERNCONF=OCCAMBSD || {
 	echo buildkernel failed
 	exit 1
