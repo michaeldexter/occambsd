@@ -197,10 +197,10 @@ read anykey
 
 echo Building world
 \time -h make -C $src_dir -j$buildjobs SRCCONF=$playground/src.conf buildworld \
-        || {
+	|| {
 	echo buildworld failed
 	exit 1
-}
+	}
 
 echo
 echo Press the elusive ANY key to continue to buildkernel
@@ -210,7 +210,7 @@ echo Building kernel
 \time -h make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$playground KERNCONF=OCCAMBSD || {
 	echo buildkernel failed
 	exit 1
-}
+	}
 
 echo
 echo Press the elusive ANY key to continue to VM image creation
