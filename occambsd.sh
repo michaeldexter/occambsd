@@ -96,8 +96,16 @@ mount -t tmpfs tmpfs /usr/obj/
 
 mount | grep tmpfs
 
+cd $src_dir
 echo Generating $playground/src.conf
-sh $src_dir/tools/tools/build_option_survey/listallopts.sh | grep -v WITH_ | sed 's/$/=YES/' | \
+make showconfig __MAKE_CONF=/dev/null SRCCONF=/dev/null |
+	sort |
+	sed '
+		s/^MK_//
+		s/=//
+	' | awk '
+	$2 == "yes"     { printf "WITHOUT_%s=YES\n", $1 }
+	' | \
 	grep -v WITHOUT_AUTO_OBJ | \
 	grep -v WITHOUT_UNIFIED_OBJDIR | \
 	grep -v WITHOUT_INSTALLLIB | \
