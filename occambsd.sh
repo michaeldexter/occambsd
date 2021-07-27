@@ -46,7 +46,7 @@ bhyve_md_id="md42"			# Ask Douglas Adams for an explanation
 xen_md_id="md43"
 buildjobs="$(sysctl -n hw.ncpu)"
 
-[ -f /usr/src/sys/amd64/conf/GENERIC ] || \
+[ -f $src_dir/sys/amd64/conf/GENERIC ] || \
 	{ echo Sources do not appear to be installed ; exit 1 ; }
 
 # Cleanup - tmpfs mounts are not always dected by mount | grep tmpfs ...
@@ -97,7 +97,7 @@ mount -t tmpfs tmpfs /usr/obj/
 mount | grep tmpfs
 
 echo Generating $playground/src.conf
-sh /usr/src/tools/tools/build_option_survey/listallopts.sh | grep -v WITH_ | sed 's/$/=YES/' | \
+sh $src_dir/tools/tools/build_option_survey/listallopts.sh | grep -v WITH_ | sed 's/$/=YES/' | \
 	grep -v WITHOUT_AUTO_OBJ | \
 	grep -v WITHOUT_UNIFIED_OBJDIR | \
 	grep -v WITHOUT_INSTALLLIB | \
@@ -125,10 +125,10 @@ echo Press the elusive ANY key to continue
 read anykey
 
 #echo Removing OCCAMBSD KERNCONF if present
-#[ -f /usr/src/sys/amd64/conf/OCCAMBSD ] && rm /usr/src/sys/amd64/conf/OCCAMBSD
+#[ -f $src_dir/sys/amd64/conf/OCCAMBSD ] && rm $src_dir/sys/amd64/conf/OCCAMBSD
 
 echo Creating new OCCAMBSD KERNCONF
-#cat << HERE > /usr/src/sys/amd64/conf/OCCAMBSD
+#cat << HERE > $src_dir/sys/amd64/conf/OCCAMBSD
 cat << HERE > $playground/OCCAMBSD
 
 cpu		HAMMER
