@@ -113,6 +113,7 @@ make showconfig __MAKE_CONF=/dev/null SRCCONF=/dev/null |
 	grep -v WITHOUT_LOADER_LUA | \
 	grep -v WITHOUT_LOCALES | \
 	grep -v WITHOUT_ZONEINFO | \
+	grep -v WITHOUT_EFI | \
 	grep -v WITHOUT_VI \
 	> $playground/src.conf
 
@@ -122,6 +123,7 @@ make showconfig __MAKE_CONF=/dev/null SRCCONF=/dev/null |
 # WITHOUT_BOOT is needed to install the LUA loader
 # WITHOUT_LOCALES is necessary for a console
 # WITHOUT_ZONEINFO is necessary for tzsetup on VM image with a userland
+# WITHOUT_EFI to support make release, specifically for loader.efi
 # WITHOUT_VI could come in handy
 
 [ -f $playground/src.conf ] || { echo $playground/src.conf did not generate ; exit 1 ; }
