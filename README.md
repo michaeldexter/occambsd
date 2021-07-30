@@ -21,10 +21,16 @@ FreeBSD 13.0-RELEASE source code or later in /usr/src
 /tmp/occambsd/bhyve-kernel                  bhyve kernel directory
 /tmp/occambsd/bhyve-mnt                     bhyve disk image mount point
 /tmp/occambsd/bhyve.raw                     bhyve disk image with kernel
+/usr/obj/usr/src/amd64.amd64/release/       disc1.iso and memstick.img location
 /tmp/occambsd/load-bhyve-vmm-module.sh      Script to load vmm.ko
 /tmp/occambsd/load-bhyve-disk-image.sh      Script to load bhyve kernel from disk image
-/tmp/occambsd/load-bhyve-directory.sh       Optional script to load bhyve kernel from directory
-/tmp/occambsd/boot-occambsd-bhyve.sh        Script to boot bhyve
+/tmp/occambsd/load-bhyve-directory.sh       Script to load bhyve kernel from directory
+/tmp/occambsd/load-bhyve-disc1.iso.sh       Script to load bhyve from a 'make release' ISO image
+/tmp/occambsd/load-bhyve-memstick.img.sh    Script to load bhyve from a 'make release' installer image
+
+/tmp/occambsd/boot-bhyve.raw.sh             Script to boot bhyve from disk image or directory
+/tmp/occambsd/boot-bhyve-disc1.iso.sh       Script to boot bhyve from a 'make release' ISO image
+/tmp/occambsd/boot-bhyve-memstick.img.sh    Script to boot bhyve from a 'make release' installer image
 /tmp/occambsd/destroy-occambsd-bhyve.sh     Script to clean up the bhyve virtual machine
 
 /tmp/occambsd/xen-kernel                    Xen kernel directory
