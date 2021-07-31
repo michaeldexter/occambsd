@@ -14,38 +14,34 @@ FreeBSD 13.0-RELEASE source code or later in /usr/src
 ## Layout
 
 ```
-/tmp/occambsd
-/tmp/occambsd/src.conf                      OccamBSD src.conf
 /tmp/occambsd/OCCAMBSD                      OccamBSD kernel configuration file
-
-/tmp/occambsd/bhyve-kernel                  bhyve kernel directory
-/tmp/occambsd/bhyve-mnt                     bhyve disk image mount point
-/tmp/occambsd/bhyve.raw                     bhyve disk image with kernel
+/tmp/occambsd/all_options.txt               A list of all available "WITHOUT" build options
+/tmp/occambsd/bhyve-kernel                  OccamBSD bhyve kernel directory
+/tmp/occambsd/bhyve-mnt                     OccamBSD bhyve mount point
+/tmp/occambsd/bhyve.raw                     OccamBSD bhyve raw disk image with world and kernel
+/tmp/occambsd/boot-bhyve-disc1.iso.sh       Script to boot bhyve from a 'make release' ISO installer image
+/tmp/occambsd/boot-bhyve-memstick.img.sh    Script to boot bhyve from a 'make release' memstick installer image
+/tmp/occambsd/boot-bhyve-disk-image.sh      Script to boot the loaded OccamBSD bhyve VM from disk image or directory
+/tmp/occambsd/boot-jail.sh                  Script to boot the OccamBSD jail(8)
+/tmp/occambsd/boot-xen-directory.sh         Script to boot the OccamBSD Xen virtual machine from directory
+/tmp/occambsd/boot-xen-disk-image.sh        Script to boot the OccamBSD Xen virtual machine from disk image
+/tmp/occambsd/destroy-bhyve.sh              Script to clean up the OccamBSD bhyve virtual machine
+/tmp/occambsd/destroy-xen.sh                Script to clean up the OccamBSD Xen virtual machine
+/tmp/occambsd/jail                          OccamBSD jail root directory
+/tmp/occambsd/jail.conf                     OccamBSD jail configuration file
+/tmp/occambsd/load-bhyve-directory.sh       Script to bhyve load OccamBSD kernel from directory
+/tmp/occambsd/load-bhyve-disc1.iso.sh       Script to bhyve load OccamBSD kernel from 'make release' ISO installer image
+/tmp/occambsd/load-bhyve-disk-image.sh      Script to bhyve load OccamBSD kernel from disk image
+/tmp/occambsd/load-bhyve-memstick.img.sh    Script to bhyve load OccamBSD kernel from 'make release' memstick installer image
+/tmp/occambsd/load-bhyve-vmm-module.sh      Script to load the bhyve kernel module vmm.ko
+/tmp/occambsd/src.conf                      OccamBSD world configuration file
+/tmp/occambsd/xen-kernel                    OccamBSD Xen kernel directory
+/tmp/occambsd/xen-kernel.cfg                OccamBSD Xen directory boot configuration file
+/tmp/occambsd/xen-mnt                       OccamBSD Xen mount point
+/tmp/occambsd/xen.cfg                       OccamBSD Xen raw disk image boot configuration file
+/tmp/occambsd/xen.raw                       OccamBSD Xen raw disk image with world and kernel
 /usr/obj/usr/src/amd64.amd64/release/       disc1.iso and memstick.img location
-/tmp/occambsd/load-bhyve-vmm-module.sh      Script to load vmm.ko
-/tmp/occambsd/load-bhyve-disk-image.sh      Script to load bhyve kernel from disk image
-/tmp/occambsd/load-bhyve-directory.sh       Script to load bhyve kernel from directory
-/tmp/occambsd/load-bhyve-disc1.iso.sh       Script to load bhyve from a 'make release' ISO image
-/tmp/occambsd/load-bhyve-memstick.img.sh    Script to load bhyve from a 'make release' installer image
-
-/tmp/occambsd/boot-bhyve.raw.sh             Script to boot bhyve from disk image or directory
-/tmp/occambsd/boot-bhyve-disc1.iso.sh       Script to boot bhyve from a 'make release' ISO image
-/tmp/occambsd/boot-bhyve-memstick.img.sh    Script to boot bhyve from a 'make release' installer image
-/tmp/occambsd/destroy-occambsd-bhyve.sh     Script to clean up the bhyve virtual machine
-
-/tmp/occambsd/xen-kernel                    Xen kernel directory
-/tmp/occambsd/xen-mnt                       Xen disk image mount point
-/tmp/occambsd/xen.raw                       Xen disk image with kernel
-/tmp/occambsd/xen-occambsd.cfg              Xen disk image boot configuration file
-/tmp/occambsd/xen-occambsd-kernel.cfg       Xen directory boot configuration file
-/tmp/occambsd/boot-occambsd-xen.sh          Script to boot Xen krenel from disk image
-/tmp/occambsd/boot-occambsd-xen-kernel.sh   Script to boot Xen kernel from directory
-/tmp/occambsd/destroy-occambsd-xen.sh       Script to clean up the Xen virtual machine
-
-/tmp/occambsd/jail                          Jail root directory
-/tmp/occambsd/jail.conf                     Jail configuration file
-/tmp/occambsd/boot-occambsd-jail.sh         Script to boot the jail(8)
-```
+...
 
 ## Usage
 
