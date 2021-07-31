@@ -1,8 +1,7 @@
 ## occambsd: An application of Occam's razor to FreeBSD
 a.k.a. "super svelte stripped down FreeBSD"
 
-This script leverages FreeBSD build options and a kernel configuration file
-to build the minimum kernel and userland to boot under the bhyve hypervisor.
+This script leverages FreeBSD build options and a kernel configuration file to build the minimum kernel and userland to boot FreeBSD under jail(8) and the bhyve and Xen hypervisors.
 
 By default it builds from /usr/src to a tmpfs mount /usr/obj and a tmpfs work
 directory mounted at /tmp/occambsd for speed and unobtrusiveness.
@@ -57,9 +56,9 @@ To boot the results under bhyve, run:
 ```
 sh load-bhyve-vmm-module.sh
 sh load-bhyve-disk-image.sh
-sh boot-occambsd-bhyve.sh
+sh boot-bhyve-disk-image.sh
 < explore the VM and shut down >
-sh destroy-occambsd-bhyve.sh
+sh destroy-bhyve.sh
 ```
 
 ## Build times on an EPYC 7402p
