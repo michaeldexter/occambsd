@@ -39,6 +39,7 @@ FreeBSD 13.0-RELEASE source code or later in /usr/src
 /tmp/occambsd/xen-mnt                       OccamBSD Xen mount point
 /tmp/occambsd/xen.cfg                       OccamBSD Xen raw disk image boot configuration file
 /tmp/occambsd/xen.raw                       OccamBSD Xen raw disk image with world and kernel
+/tmp/occambsd/*.log                         OccamBSD log files for larger steps
 /usr/obj/usr/src/amd64.amd64/release/       disc1.iso and memstick.img location
 ...
 
@@ -61,15 +62,15 @@ sh boot-bhyve-disk-image.sh
 sh destroy-bhyve.sh
 ```
 
-## Build times on an EPYC 7402p
+## Build times on an EPYC 7402p with SSD
 
-buildworld:	1m13.41s, 1m12.14s warm ARC
+buildworld:	1m11.35s real
 
-buildkernel:	12.86s, 9.79s warm ARC
+buildkernel:	7.22s real
 
-installworld: 18.46s, 15.05s warm ARC
+installworld:	15.49s real
 
-installkernel:	0.35s, 0.32s warm ARC
+installkernel:	0.35s real
 
 Boot time:	Approximately two seconds
 

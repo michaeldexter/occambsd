@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version 13.0-ALPHA3
+# Version 13.0-RELEASE
 
 # occambsd: An application of Occam's razor to FreeBSD
 # a.k.a. "super svelte stripped down FreeBSD"
@@ -40,7 +40,7 @@
 # Variables
 
 src_dir="/usr/src"
-workdir="/tmp/occambsd"		# This will be mounted tmpfs
+workdir="/tmp/occambsd"			# This will be mounted tmpfs
 imagesize="4G"				# More than enough room
 bhyve_md_id="md42"			# Ask Douglas Adams for an explanation
 xen_md_id="md43"
@@ -220,9 +220,9 @@ echo
 echo Press the elusive ANY key to continue to buildworld
 read anykey
 
-echo Building world
+echo Building world - logging to $workdir/buildworld.log
 \time -h make -C $src_dir -j$buildjobs SRCCONF=$workdir/src.conf buildworld \
-	|| {
+	> $workdir/buildworld.log || {
 	echo buildworld failed
 	exit 1
 	}
@@ -231,8 +231,9 @@ echo
 echo Press the elusive ANY key to continue to buildkernel
 read anykey
 
-echo Building kernel
-\time -h make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD || {
+echo Building kernel - logging to $workdir/buildkernel.log
+\time -h make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD \
+	> $workdir/buildkernel.log || {
 	echo buildkernel failed
 	exit 1
 	}
@@ -320,38 +321,44 @@ mount /dev/${xen_md_id}p3 $workdir/xen-mnt || {
 
 # WORLD
 
-echo Installing world to $workdir/bhyve-mnt
-\time -h make -C $src_dir installworld SRCCONF=$workdir/src.conf DESTDIR=$workdir/bhyve-mnt
+echo Installing world to $workdir/bhyve-mnt - logging to $workdir/bhyve-installworld.log
+\time -h make -C $src_dir installworld SRCCONF=$workdir/src.conf DESTDIR=$workdir/bhyve-mnt \
+	> $workdir/bhyve-installworld.log 2>&1
 
-echo Installing world to $workdir/xen-mnt
-\time -h make -C $src_dir installworld SRCCONF=$workdir/src.conf DESTDIR=$workdir/xen-mnt
+echo Installing world to $workdir/xen-mnt - logging to $workdir/bhyve-installworld.log
+\time -h make -C $src_dir installworld SRCCONF=$workdir/src.conf DESTDIR=$workdir/xen-mnt \
+	> $workdir/xen-installworld.log 2>&1
 
 # Alternative: use a known-good full userland
 #cat /usr/freebsd-dist/base.txz | tar -xf - -C $workdir/xen-mnt
 
-echo Installing world to $workdir/jail
-\time -h make -C $src_dir installworld SRCCONF=$workdir/src.conf DESTDIR=$workdir/jail
+echo Installing world to $workdir/jail - logging to $workdir/jail-installworld.log
+\time -h make -C $src_dir installworld SRCCONF=$workdir/src.conf DESTDIR=$workdir/jail \
+	> $workdir/jail-installworld.log 2>&1
 
 # KERNEL
 
-echo Installing the kernel to $workdir/bhyve-mnt
-\time -h make -C $src_dir installkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD DESTDIR=$workdir/bhyve-mnt/
+echo Installing the kernel to $workdir/bhyve-mnt - logging to $workdir/bhyve-disk-image-installkernel.log
+\time -h make -C $src_dir installkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD DESTDIR=$workdir/bhyve-mnt/ \
+	> $workdir/bhyve-disk-image-installkernel.log 2>&1
 [ -f $workdir/bhyve-mnt/boot/kernel/kernel ] || \
 	{ echo bhyve-mnt kernel failed to install ; exit 1 ; }
 
-echo Installing the kernel to $workdir/bhyve-kernel/
-\time -h make -C $src_dir installkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD DESTDIR=$workdir/bhyve-kernel/
+echo Installing the kernel to $workdir/bhyve-kernel/ - logging to $workdir/bhyve-directory-installkernel.log
+\time -h make -C $src_dir installkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD DESTDIR=$workdir/bhyve-kernel/ \
+	> $workdir/bhyve-directory-installkernel.log 2>&1
 [ -f $workdir/bhyve-kernel/boot/kernel/kernel ] || \
 	{ echo bhyve-kernel kernel failed to install ; exit 1 ; }
 
-echo Installing the kernel to $workdir/xen-mnt
-\time -h make -C $src_dir installkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD DESTDIR=$workdir/xen-mnt/
+echo Installing the kernel to $workdir/xen-mnt - logging to $workdir/xen-disk-image-installkernel.log
+\time -h make -C $src_dir installkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD DESTDIR=$workdir/xen-mnt/ \
+	> $workdir/xen-disk-image-installkernel.log 2>&1
 [ -f $workdir/xen-mnt/boot/kernel/kernel ] || \
 	{ echo xen-mnt kernel failed to install ; exit 1 ; }
 
 # Need not be nested but the familiar location is... familiar.
 echo Installing the kernel to $workdir/xen-kernel/
-cp $workdir/xen-mnt/boot/kernel/kernel $workdir/xen-kernel/boot/kernel/
+cp -p $workdir/xen-mnt/boot/kernel/kernel $workdir/xen-kernel/boot/kernel/
 [ -f $workdir/xen-kernel/boot/kernel/kernel ] || \
 	{ echo xen-kernel kernel failed to install ; exit 1 ; }
 
@@ -360,8 +367,9 @@ ls -lh $workdir/bhyve-mnt/boot/kernel/kernel
 
 # DISTRIBUTION
 
-echo Installing distribution to $workdir/bhyve-mnt
-\time -h make -C $src_dir distribution SRCCONF=$workdir/src.conf DESTDIR=$workdir/bhyve-mnt
+echo Installing distribution to $workdir/bhyve-mnt - logging to $workdir/bhyve-distribution.log
+\time -h make -C $src_dir distribution SRCCONF=$workdir/src.conf DESTDIR=$workdir/bhyve-mnt \
+	> $workdir/bhyve-disk-image-distribution.log 2>&1
 
 echo Press y to prune locales and timezones saving 28M?
 read response
@@ -376,11 +384,13 @@ if [ "$response" = "y" ]; then
 fi
 
 # DEBUG Probably far more than needed
-echo Installing distribution to $workdir/bhyve-kernel
-\time -h make -C $src_dir distribution SRCCONF=$workdir/src.conf DESTDIR=$workdir/bhyve-kernel
+echo Installing distribution to $workdir/bhyve-kernel - $workdir/bhyve-distribution.log
+\time -h make -C $src_dir distribution SRCCONF=$workdir/src.conf DESTDIR=$workdir/bhyve-kernel \
+	> $workdir/bhyve-directory-distribution.log 2>&1
 
-echo Installing distribution to $workdir/xen-mnt
-\time -h make -C $src_dir distribution SRCCONF=$workdir/src.conf DESTDIR=$workdir/xen-mnt
+echo Installing distribution to $workdir/xen-mnt - logging to $workdir/xen-disk-image-distribution.log
+\time -h make -C $src_dir distribution SRCCONF=$workdir/src.conf DESTDIR=$workdir/xen-mnt \
+	> $workdir/xen-disk-image-distribution.log 2>&1
 
 if [ "$response" = "y" ]; then
 	echo Deleting unused locales
@@ -391,8 +401,9 @@ if [ "$response" = "y" ]; then
 	rm -rf A* B* C* E* F* G* H* I* J* K* L* M* N* P* R* S* T* UCT US W* Z*
 fi
 
-echo Installing distribution to $workdir/jail
-\time -h make -C $src_dir distribution SRCCONF=$workdir/src.conf DESTDIR=$workdir/jail
+echo Installing distribution to $workdir/jail - logging to $workdir/jail-distribution.log
+\time -h make -C $src_dir distribution SRCCONF=$workdir/src.conf DESTDIR=$workdir/jail \
+	> $workdir/jail-distribution.log 2>&1
 
 if [ "$response" = "y" ]; then
 	echo Deleting unused locales
@@ -651,7 +662,7 @@ echo $workdir/boot-jail.sh
 echo
 echo The VM disk image is still mounted and you could
 echo exit and rebuild the kernel with:
-echo cd /usr/src
+echo cd $src_dir
 echo make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$workdir KERNCONF=OCCAMBSD
 echo make installkernel KERNCONFDIR=$workdir DESTDIR=$workdir/\< jail mnt or root \>
 
@@ -659,7 +670,6 @@ echo
 echo Press the elusive ANY key to unmount the VM disk image for use
 read anykey
 
-echo
 echo Unmounting $workdir/bhyve-mnt
 umount $workdir/bhyve-mnt
 
@@ -679,10 +689,11 @@ read response
 
 if [ "$response" = "y" ]; then
 
-	echo Building release
+	echo Building release - logging to $workdir/release.log
 	cd $src_dir/release || { echo cd release failed ; exit 1 ; }
 	\time -h make -C $src_dir/release SRCCONF=$workdir/src.conf \
 		KERNCONFDIR=$workdir KERNCONF=OCCAMBSD release \
+		> $workdir/release.log 2>&1 \
 		|| {
 			echo release failed
 			exit 1
