@@ -623,19 +623,19 @@ echo "bhyveload -d $workdir/bhyve.raw -m 1024 occambsd" \
 	> $workdir/load-bhyve-disk-image.sh
 echo $workdir/load-bhyve-disk-image.sh
 echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$workdir/bhyve.raw -s 31,lpc -l com1,stdio occambsd" \
-	> $workdir/boot-bhyve.raw.sh
-echo $workdir/boot-bhyve.raw.sh
+	> $workdir/boot-bhyve-disk-image.sh
+echo $workdir/boot-bhyve-disk-image.sh
 echo "bhyvectl --destroy --vm=occambsd" \
 	> $workdir/destroy-bhyve.sh
 echo $workdir/destroy-bhyve.sh
 
 echo
-echo "xl create -c $workdir/xen.cfg" \
-	> $workdir/boot-xen.sh
-echo $workdir/boot-xen.sh
 echo "xl create -c $workdir/xen-kernel.cfg" \
-	> $workdir/boot-xen-kernel.sh
-echo $workdir/boot-xen-kernel.sh
+	> $workdir/boot-xen-directory.sh
+echo $workdir/boot-xen-directory.sh
+echo "xl create -c $workdir/xen.cfg" \
+	> $workdir/boot-xen-disk-image.sh
+echo $workdir/boot-xen-disk-image.sh
 echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > $workdir/destroy-xen.sh
 echo $workdir/destroy-xen.sh
 
