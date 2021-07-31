@@ -1,4 +1,4 @@
-## occambsd: An application of Occam's razor to FreeBSD
+## OccamBSD: An application of Occam's razor to FreeBSD
 a.k.a. "super svelte stripped down FreeBSD"
 
 This script leverages FreeBSD build options and a kernel configuration file to build the minimum kernel and userland to boot FreeBSD under jail(8) and the bhyve and Xen hypervisors.
@@ -8,7 +8,7 @@ directory mounted at /tmp/occambsd for speed and unobtrusiveness.
 
 ## Requirements
 
-FreeBSD 13.0-RELEASE source code or later in /usr/src
+FreeBSD 13.0-RELEASE source code or later in /usr/src or modify the $src_dir variable as required
 
 ## Layout
 
@@ -76,4 +76,4 @@ Boot time:	Approximately two seconds
 
 Total build and installation time for bhyve, Xen, and Jail: 3 minutes
 
-This is not a desired endorsement of GitHub
+This is not an endorsement of GitHub
