@@ -42,6 +42,7 @@ FreeBSD 13.0-RELEASE source code or later in /usr/src
 /tmp/occambsd/*.log                         OccamBSD log files for larger steps
 /usr/obj/usr/src/amd64.amd64/release/       disc1.iso and memstick.img location
 ...
+
 ## Usage
 
 The occambsd.sh script is position independent and can be executed anywhere on the file system:
