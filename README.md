@@ -41,7 +41,7 @@ FreeBSD 13.0-RELEASE source code or later in /usr/src
 /tmp/occambsd/xen.raw                       OccamBSD Xen raw disk image with world and kernel
 /tmp/occambsd/*.log                         OccamBSD log files for larger steps
 /usr/obj/usr/src/amd64.amd64/release/       disc1.iso and memstick.img location
-...
+```
 
 ## Usage
 
