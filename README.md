@@ -13,41 +13,27 @@ FreeBSD 13.0-RELEASE source code or later in /usr/src or modify the $src_dir var
 ## Layout
 
 ```
-/tmp/occambsd/OCCAMBSD                      OccamBSD kernel configuration file
-/tmp/occambsd/all_options.txt               A list of all available "WITHOUT" build options
-/tmp/occambsd/bhyve-kernel                  OccamBSD bhyve kernel directory
-/tmp/occambsd/bhyve-mnt                     OccamBSD bhyve mount point
-/tmp/occambsd/bhyve.raw                     OccamBSD bhyve raw disk image with world and kernel
-/tmp/occambsd/boot-bhyve-disc1.iso.sh       Script to boot bhyve from a 'make release' ISO installer image
-/tmp/occambsd/boot-bhyve-memstick.img.sh    Script to boot bhyve from a 'make release' memstick installer image
-/tmp/occambsd/boot-bhyve-disk-image.sh      Script to boot the loaded OccamBSD bhyve VM from disk image or directory
-/tmp/occambsd/boot-jail.sh                  Script to boot the OccamBSD jail(8)
-/tmp/occambsd/boot-xen-directory.sh         Script to boot the OccamBSD Xen virtual machine from directory
-/tmp/occambsd/boot-xen-disk-image.sh        Script to boot the OccamBSD Xen virtual machine from disk image
-/tmp/occambsd/destroy-bhyve.sh              Script to clean up the OccamBSD bhyve virtual machine
-/tmp/occambsd/destroy-xen.sh                Script to clean up the OccamBSD Xen virtual machine
-/tmp/occambsd/jail                          OccamBSD jail root directory
-/tmp/occambsd/jail.conf                     OccamBSD jail configuration file
-/tmp/occambsd/load-bhyve-directory.sh       Script to bhyve load OccamBSD kernel from directory
-/tmp/occambsd/load-bhyve-disc1.iso.sh       Script to bhyve load OccamBSD kernel from 'make release' ISO installer image
-/tmp/occambsd/load-bhyve-disk-image.sh      Script to bhyve load OccamBSD kernel from disk image
-/tmp/occambsd/load-bhyve-memstick.img.sh    Script to bhyve load OccamBSD kernel from 'make release' memstick installer image
-/tmp/occambsd/load-bhyve-vmm-module.sh      Script to load the bhyve kernel module vmm.ko
-/tmp/occambsd/src.conf                      OccamBSD world configuration file
-/tmp/occambsd/xen-kernel                    OccamBSD Xen kernel directory
-/tmp/occambsd/xen-kernel.cfg                OccamBSD Xen directory boot configuration file
-/tmp/occambsd/xen-mnt                       OccamBSD Xen mount point
-/tmp/occambsd/xen.cfg                       OccamBSD Xen raw disk image boot configuration file
-/tmp/occambsd/xen.raw                       OccamBSD Xen raw disk image with world and kernel
-/tmp/occambsd/*.log                         OccamBSD log files for larger steps
-/usr/obj/usr/src/amd64.amd64/release/       disc1.iso and memstick.img location
+/tmp/occambsd/OCCAMBSD		OccamBSD kernel configuration file
+/tmp/occambsd/src.conf		OccamBSD src.conf used for the build
+/tmp/occambsd/kernel		OccamBSD kernel directory for bhyve and Xen
+/tmp/occambsd/occambsd.raw	OccamBSD raw disk image with world and kernel for bhyve and Xen
+/tmp/occambsd/image-mnt		OccamBSD raw disk image mount point
+/tmp/occambsd/jail-mnt		OccamBSD jail image mount point
+/tmp/occambsd/jail.conf		OccamBSD jail configuration file
+/tmp/occambsd/*load.sh		OccamBSD generated load scripts
+/tmp/occambsd/*boot.sh		OccamBSD generated boot scripts
+/tmp/occambsd/*log		OccamBSD log files
 ```
 
 ## Usage
 
-The occambsd.sh script is position independent and can be executed anywhere on the file system:
+The occambsd.sh script is position independent with one dependency, lib_occambsd.sh
+
+It defaults to a bhyve-compatible build but can build for Jail with -j and Xen with -x
+
+Root on ZFS support is enabled with the -z flag:
 ```
-\time -h sh occambsd.sh
+\time -h sh occambsd.sh -z
 ```
 All writes will be to a tmpfs mount on /usr/obj and /tmp/occambsd
 
@@ -75,5 +61,12 @@ installkernel:	0.35s real
 Boot time:	Approximately two seconds
 
 Total build and installation time for bhyve, Xen, and Jail: 3 minutes
+
+## Know Issues
+
+v2-beta - Only bhyve is working!
+
+Jail is showing the root file system, for some reason
+Xen requires re-testing
 
 This is not an endorsement of GitHub
