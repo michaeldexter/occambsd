@@ -1,3 +1,7 @@
+#!/bin/sh
+
+# Copyright 2021 Michael Dexter. All rights reserved
+
 # f_occam_options Function Usage:
 
 # f_occam_options < Source Directory > "< Optional Build Options To Keep >" i.e.
