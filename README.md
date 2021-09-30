@@ -74,7 +74,7 @@ Note that ARC "warmth" on the host will speed build times
 
 * v3-beta - bhyve target is tested, Xen is not, jail is not jailing
 
-* Investigate Juniper's static_libpam towards the goal of an optional fully statically-build userland
+* Investigate Juniper's static_libpam towards the goal of an optional fully statically-built userland
 
 * Could have bhyve and Xen-specific kernel configuration files
 
