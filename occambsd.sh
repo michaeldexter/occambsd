@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version 13.0-RELEASE v2-beta
+# Version 13.0-RELEASE v3-beta
 
 # occambsd: An application of Occam's razor to FreeBSD
 # a.k.a. "super svelte stripped down FreeBSD"
@@ -40,13 +40,19 @@
 # The separate kernel directory is very useful for testing kernel changes
 # while waiting for institutionalized VirtFS support.
 
+# The -u option will built and install a minimal userland,
+# rather than building and installing world
 
-# Variables
 
-zfsroot=0
+# VARIABLES
+
+zfsroot="0"
 target="bhyve"
+userland="0"
+release="0"
+quiet="0"
 
-while getopts zxj opts ; do
+while getopts zxjurq opts ; do
 	case $opts in
 	z)
 		zfsroot="1"
@@ -57,11 +63,21 @@ while getopts zxj opts ; do
 	j)
 		target="jail"
 		;;
+	u)
+		userland="1"
+		;;
+	r)
+		release="1"
+		;;
+	q)
+		quiet="1"
+		;;
 	esac
 done
 
 src_dir="/usr/src"
 work_dir="/tmp/occambsd"		# This will be mounted tmpfs
+log_dir="$work_dir/logs"
 imagesize="4G"				# More than enough room
 md_id="md42"				# Ask Douglas Adams for an explanation
 buildjobs="$(sysctl -n hw.ncpu)"
@@ -85,7 +101,8 @@ fi
 # WITHOUT_LOADER_ZFS WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL
 
 
-# Preflight checks
+# PREFLIGHT CHECKS
+
 [ -f $src_dir/sys/amd64/conf/GENERIC ] || \
 	{ echo Sources do not appear to be installed ; exit 1 ; }
 
@@ -93,7 +110,9 @@ fi
 . ./lib_occambsd.sh || { echo lib_occambsd.sh failed to source ; exit 1 ; }
 
 
-# Cleanup - tmpfs mounts are not always dected by mount | grep tmpfs ...
+# CLEANUP
+
+# tmpfs mounts are not always dected by mount | grep tmpfs ...
 #	They may also be mounted multiple times atop one another and
 #	md devices may be attached multiple times. Proper cleanup would be nice
 
@@ -108,23 +127,32 @@ mdconfig -du "$md_id" > /dev/null 2>&1
 mdconfig -du "$md_id" > /dev/null 2>&1
 
 echo ; echo Do any memory devices or tmpfs mounts need to be cleaned up?
-echo Press the elusive ANY key if you do not see any to continue ; echo
+echo Press ANY key if you do not see any to continue ; echo
 
 zpool list | grep occambsd
 mdconfig -lv
 mount | grep "$work_dir"
 mount | grep "/usr/obj"
-read clean
+read areweclean
+
+
+# PREPARATION
 
 [ -d $work_dir ] || mkdir -p "$work_dir"
+[ "$?" -ne "0" ] && { echo Failed to make $work_dir ; exit 1 ; }
 
 echo ; echo Mounting $work_dir tmpfs
 mount -t tmpfs tmpfs "$work_dir" || { echo tmpfs mount failed ; exit 1 ; }
+
+mkdir -p "$log_dir" || { echo Failed to create $log_dir ; exit 1 ; }
 
 echo ; echo Mounting a tmpfs to /usr/obj/
 mount -t tmpfs tmpfs /usr/obj/
 
 mount | grep tmpfs
+
+
+# SRC.CONF
 
 echo ; echo Generating $work_dir/src.conf with f_occam_options
 
@@ -135,12 +163,13 @@ echo ; echo The src.conf options that exclude components reads: ; echo
 
 cat $work_dir/src.conf
 
-echo ; echo Press the elusive ANY key to continue
-read anykey
+[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+
+
+# KERNCONF
 
 # FUTURE: Could build bhyve and Xen-specific kernel configuration files
-
-if [ ! "$target" = "jail" ] ; then
+# No point if for a jail but it is quick
 
 echo ; echo Creating new OCCAMBSD KERNCONF
 #cat << HERE > $src_dir/sys/amd64/conf/OCCAMBSD
@@ -219,32 +248,10 @@ HERE
 echo ; echo The resulting OCCAMBSD KERNCONF is
 cat $work_dir/OCCAMBSD
 
-echo ; echo Press the elusive ANY key to continue
-read anykey
+[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
 
-fi
 
-echo ; echo Building world - logging to $work_dir/buildworld.log
-\time -h make -C $src_dir -j$buildjobs SRCCONF=$work_dir/src.conf buildworld \
-	> $work_dir/buildworld.log || { echo buildworld failed ; exit 1 ; }
-
-if [ ! "$target" = "jail" ] ; then
-
-	echo ; echo Press the elusive ANY key to continue to buildkernel
-	read anykey
-
-	echo ; echo Building kernel - logging to $work_dir/buildkernel.log
-	\time -h make -C $src_dir -j$buildjobs buildkernel \
-		KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD \
-		> $work_dir/buildkernel.log || \
-			{ echo buildkernel failed ; exit 1 ; }
-
-	echo ; echo Seeing how big the resulting kernel is
-	ls -lh /usr/obj/usr/src/amd64.amd64/sys/OCCAMBSD/kernel
-
-	echo ; echo Press the elusive ANY key to continue
-	read anykey
-fi
+# DIRECTORIES, DISK IMAGES, AND PARTITIONING
 
 if [ "$target" = "jail" ] ; then
 	mkdir -p "$work_dir/jail-mnt"
@@ -263,19 +270,24 @@ else
 	[ -e /dev/$md_id ] || \
 		{ echo $md_id did not attach ; exit 1 ; }
 
-	echo ; echo Partitioning and formating $md_id
+[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+
+echo ; echo Partitioning and formating $md_id
 	gpart create -s gpt $md_id
 	#gpart add -t freebsd-boot -l bootfs -b 128 -s 128K $md_id
 	gpart add -a 4k -s 512k -t freebsd-boot /dev/$md_id
 	gpart add -t freebsd-swap -s 1G $md_id
 
 	if [ "$zfsroot" = "1" ] ; then
-		echo Adding gptzfsboot boot code
-		gpart bootcode -b $dest_dir/boot/pmbr -p \
-			$dest_dir/boot/gptzfsboot -i 1 /dev/$md_id
+# Moved until after world/stand are built
+#		echo Adding gptzfsboot boot code
+#		gpart bootcode -b $dest_dir/boot/pmbr -p \
+#			$dest_dir/boot/gptzfsboot -i 1 /dev/$md_id || \
+#			{ echo gpart bootcode failed ; exit 1 ; }
 
 		echo Adding freebsd-zfs partition
-		gpart add -t freebsd-zfs /dev/$md_id
+		gpart add -t freebsd-zfs /dev/$md_id || \
+			{ echo gpart add -t freebsd-zfs failed ; exit 1 ; }
 
 		echo Creating occambsd zpool
 		# altroot does not appear to be required
@@ -299,7 +311,8 @@ else
 		# Not needed for kernel-in-image boot, not helpful with kernel
 		#zpool set cachefile=$image-mnt/boot/zfs/zpool.cache occambsd
 	else
-		gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 /dev/$md_id
+# Moved until after world/stand are built
+#		gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 /dev/$md_id
 		gpart add -t freebsd-ufs /dev/$md_id
 		newfs -U /dev/${md_id}p3 || \
 			{ echo /dev/${md_id}p3 VM newfs failed ; exit 1 ; }
@@ -310,8 +323,10 @@ else
 	fi
 fi
 
+[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
 
-# WORLD
+
+# USERLAND
 
 if [ "$target" = "jail" ] ; then
 	dest_dir="$work_dir/jail-mnt"
@@ -319,64 +334,22 @@ else
 	dest_dir="$work_dir/image-mnt"
 fi
 
-echo ; echo Installing world - logging to $work_dir/installworld.log
+if [ "$userland" = "0" ] ; then
+        echo ; echo Building world - logging to $log_dir/build-world.log
+        \time -h make -C $src_dir -j$buildjobs \
+        SRCCONF=$work_dir/src.conf buildworld \
+        > $log_dir/build-world.log || { echo buildworld failed ; exit 1 ; }
 
+[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+
+	echo ; echo Installing world - logging to $log_dir/install-world.log
 	\time -h make -C $src_dir installworld SRCCONF=$work_dir/src.conf \
 		DESTDIR=$dest_dir \
-	> $work_dir/installworld.log 2>&1
+	> $log_dir/install-world.log 2>&1
 
-# Alternative: use a known-good full userland
-#cat /usr/freebsd-dist/base.txz | tar -xf - -C $dest_dir
-
-
-# KERNEL
-
-if [ ! "$target" = "jail" ] ; then
-	echo ; echo Installing the kernel to $dest_dir - \
-		logging to $work_dir/installkernel.log
-	\time -h make -C $src_dir installkernel KERNCONFDIR=$work_dir \
-		KERNCONF=OCCAMBSD DESTDIR=$dest_dir \
-		> $work_dir/installkernel.log 2>&1
-	[ -f $dest_dir/boot/kernel/kernel ] || \
-		{ echo kernel failed to install to $dest_dir ; exit 1 ; }
-
-	# Need not be nested but the familiar location is familiar
-	echo Copying the kernel to $work_dir/kernel/
-	cp -rp $work_dir/image-mnt/boot/kernel \
-		$work_dir/kernel/boot/
-	[ -f $work_dir/kernel/boot/kernel/kernel ] || \
-		{ echo $work_dir/kernel failed to copy ; exit 1 ; }
-
-	echo Seeing how big the resulting installed kernel is
-	ls -lh $work_dir/image-mnt/boot/kernel/kernel
-fi
-
-# DISTRIBUTION
-
-echo Installing distribution to $dest_dir - \
-	logging to $work_dir/distribution.log
-\time -h make -C $src_dir distribution SRCCONF=$work_dir/src.conf \
-	DESTDIR=$dest_dir \
-	> $work_dir/distribution.log 2>&1
-
-if [ ! "$target" = "jail" ] ; then
-	echo
-	echo Copying boot directory from mounted device to root kernel device
-	cp -rp $dest_dir/boot/defaults $work_dir/kernel/boot/
-	cp -rp $dest_dir/boot/lua $work_dir/kernel/boot/
-	cp -rp $dest_dir/boot/device.hints $work_dir/kernel/boot/
-	cp -rp $dest_dir/boot/zfs* $work_dir/kernel/boot/
-fi
-
-# DEBUG Determine if this is needed - obviously not needed for jail
-#echo Installing distribution to $work_dir/kernel - \
-#	$work_dir/kernel-distribution.log
-#\time -h make -C $src_dir distribution SRCCONF=$work_dir/src.conf \
-#	DESTDIR=$work_dir/kernel \
-#		> $work_dir/kernel-distribution.log 2>&1
-
-echo Press y to prune locales and timezones saving 28M?
-read response
+response="n"
+[ "$quiet" = "0" ] && \
+{ echo Press y to prune locales and timezones saving 28M? ; read response ; }
 
 if [ "$response" = "y" ]; then
 	echo Deleting unused locales from $dest_dir
@@ -395,8 +368,235 @@ if [ "$response" = "y" ]; then
 fi
 
 
-echo ; echo Press the elusive ANY key to continue to configuration
-read anykey
+else
+	echo ; echo Building and installing an artisanal userland!
+
+	echo ; echo Making essential userland directories
+	mkdir -p $dest_dir/bin
+	mkdir -p $dest_dir/sbin
+	mkdir -p $dest_dir/usr/bin
+	mkdir -p $dest_dir/usr/sbin
+	mkdir -p $dest_dir/lib
+	mkdir -p $dest_dir/libexec
+	mkdir -p $dest_dir/usr/lib
+	mkdir -p $dest_dir/usr/libexec
+	mkdir -p $dest_dir/boot/defaults
+	mkdir -p $dest_dir/boot/lua
+	mkdir -p $dest_dir/boot/zfs
+	mkdir -p $dest_dir/dev
+	mkdir -p $dest_dir/tmp
+	mkdir -p $dest_dir/usr/share/locale/C.UTF-8
+	mkdir -p $dest_dir/usr/share/zoneinfo
+
+# These items will be built statically/NO_SHARED=YES
+# The paths are below $src_dir which is /usr/src by default
+# Add components here or to the list of dynamically-built components below
+
+statics="bin/sh
+sbin/init
+sbin/mount
+bin/stty
+bin/cat
+bin/chflags
+bin/date
+bin/kenv
+bin/cp
+bin/ls
+bin/ps
+bin/rm
+bin/sleep
+sbin/devfs
+sbin/fsck
+sbin/shutdown
+sbin/sysctl
+libexec/getty
+usr.sbin/service
+stand
+cddl/sbin/zfs
+cddl/sbin/zpool
+usr.bin/env
+usr.bin/locale
+usr.bin/chpass
+usr.bin/host
+usr.bin/id
+usr.bin/less
+usr.bin/ldd
+usr.bin/random
+usr.bin/stat
+usr.bin/tar
+usr.bin/touch
+usr.bin/tr
+usr.bin/tty
+usr.bin/wall"
+
+# These items will be built dynamically
+# The paths are below $src_dir which is /usr/src by default
+
+dynamics="usr.bin/login
+lib/libnetbsd
+lib/libc
+libexec/rtld-elf
+lib/libcrypt
+lib/libypclnt
+lib/libpam
+lib/libpam/libpam
+lib/libpam/modules
+lib/libypclnt
+lib/libbsm
+lib/libopie
+lib/libutil
+lib/liby
+lib/libmd"
+
+echo ; echo Static builds!
+
+IFS="
+"
+for static in $statics ; do
+	util=$(basename $static )
+	echo Making $src_dir/$static
+	make -j$buildjobs -C $src_dir/$static NO_SHARED=YES \
+	WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
+	> $log_dir/make-$util.log 2>&1 || \
+		{ echo make $static failed ; exit 1 ; }
+
+#	SRCCONF=$work_dir/src.conf || \
+
+	echo Installing $static
+	make -C $src_dir/$static install DESTDIR=$dest_dir \
+	WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
+	SRCCONF=$work_dir/src.conf > $log_dir/install-$util.log 2>&1 || \
+		{ echo install $static failed ; exit 1 ; }
+done
+
+echo ; echo Dynamic builds!
+
+#IFS="
+#"
+for dynamic in $dynamics ; do
+        dyn=$(basename $dynamic )
+        echo Making $src_dir/$dynamic
+        make -j$buildjobs -C $src_dir/$dynamic \
+        WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
+        > $log_dir/make-$dyn.log 2>&1 || \
+                { echo make $dynamic failed ; exit 1 ; }
+
+#       SRCCONF=$work_dir/src.conf || \
+
+        echo Installing $dynamic
+        make -C $src_dir/$dynamic install DESTDIR=$dest_dir \
+        WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
+        SRCCONF=$work_dir/src.conf > $log_dir/install-$dyn.log 2>&1 || \
+                { echo install $dynamic failed ; exit 1 ; }
+done
+
+echo Building share/ctypedef
+make -C $src_dir/share/ctypedef > $log_dir/make-ctypedef.log 2>&1 || \
+	{ echo make /share/ctypedef failed ; exit 1 ; }
+
+echo Copying /usr/share/locale/C.UTF-8/LC_CTYPE
+cp /usr/obj/$src_dir/amd64.amd64/share/ctypedef/C.UTF-8.LC_CTYPE \
+	$dest_dir/usr/share/locale/C.UTF-8/ || \
+		{ echo C.UTF-8.LC_CTYPE copy from $obj_dir failed ; exit 1 ; }
+
+echo Building /usr/share/zoneinfo 
+make -C $src_dir/share/zoneinfo > $log_dir/make-zoneinfo.log 2>&1 || \
+	{ echo make /share/zoneinfo failed ; exit 1 ; }
+
+echo Copying /usr/share/zoneinfo/UTC
+cp /usr/obj/$src_dir/amd64.amd64/share/zoneinfo/builddir/Etc/UTC \
+	$dest_dir/usr/share/zoneinfo/ || \
+		{ echo make /share/zoneinfo/UTC failed ; exit 1 ; }
+
+fi # End world
+
+# Alternative: use a known-good full userland
+#cat /usr/freebsd-dist/base.txz | tar -xf - -C $dest_dir
+
+
+# BOOT CODE - Must be performed after stand is built
+
+echo ; echo Adding boot code
+
+if [ "$zfsroot" = "1" ] ; then
+	echo Adding gptzfsboot boot code
+	gpart bootcode -b $dest_dir/boot/pmbr -p \
+	$dest_dir/boot/gptzfsboot -i 1 /dev/$md_id || \
+		{ echo gpart bootcode failed ; exit 1 ; }
+else
+	gpart bootcode -b $dest_dir/boot/pmbr \
+	-p $dest_dir/boot/gptboot -i 1 /dev/$md_id
+fi
+
+# Alternatively install from the host
+#	gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 /dev/$md_id
+
+
+# KERNEL
+
+if [ ! "$target" = "jail" ] ; then
+
+[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+
+	echo ; echo Building kernel - logging to $log_dir/build-kernel.log
+	\time -h make -C $src_dir -j$buildjobs buildkernel \
+		KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD \
+		> $log_dir/build-kernel.log || \
+			{ echo buildkernel failed ; exit 1 ; }
+
+	echo ; echo Seeing how big the resulting kernel is
+	ls -lh /usr/obj/$src_dir/amd64.amd64/sys/OCCAMBSD/kernel
+
+[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+
+	echo ; echo Installing the kernel to $dest_dir - \
+		logging to $log_dir/install-kernel.log
+	\time -h make -C $src_dir installkernel KERNCONFDIR=$work_dir \
+		KERNCONF=OCCAMBSD DESTDIR=$dest_dir \
+		> $log_dir/install-kernel.log 2>&1
+	[ -f $dest_dir/boot/kernel/kernel ] || \
+		{ echo kernel failed to install to $dest_dir ; exit 1 ; }
+
+	# Need not be nested but the familiar location is familiar
+	echo Copying the kernel to $work_dir/kernel/
+	cp -rp $work_dir/image-mnt/boot/kernel \
+		$work_dir/kernel/boot/
+	[ -f $work_dir/kernel/boot/kernel/kernel ] || \
+		{ echo $work_dir/kernel failed to copy ; exit 1 ; }
+
+	echo Seeing how big the resulting installed kernel is
+	ls -lh $work_dir/image-mnt/boot/kernel/kernel
+fi
+
+
+# DISTRIBUTION
+
+echo Installing distribution to $dest_dir - \
+	logging to $log_dir/distribution.log
+\time -h make -C $src_dir distribution SRCCONF=$work_dir/src.conf \
+	DESTDIR=$dest_dir \
+	> $log_dir/distribution.log 2>&1
+
+# CONFIGURATION
+
+if [ ! "$target" = "jail" ] ; then
+	echo
+	echo Copying boot directory from mounted device to root kernel device
+	cp -rp $dest_dir/boot/defaults $work_dir/kernel/boot/
+	cp -rp $dest_dir/boot/lua $work_dir/kernel/boot/
+	cp -rp $dest_dir/boot/device.hints $work_dir/kernel/boot/
+	cp -rp $dest_dir/boot/zfs* $work_dir/kernel/boot/
+fi
+
+# DEBUG Determine if this is needed - obviously not needed for jail
+#echo Installing distribution to $work_dir/kernel - \
+#	$log_dir/kernel-distribution.log
+#\time -h make -C $src_dir distribution SRCCONF=$work_dir/src.conf \
+#	DESTDIR=$work_dir/kernel \
+#		> $log_dir/kernel-distribution.log 2>&1
+
+
+[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
 
 if [ "$target" = "jail" ] ; then
 
@@ -651,8 +851,7 @@ if [ ! "$target" = "jail" ] ; then
 	echo ; echo make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD
 	echo make installkernel KERNCONFDIR=$work_dir DESTDIR=$work_dir/\< jail mnt or root \>
 
-	echo ; echo Press the elusive ANY key to unmount the VM disk image for use
-	read anykey
+	echo ; echo Press ANY key to unmount the VM disk image ; read anykey
 
 	if [ "$zfsroot" = "1" ] ; then
 		echo Exporting occambsd zpool
@@ -667,31 +866,28 @@ if [ ! "$target" = "jail" ] ; then
 	mdconfig -lv
 fi
 
-echo ; echo Press y to make release
-read response
+if [ "$release" = "1" ] ; then
 
-if [ "$response" = "y" ] ; then
-
-	echo ; echo Building release - logging to $work_dir/release.log
+	echo ; echo Building release - logging to $log_dir/release.log
 	cd $src_dir/release || { echo cd release failed ; exit 1 ; }
 
 	\time -h make -C $src_dir/release SRCCONF=$work_dir/src.conf \
 		KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD release \
-		> $work_dir/release.log 2>&1 \
+		> $log_dir/release.log 2>&1 \
 			|| { echo release failed ; exit 1 ; }
 
 	echo ; echo Generating bhyve boot scripts for disc1.iso and memstick.img
 
-	echo "bhyveload -d /usr/obj/usr/src/amd64.amd64/release/disc1.iso -m 1024 occambsd" \
+	echo "bhyveload -d /usr/obj/$src_dir/amd64.amd64/release/disc1.iso -m 1024 occambsd" \
 		> $work_dir/load-bhyve-disc1.iso.sh
 
-	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,/usr/obj/usr/src/amd64.amd64/release/disc1.iso -s 31,lpc -l com1,stdio occambsd" \
+	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,/usr/obj/$src_dir/amd64.amd64/release/disc1.iso -s 31,lpc -l com1,stdio occambsd" \
 		> $work_dir/boot-bhyve-disc1.iso.sh
 
-	echo "bhyveload -d /usr/obj/usr/src/amd64.amd64/release/memstick.img -m 1024 occambsd" \
+	echo "bhyveload -d /usr/obj/$src_dir/amd64.amd64/release/memstick.img -m 1024 occambsd" \
 		> $work_dir/load-bhyve-memstick.img.sh
 
-	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,/usr/obj/usr/src/amd64.amd64/release/memstick.img -s 31,lpc -l com1,stdio occambsd" \
+	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,/usr/obj/$src_dir/amd64.amd64/release/memstick.img -s 31,lpc -l com1,stdio occambsd" \
 		> $work_dir/boot-bhyve-memstick.img.sh
 
 	echo ; echo Release contents are in /usr/obj
