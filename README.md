@@ -70,7 +70,7 @@ bhyve boot time: 		two ~ three seconds
 Note that ARC "warmth" on the host will speed build times
 
 
-## Know Issues/To Do
+## Known Issues/To Do
 
 * v3-beta - bhyve target is tested, Xen is not, jail is not jailing
 
