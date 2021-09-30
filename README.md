@@ -58,7 +58,7 @@ sh destroy-bhyve.sh
 
 UFS/bhyve/buildworld:		1m14.31s real, 7.2M kernel, 174M total
 ZFS/bhyve/buildworld:		1m28.78s real, 7.2M kernel, 120M total
-UFS/bhyve/userland:		2m6.56s real
+UFS/bhyve/userland:		2m6.56s real, 105M
 UFS/ZFS buildkernel:		19.52 real
 Total UFS/bhyve/buildworld:	2m10.51s real
 Total ZFS/bhyve/buildworld:	2m7.28s real ~ 2m27.17s real
