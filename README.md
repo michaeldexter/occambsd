@@ -40,7 +40,7 @@ It defaults to a build a bhyve-compatible, root-on-UFS virtual machine and diffe
 -q	Quiet mode - do not ask to continue at every major step
 ```
 
-For example, to create a root-on-ZFS virtual machine:
+For example, to create a root-on-ZFS virtual machine and note the time it takes to build:
 ```
 \time -h sh occambsd.sh -z
 ```
