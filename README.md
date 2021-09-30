@@ -11,7 +11,6 @@ directory mounted at /tmp/occambsd for speed and unobtrusiveness.
 FreeBSD 13.0-RELEASE source code or later in /usr/src or modify the $src_dir variable in the script as required
 
 ## Layout
-
 ```
 /tmp/occambsd/OCCAMBSD		OccamBSD kernel configuration file
 /tmp/occambsd/src.conf		OccamBSD src.conf used for the build
@@ -31,6 +30,7 @@ The occambsd.sh script is position independent with one dependency, lib_occambsd
 
 It defaults to a build a bhyve-compatible, root-on-UFS virtual machine and different behavior is controlled by the following flags:
 
+```
 -z	Use root-on-ZFS rather than UFS
 -x	Target Xen rather than bhyve
 -j	Target Jail rather than bhyve
@@ -38,6 +38,7 @@ It defaults to a build a bhyve-compatible, root-on-UFS virtual machine and diffe
 -r	Build a release with bootable disc1 and memstick images
 	(Only supported with a standard userland)
 -q	Quiet mode - do not ask to continue at every major step
+```
 
 For example, to create a root-on-ZFS virtual machine:
 ```
@@ -55,7 +56,7 @@ sh destroy-bhyve.sh
 ```
 
 ## Results from an EPYC 7402p
-
+```
 UFS/bhyve/buildworld:		1m14.31s real, 7.2M kernel, 174M total
 ZFS/bhyve/buildworld:		1m28.78s real, 7.2M kernel, 120M total
 UFS/bhyve/userland:		2m6.56s real, 105M
@@ -65,7 +66,7 @@ Total ZFS/bhyve/buildworld:	2m7.28s real ~ 2m27.17s real
 ZFS/bhyve/buildworld release:	3m35.70s real
 
 bhyve boot time: 		two ~ three seconds
-
+```
 Note that ARC "warmth" on the host will speed build times
 
 
