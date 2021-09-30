@@ -8,7 +8,7 @@ directory mounted at /tmp/occambsd for speed and unobtrusiveness.
 
 ## Requirements
 
-FreeBSD 13.0-RELEASE source code or later in /usr/src or modify the $src_dir variable in the script as required
+FreeBSD 13.0-RELEASE or later source code in /usr/src or modify the $src_dir variable in the script as required. A Git client if cloning from GitHub.
 
 ## Layout
 ```
