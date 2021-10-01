@@ -840,7 +840,7 @@ elif [ "$target" = "xen" ] ; then
 	#xl console -t pv OccamBSD
 	#xl console -t serial OccamBSD
 else
-	echo ; echo "jail -c -f $work_dir/jail.conf \
+	echo ; echo "jail -c -f $work_dir/jail.conf" \
 		> $work_dir/boot-jail.sh
 	echo $work_dir/boot-jail.sh
 fi
