@@ -72,15 +72,11 @@ Note that ARC "warmth" on the host will speed build times
 
 ## Known Issues/To Do
 
-* v3-beta - bhyve target is tested, Xen is not. Not tested on CURRENT
-
+* v3-beta - bhyve target is tested, Xen is not.
+* Lots of 14-CURRENT fallout for both "buildworld" and "userland" approaches
 * Investigate Juniper's static_libpam towards the goal of an optional fully statically-built userland
-
 * Could have bhyve and Xen-specific kernel configuration files
-
 * Could add release support to the minimum userland
-
 * Would be nice to target a Raspberry Pi image
-
 
 This is not an endorsement of GitHub
