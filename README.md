@@ -77,6 +77,7 @@ Note that ARC "warmth" on the host will speed build times
 * Investigate Juniper's static_libpam towards the goal of an optional fully statically-built userland
 * Could have bhyve and Xen-specific kernel configuration files
 * Could add release support to the minimum userland
+* Could add automatic du(1) and tree(1) (if installed) analysis
 * Would be nice to target a Raspberry Pi image
 
 This is not an endorsement of GitHub
