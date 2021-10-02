@@ -8,7 +8,7 @@ directory mounted at /tmp/occambsd for speed and unobtrusiveness.
 
 ## Motivations
 
-FreeBSD Jail has long provided a lightweight container for services and applications. Internet-facing services are by definition at risk of remote abuse of the service and/or the operating system hosting them. A "minimum" Jail or virtual machine can theoretically contain only the dependencies to deliver the desired service, and nothing more. In practice, FreeBSD offers a flexible build system with which build options (man src.conf) and kernel configuration options can significantly reduce the kernel and userland of a specially-build system, rather than using the standard "buildworld". Unfortuanately, the supported build option shave been inconsistent in their reliability, up until the 13.0 release of FreeBSD. While the FreeBSD "build option survey" exisits to test the build options in mass, it is hightly inconvienct to use. The related "bos-ng" project improves upon it, but the frequest exercise of many options at once is proving more effective in their validation along active source branches. OccamBSD can generate reduced-size userlands using either buildworld with build options/exclusions, or "from scratch", using the -u options which builds and installs the individual components needed to boot and log in.
+FreeBSD Jail has long provided a lightweight container for services and applications. Internet-facing services are by definition at risk of remote abuse of the service and/or the operating system hosting them. A "minimum" Jail or virtual machine can theoretically contain only the dependencies to deliver the desired service, and nothing more. In practice, FreeBSD offers a flexible build system with which build options (man src.conf) and kernel configuration options can significantly reduce the kernel and userland of a specially-build system, rather than using the standard "buildworld". Unfortunately, the supported build option shave been inconsistent in their reliability, up until the 13.0 release of FreeBSD. While the FreeBSD "build option survey" exists to test the build options in mass, it is highly inconvenient to use. The related "bos-ng" project improves upon it, but the frequent exercise of many options at once is proving more effective in their validation along active source branches. OccamBSD can generate reduced-size userlands using either buildworld with build options/exclusions, or "from scratch", using the -u options which builds and installs the individual components needed to boot and log in.
 
 The OccamBSD approach can provide:
 
@@ -16,10 +16,10 @@ The OccamBSD approach can provide:
 * The foundation for purpose-build Jails/containers and virtual machines
 * The foundation for embedded projects and products
 * An academic tour of the essential components of FreeBSD that are used by virtually all users at all times
-* An inventory of the essential components of FreeBSD that must be prioritized for secuirty auditing, quality assurance, and documentation
+* An inventory of the essential components of FreeBSD that must be prioritized for security auditing, quality assurance, and documentation
 * An opportunity to review what's left after a "userland" build for consideration of removal from base
 * Hopefully the foundation for an update mechanism to replace freebsd-update based on lessons from the up.bsd.lv proof of concept
-* To be determined: The relationsiop of this to "packaged base"; the Makefile hygene releated to this should prove useful
+* To be determined: The relationship of this to "packaged base"; the Makefile hygiene related to this should prove useful
 
 In short, to help deliver on the unwavering FreeBSD promise to provide a flexible, permissively-licensed operating system for use for. nearly any purpose
 
