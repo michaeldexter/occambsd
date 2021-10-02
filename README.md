@@ -13,13 +13,15 @@ FreeBSD Jail has long provided a lightweight container for services and applicat
 The OccamBSD approach can provide:
 
 * Validation of the FreeBSD build system
-* The foundation for purpose-build Jails and virtual machines
+* The foundation for purpose-build Jails/containers and virtual machines
 * The foundation for embedded projects and products
 * An academic tour of the essential components of FreeBSD that are used by virtually all users at all times
 * An inventory of the essential components of FreeBSD that must be prioritized for secuirty auditing, quality assurance, and documentation
 * An opportunity to review what's left after a "userland" build for consideration of removal from base
 * Hopefully the foundation for an update mechanism to replace freebsd-update based on lessons from the up.bsd.lv proof of concept
 * To be determined: The relationsiop of this to "packaged base"; the Makefile hygene releated to this should prove useful
+
+In short, to help deliver on the unwavering FreeBSD promise to provide a flexible, permissively-licensed operating system for use for. nearly any purpose
 
 ## Requirements
 
