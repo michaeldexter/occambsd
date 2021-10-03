@@ -137,7 +137,7 @@ TinyBSD (/usr/src/tools/tools/tinybsd) is focused on minimization of a FreeBSD i
 
 /usr/src/sys/kern/sysv_msg.c:185:2: error: invalid application of 'sizeof' to an incomplete type 'struct freebsd7_msgctl_args'
 ```
-The TinyBSD build issues can be solved by substituting an OCCAMBSD kernel configuration file for the TINYBSD ones, resulting in a 10M installation, but it lacks the modern lua loader.
+The TinyBSD build issues can be solved by substituting an OCCAMBSD kernel configuration file for the TINYBSD ones, resulting in a 10M installation, but it cannot find the modern lua loader or if manually booted, /etc/rc.
 
 [Poudriere image.sh](https://github.com/freebsd/poudriere/blob/master/src/share/poudriere/image.sh) is an actively-developed framework for image generation that is well documented as part of the [BSD Router Project](https://bsdrp.net/documentation/technical_docs/poudriere?s[]=build) A Poudriere image installation can be reduced using KERNCONF and src.conf entries.
 
