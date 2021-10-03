@@ -106,6 +106,38 @@ NANO_MEDIASIZE=16000000
 
 picobsd (formerly referred to as PicoBSD) was located in /usr/src/release/picobsd and appears to have been removed from FreeBSD 13.0R. It can be found in the 12.X and earlier sources, and is unique in that it includes custom utilities.
 
+TinyBSD (/usr/src/tools/tools/tinybsd) is focused on minimization of a FreeBSD installation but is not compatible with recent FreeBSD. These modifications to its various kernel configuraiton files will enable a kernel build but it fails with the error below:
+```
+< machine		i386
+< cpu		I486_CPU
+< cpu		I586_CPU
+< cpu		I686_CPU
+---
+> #machine		i386
+> #cpu		I486_CPU
+> #cpu		I586_CPU
+> #cpu		I686_CPU
+> cpu		HAMMER
+31c32
+< options 	ADAPTIVE_GIANT		# Giant mutex is adaptive.
+---
+> #options 	ADAPTIVE_GIANT		# Giant mutex is adaptive.
+33c34
+< device		apic			# I/O APIC
+---
+> #device		apic			# I/O APIC
+39c40
+< device		atadisk		# ATA disk drives
+---
+> #device		atadisk		# ATA disk drives
+69c70
+< options CLK_USE_I8254_CALIBRATION
+---
+> #options CLK_USE_I8254_CALIBRATION
+
+/usr/src/sys/kern/sysv_msg.c:185:2: error: invalid application of 'sizeof' to an incomplete type 'struct freebsd7_msgctl_args'
+```
+
 [Poudriere image.sh](https://github.com/freebsd/poudriere/blob/master/src/share/poudriere/image.sh) is an actively-developed framework for image generation that is well documented as part of the [BSD Router Project](https://bsdrp.net/documentation/technical_docs/poudriere?s[]=build) A Poudriere image installation can be reduced using KERNCONF and src.conf entries.
 
 [mkjail](https://github.com/mkjail/mkjail) can be used on FreeBSD to create new jails, keep them updated, and upgrade to a new release.
