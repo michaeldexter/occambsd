@@ -86,7 +86,6 @@ bhyve boot time: 		two ~ three seconds
 ```
 Note that ARC "warmth" on the host will speed build times
 
-
 ## Known Issues/To Do
 
 * v3-beta - bhyve target is tested, Xen is not
@@ -96,5 +95,19 @@ Note that ARC "warmth" on the host will speed build times
 * Could add release support to the minimum userland
 * Could add automatic du(1) and tree(1) (if installed) analysis
 * Would be nice to target a Raspberry Pi image
+
+## Related Tools
+
+NanoBSD (nanobsd(8) and /usr/src/tools/tools/nanobsd/) is a "utility used to create a FreeBSD system image suitable for embedded applications" that produces a flashable disk image that can have one or more additional boot partitions for upgrading and fallback. A FreeBSD 13.0R build of NanoBSD consumes 2.7G of disk space per boot partition, representing a full installation of FreeBSD. Using NanoBSD with FreeBSD 13.0R requires a larger default image size and note that it defaults to 'make -j 3'. A NanoBSD installation can be reduced using KERNCONF and src.conf entries. Consider these changes to ~/nanobsd/defaults.sh:
+```
+NANO_PMAKE="make -j $(sysctl -n hw.ncpu)"
+NANO_MEDIASIZE=16000000
+```
+
+picobsd (formerly referred to as PicoBSD) was located in /usr/src/release/picobsd and appears to have been removed from FreeBSD 13.0R. It can be found in the 12.X and earlier sources, and is unique in that it includes custom utilities.
+
+[Poudriere image.sh](https://github.com/freebsd/poudriere/blob/master/src/share/poudriere/image.sh) is an actively-developed framework for image generation that is well documented as part of the [BSD Router Project](https://bsdrp.net/documentation/technical_docs/poudriere?s[]=build) A Poudriere image installation can be reduced using KERNCONF and src.conf entries.
+
+[mkjail](https://github.com/mkjail/mkjail) can be used on FreeBSD to create new jails, keep them updated, and upgrade to a new release.
 
 This is not an endorsement of GitHub
