@@ -21,7 +21,7 @@ The OccamBSD approach can provide:
 * Hopefully the foundation for an update mechanism to replace freebsd-update based on lessons from the up.bsd.lv proof of concept
 * To be determined: The relationship of this to "packaged base"; the Makefile hygiene related to this should prove useful
 
-In short, to help deliver on the unwavering FreeBSD promise to provide a flexible, permissively-licensed operating system for use for. nearly any purpose
+In short, to help deliver on the unwavering FreeBSD promise to provide a flexible, permissively-licensed operating system for use for nearly any purpose.
 
 ## Requirements
 
