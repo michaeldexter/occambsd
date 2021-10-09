@@ -72,6 +72,9 @@ while getopts zxjurq opts ; do
 	q)
 		quiet="1"
 		;;
+	*)
+		echo Invalid input
+		exit 1
 	esac
 done
 
