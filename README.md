@@ -27,6 +27,8 @@ In short, to help deliver on the unwavering FreeBSD promise to provide a flexibl
 
 FreeBSD 13.0-RELEASE or later source code in /usr/src or modify the $src_dir variable in the script as required. A Git-compatible client if cloning from GitHub.
 
+FreeBSD 14-CURRENT is supported as of 2021-11-28
+
 ## Layout
 ```
 /tmp/occambsd/OCCAMBSD		OccamBSD kernel configuration file
@@ -38,7 +40,9 @@ FreeBSD 13.0-RELEASE or later source code in /usr/src or modify the $src_dir var
 /tmp/occambsd/jail.conf		OccamBSD jail configuration file
 /tmp/occambsd/*load.sh		OccamBSD generated load scripts
 /tmp/occambsd/*boot.sh		OccamBSD generated boot scripts
-/tmp/occambsd/logs/*		OccamBSD log files
+/tmp/occambsd/logs/*		OccamBSD build log files
+/tmp/occambsd/filetree.txt	OccamBSD disk image tree(1) output (if present)
+/tmp/occambsd/diskusage.txt	OccamBSD disk image du(1) output
 ```
 
 ## Usage
@@ -89,7 +93,6 @@ Note that ARC "warmth" on the host will speed build times
 ## Known Issues/To Do
 
 * v3-beta - bhyve target is tested, Xen is not
-* Lots of 14-CURRENT fallout for both "buildworld" and "userland" approaches
 * Investigate Juniper's static_libpam towards the goal of an optional fully statically-built userland
 * Could have bhyve and Xen-specific kernel configuration files
 * Could add release support to the minimum userland
@@ -118,6 +121,6 @@ Was μbsd a thing?
 
 ## Observations
 
-There are (and have been) many FreeBSD build tools but few, with the notable exception of TinyBSD, have made any effort to "minimize" the FreeBSD kernel and/or base system with any effort beyond a kernel configuration file and a src.conf file. This is understandable, given that the FreeBSD build options have been under-maintained for decades. FreeBSD 13.0-RELEASE marks an important milestone with the quality of its build options. Unfortunately, FreeBSD 14-MAIN already suffers from build option fallout. (Sad face)
+There are (and have been) many FreeBSD build tools but few, with the notable exception of TinyBSD, have made any effort to "minimize" the FreeBSD kernel and/or base system with any effort beyond a kernel configuration file and a src.conf file. This is understandable, given that the FreeBSD build options have been under-maintained for decades. FreeBSD 13.0-RELEASE marks an important milestone with the quality of its build options.
 
 This project is not an endorsement of GitHub

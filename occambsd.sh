@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version 13.0-RELEASE v3-beta
+# Version 13.0-RELEASE v4
 
 # occambsd: An application of Occam's razor to FreeBSD
 # a.k.a. "super svelte stripped down FreeBSD"
@@ -84,8 +84,10 @@ log_dir="$work_dir/logs"
 imagesize="4G"				# More than enough room
 md_id="md42"				# Ask Douglas Adams for an explanation
 buildjobs="$(sysctl -n hw.ncpu)"
-enabled_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_VI"
-enabled_zfs_options="WITHOUT_LOADER_ZFS WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL"
+
+enabled_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_GELI WITHOUT_LOADER_LUA WITHOUT_LOADER_ZFS WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_VI"
+
+enabled_zfs_options="WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL"
 
 if [ "$zfsroot" = "1" ] ; then
 	enabled_options="$enabled_options $enabled_zfs_options"
@@ -94,14 +96,16 @@ fi
 # The world will be built WITH these build options:
 # WITHOUT_AUTO_OBJ and WITHOUT_UNIFIED_OBJDIR warn that they go in src-env.conf
 # <broken or complex build options>
+# WITHOUT_LOADER_GELI is required in 14-MAIN for WITHOUT_BOOT
 # WITHOUT_LOADER_LUA is required for the lua boot code
+# WITHOUT_LOADER_ZFS is required in 14-MAIN for WITHOUT_BOOT and for ZFS
 # WITHOUT_BOOT is needed to install the LUA loader
 # WITHOUT_LOCALES is necessary for a console
 # WITHOUT_ZONEINFO is necessary for tzsetup on VM image with a userland
 # WITHOUT_EFI to support make release, specifically for loader.efi
 # WITHOUT_VI could come in handy
 # Required for ZFS support:
-# WITHOUT_LOADER_ZFS WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL
+# WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL
 
 
 # PREFLIGHT CHECKS
@@ -157,10 +161,15 @@ mount | grep tmpfs
 
 # SRC.CONF
 
+echo ; echo Generating $work_dir/all-options with f_occam_options
+
+f_occam_options $src_dir > $work_dir/all-options.txt || \
+	{ echo $work_dir/all-options.conf generation failed ; exit 1 ; }
+
 echo ; echo Generating $work_dir/src.conf with f_occam_options
 
 f_occam_options $src_dir "$enabled_options" > $work_dir/src.conf || \
-	{ echo f_occam_options function failed ; exit 1 ; }
+	{ echo $work_dir/src.conf generation failed ; exit 1 ; }
 
 echo ; echo The src.conf options that exclude components reads: ; echo
 
@@ -229,7 +238,13 @@ device		virtio_blk		# VirtIO Block device
 # Needed for Xen
 options		XENHVM			# Xen HVM kernel infrastructure
 device		xenpci			# Xen HVM Hypervisor services driver
-device		acpi
+
+# Needed for 13.0 Xen
+#device		acpi
+
+# Needed for 14-MAIN Xen
+device          xentimer                # Xen x86 PV timer device
+
 #device		da			# Direct Access (disks)
 
 # Apparently not needed if virtio device and MODULE_OVERRIDE are specified
@@ -348,6 +363,7 @@ if [ "$userland" = "0" ] ; then
 	echo ; echo Installing world - logging to $log_dir/install-world.log
 	\time -h make -C $src_dir installworld SRCCONF=$work_dir/src.conf \
 		DESTDIR=$dest_dir \
+		NO_FSCHG=YES \
 	> $log_dir/install-world.log 2>&1
 
 response="n"
@@ -847,6 +863,11 @@ else
 		> $work_dir/boot-jail.sh
 	echo $work_dir/boot-jail.sh
 fi
+
+#[ $( which tree > /dev/null 2>&1 ) ] && tree $dest_dir > $work_dir/filetree.txt
+[ $( which tree ) ] && tree $dest_dir > $work_dir/filetree.txt
+
+du -h $dest_dir > $work_dir/diskusage.txt
 
 if [ ! "$target" = "jail" ] ; then
 	echo ; echo The VM disk image is still mounted and you could
