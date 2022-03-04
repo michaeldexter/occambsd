@@ -2,7 +2,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright 2021 Michael Dexter
+# Copyright 2021, 2022 Michael Dexter
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version 13.0-RELEASE v4
+# Version v5
 
 # occambsd: An application of Occam's razor to FreeBSD
 # a.k.a. "super svelte stripped down FreeBSD"
@@ -40,7 +40,7 @@
 # The separate kernel directory is very useful for testing kernel changes
 # while waiting for institutionalized VirtFS support.
 
-# The -u option will built and install a minimal userland,
+# The -u option will build and install a minimal userland,
 # rather than building and installing world
 
 
@@ -85,12 +85,25 @@ imagesize="4G"				# More than enough room
 md_id="md42"				# Ask Douglas Adams for an explanation
 buildjobs="$(sysctl -n hw.ncpu)"
 
-enabled_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_GELI WITHOUT_LOADER_LUA WITHOUT_LOADER_ZFS WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_VI"
 
-enabled_zfs_options="WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL"
+# Determining the OS revision for conditional handling
+
+# Using /tmp because the work_dir is not up yet
+grep "REVISION=" $src_dir/sys/conf/newvers.sh > /tmp/revision.txt
+. /tmp/revision.txt
+
+# Tested 2022-03-03 with 13.0R and 14-MAIN
+enabled_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_VI"
+
+# Previous list
+#enabled_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_VI"
+
+	if [ "$REVISION" = "14.0" ] ; then
+		enabled_options="$enabled_options WITHOUT_LOADER_GELI"
+	fi
 
 if [ "$zfsroot" = "1" ] ; then
-	enabled_options="$enabled_options $enabled_zfs_options"
+	enabled_options="$enabled_options WITHOUT_LOADER_ZFS WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL"
 fi
 
 # The world will be built WITH these build options:
@@ -98,14 +111,14 @@ fi
 # <broken or complex build options>
 # WITHOUT_LOADER_GELI is required in 14-MAIN for WITHOUT_BOOT
 # WITHOUT_LOADER_LUA is required for the lua boot code
-# WITHOUT_LOADER_ZFS is required in 14-MAIN for WITHOUT_BOOT and for ZFS
+# WITHOUT_LOADER_ZFS is required in 14-MAIN for WITHOUT_BOOT
 # WITHOUT_BOOT is needed to install the LUA loader
 # WITHOUT_LOCALES is necessary for a console
 # WITHOUT_ZONEINFO is necessary for tzsetup on VM image with a userland
 # WITHOUT_EFI to support make release, specifically for loader.efi
 # WITHOUT_VI could come in handy
 # Required for ZFS support:
-# WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL
+# WITHOUT_LOADER_ZFS WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL
 
 
 # PREFLIGHT CHECKS
@@ -133,14 +146,14 @@ zpool export -f occambsd > /dev/null 2>&1
 mdconfig -du "$md_id" > /dev/null 2>&1
 mdconfig -du "$md_id" > /dev/null 2>&1
 
-echo ; echo Do any memory devices or tmpfs mounts need to be cleaned up?
-echo Press ANY key if you do not see any to continue ; echo
-
 zpool list | grep occambsd
 mdconfig -lv
 mount | grep "$work_dir"
 mount | grep "/usr/obj"
-read areweclean
+if [ "$quiet" = "0" ] ; then 
+	echo ; echo is md42 listed? If so, go destroy it
+	echo ; echo Press ANY key to continue ; read anykey
+fi
 
 
 # PREPARATION
@@ -179,9 +192,6 @@ cat $work_dir/src.conf
 
 
 # KERNCONF
-
-# FUTURE: Could build bhyve and Xen-specific kernel configuration files
-# No point if for a jail but it is quick
 
 echo ; echo Creating new OCCAMBSD KERNCONF
 #cat << HERE > $src_dir/sys/amd64/conf/OCCAMBSD
@@ -235,16 +245,7 @@ device		virtio			# Generic VirtIO bus (required)
 device		virtio_pci		# VirtIO PCI device
 device		virtio_blk		# VirtIO Block device
 
-# Needed for Xen
-options		XENHVM			# Xen HVM kernel infrastructure
-device		xenpci			# Xen HVM Hypervisor services driver
-
-# Needed for 13.0 Xen
-#device		acpi
-
-# Needed for 14-MAIN Xen
-device          xentimer                # Xen x86 PV timer device
-
+# TO BE DETERMINED - NEEDED FOR XEN?
 #device		da			# Direct Access (disks)
 
 # Apparently not needed if virtio device and MODULE_OVERRIDE are specified
@@ -258,10 +259,37 @@ device          xentimer                # Xen x86 PV timer device
 #device		iflib
 #device		em			# Intel PRO/1000 Gigabit Ethernet Family
 
-# Requested/required by the zfs kernel
-device		crypto			# core crypto support
-device		aesni			# AES-NI OpenCrypto module
+# Adding for cpersiva@/@cpersiva/wiki.freebsd.org/BootTime
+# "Check out the freebsd-boot-profiling repo and run mkflame.sh"
+options		TSLOG
 HERE
+
+
+# Conditional KERNCONF options and devices
+
+if [ "$zfsroot" = "1" ] ; then
+	echo "device	crypto		# core crypto support" \
+		>> $work_dir/OCCAMBSD
+	echo "device	aesni		# AES-NI OpenCrypto module" \
+		>> $work_dir/OCCAMBSD
+fi
+
+if [ "$target" = "xen" ] ; then
+	echo "options	XENHVM	# Xen HVM kernel infrastructure" \
+		>> $work_dir/OCCAMBSD
+	echo "device	xenpci	# Xen HVM Hypervisor services driver" \
+		>> $work_dir/OCCAMBSD
+	if [ "$REVISION" = "13.0" ] ; then
+		echo "device	acpi" \
+			>> $work_dir/OCCAMBSD
+	elif [ "$REVISION" = "14.0" ] ; then
+		echo "device	xentimer	# Xen x86 PV timer device" \
+			>> $work_dir/OCCAMBSD
+	else
+		echo REVISION $REVISION not recognized
+		exit 1
+	fi
+fi
 
 echo ; echo The resulting OCCAMBSD KERNCONF is
 cat $work_dir/OCCAMBSD
@@ -601,10 +629,14 @@ echo Installing distribution to $dest_dir - \
 if [ ! "$target" = "jail" ] ; then
 	echo
 	echo Copying boot directory from mounted device to root kernel device
-	cp -rp $dest_dir/boot/defaults $work_dir/kernel/boot/
-	cp -rp $dest_dir/boot/lua $work_dir/kernel/boot/
-	cp -rp $dest_dir/boot/device.hints $work_dir/kernel/boot/
-	cp -rp $dest_dir/boot/zfs* $work_dir/kernel/boot/
+	[ -d $dest_dir/boot/defaults ] && \
+		cp -rp $dest_dir/boot/defaults $work_dir/kernel/boot/
+	[ -d $dest_dir/boot/lua ] && \
+		cp -rp $dest_dir/boot/lua $work_dir/kernel/boot/
+	[ -f $dest_dir/boot/device.hints ] && \
+		cp -p $dest_dir/boot/device.hints $work_dir/kernel/boot/
+	[ -d $dest_dir/boot/zfs ] && \
+		cp -rp $dest_dir/boot/zfs* $work_dir/kernel/boot/
 fi
 
 # DEBUG Determine if this is needed - obviously not needed for jail
@@ -919,6 +951,9 @@ else
 	echo ; echo Unmounting /usr/obj
 	umount /usr/obj
 fi
+
+echo ; echo removing /tmp/revision.txt
+rm /tmp/revision.txt
 
 echo ; echo Running df -h \| grep tmpfs to see how big the results are
 df -h | grep tmpfs

@@ -92,12 +92,11 @@ Note that ARC "warmth" on the host will speed build times
 
 ## Known Issues/To Do
 
-* v3-beta - bhyve target is tested, Xen is not
 * Investigate Juniper's static_libpam towards the goal of an optional fully statically-built userland
-* Could have bhyve and Xen-specific kernel configuration files
 * Could add release support to the minimum userland
 * Could add automatic du(1) and tree(1) (if installed) analysis
 * Would be nice to target a Raspberry Pi image
+* The cpersiva@/@cpersiva/wiki.freebsd.org/BootTime TSLOG option is in the kernel but it would be nice to have a script to extract the results
 
 ## Related Tools
 
