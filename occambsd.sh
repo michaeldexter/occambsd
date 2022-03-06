@@ -219,9 +219,6 @@ device		ether			# Ethernet support
 # Do boot it in bhyve, you will want to see serial output
 device		uart			# Generic UART driver
 
-#panic: running without device atpic requires a local APIC
-device		atpic			# 8259A compatability
-
 # To get past mountroot
 device		ahci			# AHCI-compatible SATA controllers
 device		scbus			# SCSI bus (required for ATA/SCSI)
@@ -285,6 +282,7 @@ if [ "$target" = "xen" ] ; then
 	elif [ "$REVISION" = "14.0" ] ; then
 		echo "device	xentimer	# Xen x86 PV timer device" \
 			>> $work_dir/OCCAMBSD
+		echo "device	acpi" >> $work_dir/OCCAMBSD
 	else
 		echo REVISION $REVISION not recognized
 		exit 1
@@ -878,12 +876,18 @@ if [ "$target" = "bhyve" ] ; then
 		> $work_dir/destroy-bhyve.sh
 	echo $work_dir/destroy-bhyve.sh
 elif [ "$target" = "xen" ] ; then
-	echo ; echo "xl create -c $work_dir/xen-kernel.cfg" \
+	echo "xl list | grep OccamBSD && xl destroy OccamBSD" \
 		> $work_dir/boot-xen-directory.sh
+	echo ; echo "xl create -c $work_dir/xen-kernel.cfg" \
+		>> $work_dir/boot-xen-directory.sh
 	echo $work_dir/boot-xen-directory.sh
-	echo "xl create -c $work_dir/xen.cfg" \
+
+	echo "xl list | grep OccamBSD && xl destroy OccamBSD" \
 		> $work_dir/boot-xen-disk-image.sh
+	echo "xl create -c $work_dir/xen.cfg" \
+		>> $work_dir/boot-xen-disk-image.sh
 	echo $work_dir/boot-xen-disk-image.sh
+
 	echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > $work_dir/destroy-xen.sh
 	echo $work_dir/destroy-xen.sh
 
