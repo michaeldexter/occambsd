@@ -3,8 +3,7 @@ a.k.a. "super svelte stripped down FreeBSD"
 
 This script leverages FreeBSD build options and a minimum kernel configuration file to build the minimum kernel and userland to boot FreeBSD under jail(8) and the bhyve and Xen hypervisors.
 
-By default it builds from /usr/src to a tmpfs mount /usr/obj and a tmpfs work
-directory mounted at /tmp/occambsd for speed and unobtrusiveness.
+By default it builds from /usr/src to /usr/obj and a work directory /tmp/occambsd. The object and work directories can be mounted tmpfs using the -t flag for speed and unobtrusiveness.
 
 ## Motivations
 
@@ -58,6 +57,7 @@ It defaults to a build a bhyve-compatible, root-on-UFS virtual machine and diffe
 -u	Build and install a minimum userland without build|installworld
 -r	Build a release with bootable disc1 and memstick images
 	(Only supported with a standard userland)
+-t	Use tmpfs(5) for the object and work directories
 -q	Quiet mode - do not ask to continue at every major step
 ```
 
@@ -65,7 +65,7 @@ For example, to create a root-on-ZFS virtual machine and note the time it takes 
 ```
 \time -h sh occambsd.sh -z
 ```
-All written output is to tmpfs mounts on /usr/obj and /tmp/occambsd
+All written output is to /usr/obj and /tmp/occambsd
 
 To boot the results under bhyve, run:
 ```
@@ -92,10 +92,12 @@ Note that ARC "warmth" on the host will speed build times
 
 ## Known Issues/To Do
 
+* The Jail option reports "occambsd: created" but is not created
 * Investigate Juniper's static_libpam towards the goal of an optional fully statically-built userland
-* Could add release support to the minimum userland
-* Could add automatic du(1) and tree(1) (if installed) analysis
-* Would be nice to target a Raspberry Pi image
+* Consider adding release support to the minimum userland
+* Consider adding automatic du(1) and tree(1) (if installed) analysis
+* Consider targeting a Raspberry Pi image
+* Consider placing "bread crumbs" to avoid re-running successful steps
 * The cpersiva@/@cpersiva/wiki.freebsd.org/BootTime TSLOG option is in the kernel but it would be nice to have a script to extract the results
 
 ## Related Tools

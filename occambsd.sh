@@ -50,9 +50,10 @@ zfsroot="0"
 target="bhyve"
 userland="0"
 release="0"
+tmpfs="0"
 quiet="0"
 
-while getopts zxjurq opts ; do
+while getopts zxjurtq opts ; do
 	case $opts in
 	z)
 		zfsroot="1"
@@ -69,6 +70,9 @@ while getopts zxjurq opts ; do
 	r)
 		release="1"
 		;;
+	t)
+		tmpfs="1"
+		;;
 	q)
 		quiet="1"
 		;;
@@ -79,10 +83,10 @@ while getopts zxjurq opts ; do
 done
 
 src_dir="/usr/src"
-obj_dir="/usr/obj"			# This will be mounted tmpfs
-work_dir="/tmp/occambsd"		# This will be mounted tmpfs
+obj_dir="/usr/obj"
+work_dir="/tmp/occambsd"
 log_dir="$work_dir/logs"
-imagesize="5G"
+imagesize="4G"
 md_id="md42"				# Ask Douglas Adams for an explanation
 buildjobs="$(sysctl -n hw.ncpu)"
 
@@ -137,6 +141,7 @@ fi
 #	They may also be mounted multiple times atop one another and
 #	md devices may be attached multiple times. Proper cleanup would be nice
 
+# NOT making these tmpfs conditional as the user may try with and without tmpfs
 umount -f "$work_dir/image-mnt" > /dev/null 2>&1
 umount -f "$work_dir/jail-mnt/dev" > /dev/null 2>&1
 umount -f "$work_dir" > /dev/null 2>&1
@@ -159,18 +164,29 @@ fi
 
 # PREPARATION
 
+[ -f $src_dir/Makefile ] || { echo Does $src_dir contain sources? ; exit 1 ; }
+
 [ -d $work_dir ] || mkdir -p "$work_dir"
 [ "$?" -ne "0" ] && { echo Failed to make $work_dir ; exit 1 ; }
 
+if [ "$tmpfs" = "1" ] ; then
 echo ; echo Mounting $work_dir tmpfs
-mount -t tmpfs tmpfs "$work_dir" || { echo tmpfs mount failed ; exit 1 ; }
+	mount -t tmpfs tmpfs "$work_dir" || \
+		{ echo tmpfs mount failed ; exit 1 ; }
+fi
 
+# Consider that the might be under $work_dir or somewhere else entirely
+[ -d $obj_dir ] || mkdir -p "$obj_dir"
+[ "$?" -ne "0" ] && { echo Failed to make $obj_dir ; exit 1 ; }
+
+# Assume this is under $work_dir and create at the same time?
 mkdir -p "$log_dir" || { echo Failed to create $log_dir ; exit 1 ; }
 
-echo ; echo Mounting a tmpfs to $obj_dir/
-mount -t tmpfs tmpfs $obj_dir/
-
-mount | grep tmpfs
+if [ "$tmpfs" = "1" ] ; then
+	echo ; echo Mounting a tmpfs to $obj_dir/
+	mount -t tmpfs tmpfs $obj_dir/
+	mount | grep tmpfs
+fi
 
 
 # SRC.CONF
@@ -216,6 +232,9 @@ device		loop			# Network loopback
 # The modern kernel will not build without ethernet
 device		ether			# Ethernet support
 # The kernel should build at this point
+
+# Was bhyve working without this?
+device		acpi
 
 # Do boot it in bhyve, you will want to see serial output
 device		uart			# Generic UART driver
@@ -277,16 +296,9 @@ if [ "$target" = "xen" ] ; then
 		>> $work_dir/OCCAMBSD
 	echo "device	xenpci	# Xen HVM Hypervisor services driver" \
 		>> $work_dir/OCCAMBSD
-	if [ "$REVISION" = "13.0" ] ; then
-		echo "device	acpi" \
-			>> $work_dir/OCCAMBSD
-	elif [ "$REVISION" = "14.0" ] ; then
+	if [ "$REVISION" = "14.0" ] ; then
 		echo "device	xentimer	# Xen x86 PV timer device" \
 			>> $work_dir/OCCAMBSD
-		echo "device	acpi" >> $work_dir/OCCAMBSD
-	else
-		echo REVISION $REVISION not recognized
-		exit 1
 	fi
 fi
 
@@ -373,6 +385,11 @@ fi
 
 # USERLAND
 
+if [ "$tmpfs" = "0" ] ; then
+	echo ; echo Cleaning object directory
+	env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir clean
+fi
+
 if [ "$target" = "jail" ] ; then
 	dest_dir="$work_dir/jail-mnt"
 else
@@ -381,14 +398,15 @@ fi
 
 if [ "$userland" = "0" ] ; then
         echo ; echo Building world - logging to $log_dir/build-world.log
-        \time -h make -C $src_dir -j$buildjobs \
+        \time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir -j$buildjobs \
         SRCCONF=$work_dir/src.conf buildworld \
         > $log_dir/build-world.log || { echo buildworld failed ; exit 1 ; }
 
 [ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
 
 	echo ; echo Installing world - logging to $log_dir/install-world.log
-	\time -h make -C $src_dir installworld SRCCONF=$work_dir/src.conf \
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
+		installworld SRCCONF=$work_dir/src.conf \
 		DESTDIR=$dest_dir \
 		NO_FSCHG=YES \
 	> $log_dir/install-world.log 2>&1
@@ -501,15 +519,16 @@ IFS="
 for static in $statics ; do
 	util=$(basename $static )
 	echo Making $src_dir/$static
-	make -j$buildjobs -C $src_dir/$static NO_SHARED=YES \
-	WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
+	env MAKEOBJDIRPREFIX=$obj_dir make -j$buildjobs -C $src_dir/$static \
+	NO_SHARED=YES WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
 	> $log_dir/make-$util.log 2>&1 || \
 		{ echo make $static failed ; exit 1 ; }
 
 #	SRCCONF=$work_dir/src.conf || \
 
 	echo Installing $static
-	make -C $src_dir/$static install DESTDIR=$dest_dir \
+	env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/$static install \
+	DESTDIR=$dest_dir \
 	WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
 	SRCCONF=$work_dir/src.conf > $log_dir/install-$util.log 2>&1 || \
 		{ echo install $static failed ; exit 1 ; }
@@ -522,7 +541,7 @@ echo ; echo Dynamic builds!
 for dynamic in $dynamics ; do
         dyn=$(basename $dynamic )
         echo Making $src_dir/$dynamic
-        make -j$buildjobs -C $src_dir/$dynamic \
+        env MAKEOBJDIRPREFIX=$obj_dir make -j$buildjobs -C $src_dir/$dynamic \
         WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
         > $log_dir/make-$dyn.log 2>&1 || \
                 { echo make $dynamic failed ; exit 1 ; }
@@ -530,15 +549,17 @@ for dynamic in $dynamics ; do
 #       SRCCONF=$work_dir/src.conf || \
 
         echo Installing $dynamic
-        make -C $src_dir/$dynamic install DESTDIR=$dest_dir \
+        env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/$dynamic install \
+	DESTDIR=$dest_dir \
         WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
         SRCCONF=$work_dir/src.conf > $log_dir/install-$dyn.log 2>&1 || \
                 { echo install $dynamic failed ; exit 1 ; }
 done
 
 echo Building share/ctypedef
-make -C $src_dir/share/ctypedef > $log_dir/make-ctypedef.log 2>&1 || \
-	{ echo make /share/ctypedef failed ; exit 1 ; }
+env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/share/ctypedef \
+	> $log_dir/make-ctypedef.log 2>&1 || \
+		{ echo make /share/ctypedef failed ; exit 1 ; }
 
 echo Copying /usr/share/locale/C.UTF-8/LC_CTYPE
 cp $obj_dir/$src_dir/amd64.amd64/share/ctypedef/C.UTF-8.LC_CTYPE \
@@ -546,8 +567,9 @@ cp $obj_dir/$src_dir/amd64.amd64/share/ctypedef/C.UTF-8.LC_CTYPE \
 		{ echo C.UTF-8.LC_CTYPE copy from $obj_dir failed ; exit 1 ; }
 
 echo Building /usr/share/zoneinfo 
-make -C $src_dir/share/zoneinfo > $log_dir/make-zoneinfo.log 2>&1 || \
-	{ echo make /share/zoneinfo failed ; exit 1 ; }
+env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/share/zoneinfo \
+	> $log_dir/make-zoneinfo.log 2>&1 || \
+		{ echo make /share/zoneinfo failed ; exit 1 ; }
 
 echo Copying /usr/share/zoneinfo/UTC
 cp $obj_dir/$src_dir/amd64.amd64/share/zoneinfo/builddir/Etc/UTC \
@@ -585,8 +607,8 @@ if [ ! "$target" = "jail" ] ; then
 [ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
 
 	echo ; echo Building kernel - logging to $log_dir/build-kernel.log
-	\time -h make -C $src_dir -j$buildjobs buildkernel \
-		KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD \
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir -j$buildjobs \
+		buildkernel KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD \
 		> $log_dir/build-kernel.log || \
 			{ echo buildkernel failed ; exit 1 ; }
 
@@ -597,8 +619,8 @@ if [ ! "$target" = "jail" ] ; then
 
 	echo ; echo Installing the kernel to $dest_dir - \
 		logging to $log_dir/install-kernel.log
-	\time -h make -C $src_dir installkernel KERNCONFDIR=$work_dir \
-		KERNCONF=OCCAMBSD DESTDIR=$dest_dir \
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir installkernel \
+	KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD DESTDIR=$dest_dir \
 		> $log_dir/install-kernel.log 2>&1
 	[ -f $dest_dir/boot/kernel/kernel ] || \
 		{ echo kernel failed to install to $dest_dir ; exit 1 ; }
@@ -619,9 +641,9 @@ fi
 
 echo Installing distribution to $dest_dir - \
 	logging to $log_dir/distribution.log
-\time -h make -C $src_dir distribution SRCCONF=$work_dir/src.conf \
-	DESTDIR=$dest_dir \
-	> $log_dir/distribution.log 2>&1
+\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
+	SRCCONF=$work_dir/src.conf DESTDIR=$dest_dir \
+		> $log_dir/distribution.log 2>&1
 
 # CONFIGURATION
 
@@ -641,8 +663,8 @@ fi
 # DEBUG Determine if this is needed - obviously not needed for jail
 #echo Installing distribution to $work_dir/kernel - \
 #	$log_dir/kernel-distribution.log
-#\time -h make -C $src_dir distribution SRCCONF=$work_dir/src.conf \
-#	DESTDIR=$work_dir/kernel \
+#\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
+# SRCCONF=$work_dir/src.conf DESTDIR=$work_dir/kernel \
 #		> $log_dir/kernel-distribution.log 2>&1
 
 
@@ -687,6 +709,7 @@ EOF
 	if [ "$zfsroot" = 0 ] ; then
 echo "/dev/${root_dev}0p3	/	ufs	rw,noatime	1	1" \
 	> "$dest_dir/etc/fstab"
+		cp "$dest_dir/etc/fstab" "$work_dir/kernel/etc/"
 	fi
 
 	echo "/dev/${root_dev}0p2	none	swap	sw	1	1" \
@@ -814,6 +837,7 @@ exec.clean;
 mount.devfs;
 occambsd {
 	path = "$work_dir/jail-mnt";
+	mount.devfs;
 	host.hostname = "occambsd";
 #	ip4.addr = 10.0.0.99;
 	exec.start = "/bin/sh /etc/rc";
@@ -864,12 +888,20 @@ echo ; echo Note these setup and tear-down scripts:
 if [ "$target" = "bhyve" ] ; then
 	echo ; echo "kldload vmm" > $work_dir/load-bhyve-vmm-module.sh
 	echo $work_dir/load-bhyve-vmm-module.sh
-	echo "bhyveload -h $work_dir/kernel/ -m 1024 occambsd" \
+	echo "[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd" \
 		> $work_dir/load-bhyve-directory.sh
+	echo "sleep 1" >> $work_dir/load-bhyve-directory.sh
+	echo "bhyveload -h $work_dir/kernel/ -m 1024 occambsd" \
+		>> $work_dir/load-bhyve-directory.sh
 	echo $work_dir/load-bhyve-directory.sh
-	echo "bhyveload -d $work_dir/occambsd.raw -m 1024 occambsd" \
+
+	echo "[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd" \
 		> $work_dir/load-bhyve-disk-image.sh
+	echo "sleep 1" >> $work_dir/load-bhyve-disk-image.sh
+	echo "bhyveload -d $work_dir/occambsd.raw -m 1024 occambsd" \
+		>> $work_dir/load-bhyve-disk-image.sh
 	echo $work_dir/load-bhyve-disk-image.sh
+
 	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$work_dir/occambsd.raw -s 31,lpc -l com1,stdio occambsd" \
 		> $work_dir/boot-bhyve-disk-image.sh
 	echo $work_dir/boot-bhyve-disk-image.sh
@@ -896,8 +928,8 @@ elif [ "$target" = "xen" ] ; then
 	#xl console -t pv OccamBSD
 	#xl console -t serial OccamBSD
 else
-	echo ; echo "jail -c -f $work_dir/jail.conf" \
-		> $work_dir/boot-jail.sh
+	echo ; echo "jail -c -f $work_dir/jail.conf" > $work_dir/boot-jail.sh
+	echo ; echo "jls" >> $work_dir/boot-jail.sh
 	echo $work_dir/boot-jail.sh
 fi
 
@@ -909,10 +941,13 @@ du -h $dest_dir > $work_dir/diskusage.txt
 if [ ! "$target" = "jail" ] ; then
 	echo ; echo The VM disk image is still mounted and you could
 	echo exit and rebuild the kernel with:
-	echo ; echo make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD
-	echo make installkernel KERNCONFDIR=$work_dir DESTDIR=$work_dir/\< jail mnt or root \>
+	echo ; echo env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD
+	echo ; echo env MAKEOBJDIRPREFIX=$obj_dir make installkernel KERNCONFDIR=$work_dir DESTDIR=$work_dir/\< jail mnt or root \>
 
-	echo ; echo Press ANY key to unmount the VM disk image ; read anykey
+	if [ "$quiet" = "0" ] ; then
+		echo ; echo Press ANY key to unmount the VM disk image
+		read anykey
+	fi
 
 	if [ "$zfsroot" = "1" ] ; then
 		echo Exporting occambsd zpool
@@ -932,29 +967,38 @@ if [ "$release" = "1" ] ; then
 	echo ; echo Building release - logging to $log_dir/release.log
 	cd $src_dir/release || { echo cd release failed ; exit 1 ; }
 
-	\time -h make -C $src_dir/release SRCCONF=$work_dir/src.conf \
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
+		SRCCONF=$work_dir/src.conf \
 		KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD release \
 		> $log_dir/release.log 2>&1 \
 			|| { echo release failed ; exit 1 ; }
 
 	echo ; echo Generating bhyve boot scripts for disc1.iso and memstick.img
 
-	echo "bhyveload -d $obj_dir/$src_dir/amd64.amd64/release/disc1.iso -m 1024 occambsd" \
+	echo "[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd" \
 		> $work_dir/load-bhyve-disc1.iso.sh
+	echo "sleep 1" >> $work_dir/load-bhyve-disc1.iso.sh
+	echo "bhyveload -d $obj_dir/$src_dir/amd64.amd64/release/disc1.iso -m 1024 occambsd" \
+		>> $work_dir/load-bhyve-disc1.iso.sh
 
 	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$obj_dir/$src_dir/amd64.amd64/release/disc1.iso -s 31,lpc -l com1,stdio occambsd" \
 		> $work_dir/boot-bhyve-disc1.iso.sh
 
-	echo "bhyveload -d $obj_dir/$src_dir/amd64.amd64/release/memstick.img -m 1024 occambsd" \
+	echo "[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd" \
 		> $work_dir/load-bhyve-memstick.img.sh
+	echo "sleep 1" >> $work_dir/load-bhyve-memstick.img.sh
+	echo "bhyveload -d $obj_dir/$src_dir/amd64.amd64/release/memstick.img -m 1024 occambsd" \
+		>> $work_dir/load-bhyve-memstick.img.sh
 
 	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$obj_dir/$src_dir/amd64.amd64/release/memstick.img -s 31,lpc -l com1,stdio occambsd" \
 		> $work_dir/boot-bhyve-memstick.img.sh
 
 	echo ; echo Release contents are in $obj_dir
 else
-	echo ; echo Unmounting $obj_dir
-	umount $obj_dir
+	if [ "$tmpfs" = "1" ] ; then
+		echo ; echo Unmounting $obj_dir
+		umount $obj_dir
+	fi
 fi
 
 echo ; echo removing /tmp/revision.txt
