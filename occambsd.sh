@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v5
+# Version v5.1
 
 # occambsd: An application of Occam's razor to FreeBSD
 # a.k.a. "super svelte stripped down FreeBSD"
@@ -79,9 +79,10 @@ while getopts zxjurq opts ; do
 done
 
 src_dir="/usr/src"
+obj_dir="/usr/obj"			# This will be mounted tmpfs
 work_dir="/tmp/occambsd"		# This will be mounted tmpfs
 log_dir="$work_dir/logs"
-imagesize="4G"				# More than enough room
+imagesize="5G"
 md_id="md42"				# Ask Douglas Adams for an explanation
 buildjobs="$(sysctl -n hw.ncpu)"
 
@@ -132,7 +133,7 @@ fi
 
 # CLEANUP
 
-# tmpfs mounts are not always dected by mount | grep tmpfs ...
+# mounts are oddly not always dected with mount | grep tmpfs ...
 #	They may also be mounted multiple times atop one another and
 #	md devices may be attached multiple times. Proper cleanup would be nice
 
@@ -140,8 +141,8 @@ umount -f "$work_dir/image-mnt" > /dev/null 2>&1
 umount -f "$work_dir/jail-mnt/dev" > /dev/null 2>&1
 umount -f "$work_dir" > /dev/null 2>&1
 umount -f "$work_dir" > /dev/null 2>&1
-umount -f "/usr/obj" > /dev/null 2>&1
-umount -f "/usr/obj" > /dev/null 2>&1
+umount -f "$obj_dir" > /dev/null 2>&1
+umount -f "$obj_dir" > /dev/null 2>&1
 zpool export -f occambsd > /dev/null 2>&1
 mdconfig -du "$md_id" > /dev/null 2>&1
 mdconfig -du "$md_id" > /dev/null 2>&1
@@ -149,7 +150,7 @@ mdconfig -du "$md_id" > /dev/null 2>&1
 zpool list | grep occambsd
 mdconfig -lv
 mount | grep "$work_dir"
-mount | grep "/usr/obj"
+mount | grep "$obj_dir"
 if [ "$quiet" = "0" ] ; then 
 	echo ; echo is md42 listed? If so, go destroy it
 	echo ; echo Press ANY key to continue ; read anykey
@@ -166,8 +167,8 @@ mount -t tmpfs tmpfs "$work_dir" || { echo tmpfs mount failed ; exit 1 ; }
 
 mkdir -p "$log_dir" || { echo Failed to create $log_dir ; exit 1 ; }
 
-echo ; echo Mounting a tmpfs to /usr/obj/
-mount -t tmpfs tmpfs /usr/obj/
+echo ; echo Mounting a tmpfs to $obj_dir/
+mount -t tmpfs tmpfs $obj_dir/
 
 mount | grep tmpfs
 
@@ -540,7 +541,7 @@ make -C $src_dir/share/ctypedef > $log_dir/make-ctypedef.log 2>&1 || \
 	{ echo make /share/ctypedef failed ; exit 1 ; }
 
 echo Copying /usr/share/locale/C.UTF-8/LC_CTYPE
-cp /usr/obj/$src_dir/amd64.amd64/share/ctypedef/C.UTF-8.LC_CTYPE \
+cp $obj_dir/$src_dir/amd64.amd64/share/ctypedef/C.UTF-8.LC_CTYPE \
 	$dest_dir/usr/share/locale/C.UTF-8/ || \
 		{ echo C.UTF-8.LC_CTYPE copy from $obj_dir failed ; exit 1 ; }
 
@@ -549,7 +550,7 @@ make -C $src_dir/share/zoneinfo > $log_dir/make-zoneinfo.log 2>&1 || \
 	{ echo make /share/zoneinfo failed ; exit 1 ; }
 
 echo Copying /usr/share/zoneinfo/UTC
-cp /usr/obj/$src_dir/amd64.amd64/share/zoneinfo/builddir/Etc/UTC \
+cp $obj_dir/$src_dir/amd64.amd64/share/zoneinfo/builddir/Etc/UTC \
 	$dest_dir/usr/share/zoneinfo/ || \
 		{ echo make /share/zoneinfo/UTC failed ; exit 1 ; }
 
@@ -590,7 +591,7 @@ if [ ! "$target" = "jail" ] ; then
 			{ echo buildkernel failed ; exit 1 ; }
 
 	echo ; echo Seeing how big the resulting kernel is
-	ls -lh /usr/obj/$src_dir/amd64.amd64/sys/OCCAMBSD/kernel
+	ls -lh $obj_dir/$src_dir/amd64.amd64/sys/OCCAMBSD/kernel
 
 [ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
 
@@ -938,22 +939,22 @@ if [ "$release" = "1" ] ; then
 
 	echo ; echo Generating bhyve boot scripts for disc1.iso and memstick.img
 
-	echo "bhyveload -d /usr/obj/$src_dir/amd64.amd64/release/disc1.iso -m 1024 occambsd" \
+	echo "bhyveload -d $obj_dir/$src_dir/amd64.amd64/release/disc1.iso -m 1024 occambsd" \
 		> $work_dir/load-bhyve-disc1.iso.sh
 
-	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,/usr/obj/$src_dir/amd64.amd64/release/disc1.iso -s 31,lpc -l com1,stdio occambsd" \
+	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$obj_dir/$src_dir/amd64.amd64/release/disc1.iso -s 31,lpc -l com1,stdio occambsd" \
 		> $work_dir/boot-bhyve-disc1.iso.sh
 
-	echo "bhyveload -d /usr/obj/$src_dir/amd64.amd64/release/memstick.img -m 1024 occambsd" \
+	echo "bhyveload -d $obj_dir/$src_dir/amd64.amd64/release/memstick.img -m 1024 occambsd" \
 		> $work_dir/load-bhyve-memstick.img.sh
 
-	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,/usr/obj/$src_dir/amd64.amd64/release/memstick.img -s 31,lpc -l com1,stdio occambsd" \
+	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$obj_dir/$src_dir/amd64.amd64/release/memstick.img -s 31,lpc -l com1,stdio occambsd" \
 		> $work_dir/boot-bhyve-memstick.img.sh
 
-	echo ; echo Release contents are in /usr/obj
+	echo ; echo Release contents are in $obj_dir
 else
-	echo ; echo Unmounting /usr/obj
-	umount /usr/obj
+	echo ; echo Unmounting $obj_dir
+	umount $obj_dir
 fi
 
 echo ; echo removing /tmp/revision.txt
