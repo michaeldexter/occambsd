@@ -730,7 +730,6 @@ fi
 echo ; echo Touching firstboot files
 
 touch "$dest_dir/firstboot"
-touch "$work_dir/kernel/firstboot"
 
 # VM loader.conf acrobatics
 if ! [ "$target" = "jail" ] ; then
