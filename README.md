@@ -92,7 +92,6 @@ Note that ARC "warmth" on the host will speed build times
 
 ## Known Issues/To Do
 
-* The Jail option reports "occambsd: created" but is not created
 * Investigate Juniper's static_libpam towards the goal of an optional fully statically-built userland
 * Consider adding release support to the minimum userland
 * Consider adding automatic du(1) and tree(1) (if installed) analysis

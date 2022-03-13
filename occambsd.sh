@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v5.1
+# Version v5.2
 
 # occambsd: An application of Occam's razor to FreeBSD
 # a.k.a. "super svelte stripped down FreeBSD"
@@ -142,6 +142,9 @@ fi
 #	md devices may be attached multiple times. Proper cleanup would be nice
 
 # NOT making these tmpfs conditional as the user may try with and without tmpfs
+jls | grep occambsd && jail -r occambsd
+[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd
+xl list | grep OccamBSD && xl destroy OccamBSD
 umount -f "$work_dir/image-mnt" > /dev/null 2>&1
 umount -f "$work_dir/jail-mnt/dev" > /dev/null 2>&1
 umount -f "$work_dir" > /dev/null 2>&1
@@ -170,9 +173,12 @@ fi
 [ "$?" -ne "0" ] && { echo Failed to make $work_dir ; exit 1 ; }
 
 if [ "$tmpfs" = "1" ] ; then
-echo ; echo Mounting $work_dir tmpfs
+	echo ; echo Mounting $work_dir tmpfs
 	mount -t tmpfs tmpfs "$work_dir" || \
 		{ echo tmpfs mount failed ; exit 1 ; }
+else
+	echo ; echo Cleansing $work_dir
+	rm -rf $work_dir/*
 fi
 
 # Consider that the might be under $work_dir or somewhere else entirely
@@ -387,7 +393,9 @@ fi
 
 if [ "$tmpfs" = "0" ] ; then
 	echo ; echo Cleaning object directory
-	env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir clean
+#	env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir clean
+	chflags -R 0 $obj_dir
+	rm -rf $obj_dir/*
 fi
 
 if [ "$target" = "jail" ] ; then
@@ -586,23 +594,24 @@ fi # End world
 
 echo ; echo Adding boot code
 
-if [ "$zfsroot" = "1" ] ; then
-	echo Adding gptzfsboot boot code
-	gpart bootcode -b $dest_dir/boot/pmbr -p \
-	$dest_dir/boot/gptzfsboot -i 1 /dev/$md_id || \
-		{ echo gpart bootcode failed ; exit 1 ; }
-else
-	gpart bootcode -b $dest_dir/boot/pmbr \
-	-p $dest_dir/boot/gptboot -i 1 /dev/$md_id
+if ! [ "$target" = "jail" ] ; then
+	if [ "$zfsroot" = "1" ] ; then
+		echo Adding gptzfsboot boot code
+		gpart bootcode -b $dest_dir/boot/pmbr -p \
+		$dest_dir/boot/gptzfsboot -i 1 /dev/$md_id || \
+			{ echo gpart bootcode failed ; exit 1 ; }
+	else
+		gpart bootcode -b $dest_dir/boot/pmbr \
+		-p $dest_dir/boot/gptboot -i 1 /dev/$md_id
+	fi
 fi
-
 # Alternatively install from the host
 #	gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 /dev/$md_id
 
 
 # KERNEL
 
-if [ ! "$target" = "jail" ] ; then
+if ! [ "$target" = "jail" ] ; then
 
 [ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
 
@@ -647,7 +656,7 @@ echo Installing distribution to $dest_dir - \
 
 # CONFIGURATION
 
-if [ ! "$target" = "jail" ] ; then
+if ! [ "$target" = "jail" ] ; then
 	echo
 	echo Copying boot directory from mounted device to root kernel device
 	[ -d $dest_dir/boot/defaults ] && \
@@ -675,22 +684,22 @@ if [ "$target" = "jail" ] ; then
 	# sendmail ss flags etc?
 	echo ; echo Generating jail rc.conf and fstab
 	echo
-tee -a $work_dir/jail-mnt/etc/rc.conf <<EOF
+tee -a $work_dir/jail-mnt/etc/rc.conf <<HERE
 hostname="occambsd-jail"
 ifconfig_DEFAULT="DHCP inet6 accept_rtadv"
 growfs_enable="YES"
-EOF
+HERE
 
 	touch $dest_dir/etc/fstab
 else
 	echo ; echo Generating image rc.conf
 
 	echo
-tee -a $work_dir/image-mnt/etc/rc.conf <<EOF
+tee -a $work_dir/image-mnt/etc/rc.conf <<HERE
 hostname="occambsd"
 ifconfig_DEFAULT="DHCP inet6 accept_rtadv"
 growfs_enable="YES"
-EOF
+HERE
 
 	if [ "$zfsroot" = 1 ] ; then
 		echo Adding rc.conf ZFS entry
@@ -723,28 +732,27 @@ echo ; echo Touching firstboot files
 touch "$dest_dir/firstboot"
 touch "$work_dir/kernel/firstboot"
 
-
 # VM loader.conf acrobatics
-if [ ! "$target" = "jail" ] ; then
+if ! [ "$target" = "jail" ] ; then
 	echo ; echo Generating genernic VM image loader.conf
 
 	echo
-	tee -a $work_dir/image-mnt/boot/loader.conf <<EOF
+	tee -a $work_dir/image-mnt/boot/loader.conf <<HERE
 #kern.geom.label.disk_ident.enable="0"
 #kern.geom.label.gptid.enable="0"
 autoboot_delay="3"
 boot_verbose="1"
-EOF
+HERE
 
 	echo ; echo Generating generic kernel loader.conf
 
 	echo
-	tee -a $work_dir/kernel/boot/loader.conf <<EOF
+	tee -a $work_dir/kernel/boot/loader.conf <<HERE
 kern.geom.label.disk_ident.enable="0"
 kern.geom.label.gptid.enable="0"
 autoboot_delay="3"
 boot_verbose="1"
-EOF
+HERE
 
 	if [ "$zfsroot" = "1" ] ; then
 		echo ; echo Adding ZFS loader entries
@@ -821,25 +829,41 @@ if [ "$target" = "xen" ] ; then
 		{ echo Package installation failed ; exit 1 ; }
 fi
 
+
+# STATISTICS
+
 echo ; echo Running df -h | grep $md_id
 df -h | grep $md_id
 
 echo ; echo Finding all files over 1M in size
 find $work_dir/image-mnt -size +1M -exec ls -lh {} +
 
+echo df -h just ran... did you see $md_id
+df -h
+
+if ! [ "$target" = "jail" ] ; then
+#	cat << HERE >> "$work_dir/image-mnt/etc/rc.local"
+# rc.local appears to be too early, log is short, MS=0
+	cat << HERE >> "$work_dir/image-mnt/collect-ts-data.sh"
+TSCEND=\`sysctl -n debug.tslog_user | grep sh | head -1 | cut -f 4 -d ' '\`
+TSCFREQ=\`sysctl -n machdep.tsc_freq\`
+MS=\$((TSCEND * 1000 / TSCFREQ));
+
+echo \$MS > /root/ts-ms.var
+sysctl -b debug.tslog > /root/ts.log
+HERE
+
+	cat $work_dir/image-mnt/collect-ts-data.sh
+fi
+
 if [ "$target" = "jail" ] ; then
 	echo ; echo Generating jail.conf
 
 cat << HERE > $work_dir/jail.conf
-exec.start = "/bin/sh /etc/rc";
-exec.stop = "/bin/sh /etc/rc.shutdown";
-exec.clean;
-mount.devfs;
 occambsd {
+	host.hostname = occambsd;
 	path = "$work_dir/jail-mnt";
 	mount.devfs;
-	host.hostname = "occambsd";
-#	ip4.addr = 10.0.0.99;
 	exec.start = "/bin/sh /etc/rc";
 	exec.stop = "/bin/sh /etc/rc.shutdown jail";
 	}
@@ -882,6 +906,9 @@ HERE
 fi
 
 echo ; echo The resulting disk image is $work_dir/occambsd.raw
+
+
+# SCRIPTS
 
 echo ; echo Note these setup and tear-down scripts:
 
@@ -927,10 +954,14 @@ elif [ "$target" = "xen" ] ; then
 	# Notes while debugging
 	#xl console -t pv OccamBSD
 	#xl console -t serial OccamBSD
-else
-	echo ; echo "jail -c -f $work_dir/jail.conf" > $work_dir/boot-jail.sh
-	echo ; echo "jls" >> $work_dir/boot-jail.sh
+else # Assume jail
+	echo "jail -c -f $work_dir/jail.conf occambsd" > \
+		$work_dir/boot-jail.sh
+	echo "jls" >> $work_dir/boot-jail.sh
 	echo $work_dir/boot-jail.sh
+	echo "jail -r occambsd" > $work_dir/stop-jail.sh
+	echo "jls" >> $work_dir/stop-jail.sh
+	echo $work_dir/stop-jail.sh
 fi
 
 #[ $( which tree > /dev/null 2>&1 ) ] && tree $dest_dir > $work_dir/filetree.txt
@@ -938,7 +969,7 @@ fi
 
 du -h $dest_dir > $work_dir/diskusage.txt
 
-if [ ! "$target" = "jail" ] ; then
+if ! [ "$target" = "jail" ] ; then
 	echo ; echo The VM disk image is still mounted and you could
 	echo exit and rebuild the kernel with:
 	echo ; echo env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD
@@ -1001,10 +1032,23 @@ else
 	fi
 fi
 
+if ! [ "$target" = "jail" ] ; then
+	cat << HERE >> "$work_dir/attach.img.sh"
+mdconfig -a -u "$md_id" -f "$work_dir/occambsd.raw" || \
+	{ echo image mdconfig attach failed ; exit 1 ; }
+mount /dev/${md_id}p3 $work_dir/image-mnt || \
+	{ echo image mount failed ; exit 1 ; }
+HERE
+
+	cat << HERE >> "$work_dir/detach.img.sh"
+umount -f "$work_dir/image-mnt" || \
+	{ echo image umount failed ; exit 1 ; }
+mdconfig -d -u "$md_id" || \
+	{ echo image mdconfig detach failed ; exit 1 ; }
+HERE
+fi
+
 echo ; echo removing /tmp/revision.txt
 rm /tmp/revision.txt
-
-echo ; echo Running df -h \| grep tmpfs to see how big the results are
-df -h | grep tmpfs
 
 exit 0
