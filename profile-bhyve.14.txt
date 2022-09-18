@@ -1,0 +1,9 @@
+build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_VI WITHOUT_LOADER_GELI"
+
+kernel_modules="virtio"
+
+kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 TSLOG"
+
+kernel_devices="pci loop ether acpi uart ahci scbus cd virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon"
+
+packages=""

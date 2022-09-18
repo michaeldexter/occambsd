@@ -26,7 +26,30 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v5.2
+# Version v5.6
+
+f_usage() {
+        echo "USAGE:"
+	echo "-p <profile file> (required)"
+	echo "-s <source directory override>"
+	echo "-o <object directory override>"
+	echo "-z (Use ZFS)"
+	echo "-x (Use Xen)"
+	echo "-j (Use Jail)"
+	echo "-u (Use an artisinal userland in place of buildworld"
+	echo "-r (Also make release)"
+	echo "-d <device> (Use specific device <device>)"
+	echo "-q (Quiet mode: Do not ask to proceed at every stage)"
+	echo "-k (Keep and reuse build output in quiet mode)"
+        exit 1
+}
+
+f_quiet() (
+	if [ "$quiet" = "0" ] ; then
+		echo ; echo "Press ANY key to continue"
+		read anykey
+	fi
+)
 
 # occambsd: An application of Occam's razor to FreeBSD
 # a.k.a. "super svelte stripped down FreeBSD"
@@ -40,21 +63,47 @@
 # The separate kernel directory is very useful for testing kernel changes
 # while waiting for institutionalized VirtFS support.
 
-# The -u option will build and install a minimal userland,
+# The -u option will build and install a minimal, artisanal userland,
 # rather than building and installing world
 
 
-# VARIABLES
+# DEFAULT VARIABLES
 
-zfsroot="0"
+profile="0"
 target="bhyve"
-userland="0"
-release="0"
-tmpfs="0"
 quiet="0"
+keep="0"
+zfsroot="0"
+release="0"
+hardware_device="0"
+artisanal_userland="0"
+device="md42"				# Ask Douglas Adams for an explanation
+src_dir="/usr/src"			# Can be overridden
+obj_dir="/usr/obj"			# Can be overridden
+work_dir="/tmp/occambsd"
+log_dir="$work_dir/logs"		# Must stay under work_dir
+imagesize="4G"
+buildjobs="$(sysctl -n hw.ncpu)"
 
-while getopts zxjurtq opts ; do
+while getopts p:s:o:zxjurd:qk opts ; do
 	case $opts in
+	p)
+		# REQUIRED
+		[ "${OPTARG}" ] || f_usage
+		profile="${OPTARG}"
+		. "${OPTARG}" || \
+	        { echo "Profile file ${OPTARG} failed to source" ; exit 1 ; }
+		;;
+	s)
+		# Override source directory
+		src_dir="${OPTARG}"
+		[ -d "$src_dir" ] || { echo "$src_dir not found" ; exit 1 ; }
+		;;
+	o)
+		# Override source directory
+		obj_dir="${OPTARG}"
+		[ -d "$obj_dir" ] || { echo "$obj_dir not found" ; exit 1 ; }
+		;;
 	z)
 		zfsroot="1"
 		;;
@@ -65,358 +114,352 @@ while getopts zxjurtq opts ; do
 		target="jail"
 		;;
 	u)
-		userland="1"
+		artisanal_userland="1"
 		;;
 	r)
 		release="1"
 		;;
-	t)
-		tmpfs="1"
+	d)
+		# Override memory device
+		device="${OPTARG}"
+		# Needed to distinguish hardware devices from md for setup
+		device="$( basename "$device" )"
+		[ -e "/dev/$device" ] || \
+			{ echo "${1}: Device $device not found" ; exit 1 ; }
+		gpart show "$device" > /dev/null 2>&1 && \
+			{ echo "${1}: $device is partitioned" ; exit 1 ; }
+		hardware_device="1"
 		;;
 	q)
 		quiet="1"
 		;;
+	k)
+		keep="1"
+		;;
 	*)
-		echo Invalid input
+		f_usage
 		exit 1
+		;;
 	esac
 done
 
-src_dir="/usr/src"
-obj_dir="/usr/obj"
-work_dir="/tmp/occambsd"
-log_dir="$work_dir/logs"
-imagesize="4G"
-md_id="md42"				# Ask Douglas Adams for an explanation
-buildjobs="$(sysctl -n hw.ncpu)"
-
-
-# Determining the OS revision for conditional handling
-
-# Using /tmp because the work_dir is not up yet
-grep "REVISION=" $src_dir/sys/conf/newvers.sh > /tmp/revision.txt
-. /tmp/revision.txt
-
-# Tested 2022-03-03 with 13.0R and 14-MAIN
-enabled_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_VI"
-
-# Previous list
-#enabled_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_VI"
-
-	if [ "$REVISION" = "14.0" ] ; then
-		enabled_options="$enabled_options WITHOUT_LOADER_GELI"
-	fi
-
-if [ "$zfsroot" = "1" ] ; then
-	enabled_options="$enabled_options WITHOUT_LOADER_ZFS WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL"
-fi
-
-# The world will be built WITH these build options:
-# WITHOUT_AUTO_OBJ and WITHOUT_UNIFIED_OBJDIR warn that they go in src-env.conf
-# <broken or complex build options>
-# WITHOUT_LOADER_GELI is required in 14-MAIN for WITHOUT_BOOT
-# WITHOUT_LOADER_LUA is required for the lua boot code
-# WITHOUT_LOADER_ZFS is required in 14-MAIN for WITHOUT_BOOT
-# WITHOUT_BOOT is needed to install the LUA loader
-# WITHOUT_LOCALES is necessary for a console
-# WITHOUT_ZONEINFO is necessary for tzsetup on VM image with a userland
-# WITHOUT_EFI to support make release, specifically for loader.efi
-# WITHOUT_VI could come in handy
-# Required for ZFS support:
-# WITHOUT_LOADER_ZFS WITHOUT_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL
-
-
-# PREFLIGHT CHECKS
+# If no profile specified (rquired)
+[ "$profile" = "0" ] && f_usage
 
 [ -f $src_dir/sys/amd64/conf/GENERIC ] || \
-	{ echo Sources do not appear to be installed ; exit 1 ; }
-
-[ -f ./lib_occambsd.sh ] || { echo lib_occambsd.sh not found ; exit 1 ; }
-. ./lib_occambsd.sh || { echo lib_occambsd.sh failed to source ; exit 1 ; }
 
 
 # CLEANUP
 
-# mounts are oddly not always dected with mount | grep tmpfs ...
-#	They may also be mounted multiple times atop one another and
-#	md devices may be attached multiple times. Proper cleanup would be nice
+# Policy: Always cleanse target media but offer to cleanse build objects,
+# allowing reuse
 
-# NOT making these tmpfs conditional as the user may try with and without tmpfs
-jls | grep occambsd && jail -r occambsd
+# Note: mount | grep name is not a reliable verification is something is mounted
+# Note: The same mount can exist multiple times
+
+# First clean up mounts, devices, and pool outside the world directory
+
+jls | grep -q occambsd && jail -r occambsd
 [ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd
-xl list | grep OccamBSD && xl destroy OccamBSD
-umount -f "$work_dir/image-mnt" > /dev/null 2>&1
-umount -f "$work_dir/jail-mnt/dev" > /dev/null 2>&1
-umount -f "$work_dir" > /dev/null 2>&1
-umount -f "$work_dir" > /dev/null 2>&1
-umount -f "$obj_dir" > /dev/null 2>&1
-umount -f "$obj_dir" > /dev/null 2>&1
-zpool export -f occambsd > /dev/null 2>&1
-mdconfig -du "$md_id" > /dev/null 2>&1
-mdconfig -du "$md_id" > /dev/null 2>&1
 
-zpool list | grep occambsd
-mdconfig -lv
-mount | grep "$work_dir"
-mount | grep "$obj_dir"
-if [ "$quiet" = "0" ] ; then 
-	echo ; echo is md42 listed? If so, go destroy it
-	echo ; echo Press ANY key to continue ; read anykey
+[ -d "$work_dir/device-mnt" ] && \
+	umount -f "$work_dir/device-mnt" > /dev/null 2>&1
+[ -d "$work_dir/jail-mnt/dev" ] && \
+	umount -f "$work_dir/jail-mnt/dev" > /dev/null 2>&1
+
+if [ $( which xl ) ]; then
+	xl list | grep OccamBSD && xl destroy OccamBSD
+	xl list | grep OccamBSD && \
+		{ echo "OccamBSD DomU failed to destroy" ; exit 1 ; }
+fi
+ 
+zpool get name occambsd && zpool export -f occambsd > /dev/null 2>&1
+zpool get name occambsd > /dev/null 2>&1 && \
+	{ echo "zpool occambsd failed to export" ; exit 1 ; }
+
+if [ "$hardware_device" = "0" ] ; then
+	echo Using a md device
+	mdconfig -du "$device" > /dev/null 2>&1
+	mdconfig -du "$device" > /dev/null 2>&1
+	mdconfig -lv
+
+	if [ "$quiet" = "0" ] ; then 
+		echo ; echo is md42 listed? If so, go destroy it manually
+		echo ; echo Press ANY key to continue ; read anykey
+	fi
 fi
 
 
 # PREPARATION
 
-[ -f $src_dir/Makefile ] || { echo Does $src_dir contain sources? ; exit 1 ; }
+# Create fresh if greenfield, conditionally cleanse if existing
 
-[ -d $work_dir ] || mkdir -p "$work_dir"
-[ "$?" -ne "0" ] && { echo Failed to make $work_dir ; exit 1 ; }
-
-if [ "$tmpfs" = "1" ] ; then
-	echo ; echo Mounting $work_dir tmpfs
-	mount -t tmpfs tmpfs "$work_dir" || \
-		{ echo tmpfs mount failed ; exit 1 ; }
-else
-	echo ; echo Cleansing $work_dir
-	rm -rf $work_dir/*
+# Condition 1: Greenfield
+if ! [ -d $obj_dir ] ; then
+	mkdir -p "$obj_dir" || { echo Failed to make $obj_dir ; exit 1 ; }
 fi
 
-# Consider that the might be under $work_dir or somewhere else entirely
-[ -d $obj_dir ] || mkdir -p "$obj_dir"
-[ "$?" -ne "0" ] && { echo Failed to make $obj_dir ; exit 1 ; }
+if ! [ -d $work_dir ] ; then
+	echo Creating $work_dir
+	# Creating log_dir includes parent directory work_dir
+	mkdir -p "$log_dir" || \
+		{ echo Failed to create $work_dir ; exit 1 ; }
 
-# Assume this is under $work_dir and create at the same time?
-mkdir -p "$log_dir" || { echo Failed to create $log_dir ; exit 1 ; }
-
-if [ "$tmpfs" = "1" ] ; then
-	echo ; echo Mounting a tmpfs to $obj_dir/
-	mount -t tmpfs tmpfs $obj_dir/
-	mount | grep tmpfs
-fi
-
-
-# SRC.CONF
-
-echo ; echo Generating $work_dir/all-options with f_occam_options
-
-f_occam_options $src_dir > $work_dir/all-options.txt || \
-	{ echo $work_dir/all-options.conf generation failed ; exit 1 ; }
-
-echo ; echo Generating $work_dir/src.conf with f_occam_options
-
-f_occam_options $src_dir "$enabled_options" > $work_dir/src.conf || \
-	{ echo $work_dir/src.conf generation failed ; exit 1 ; }
-
-echo ; echo The src.conf options that exclude components reads: ; echo
-
-cat $work_dir/src.conf
-
-[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
-
-
-# KERNCONF
-
-echo ; echo Creating new OCCAMBSD KERNCONF
-#cat << HERE > $src_dir/sys/amd64/conf/OCCAMBSD
-cat << HERE > $work_dir/OCCAMBSD
-
-cpu		HAMMER
-ident		OCCAMBSD
-
-# Sync with the devices below? Have not needed virtio_blk etc.
-makeoptions	MODULES_OVERRIDE="virtio opensolaris zfs cryptodev acl_nfs4 xdr zlib crypto"
-
-# crypto fails without xdr
-
-# Pick a scheduler - Required
-options 	SCHED_ULE		# ULE scheduler
-#options	SCHED_4BSD
-
-device		pci
-# The tribal elders say that the loopback device was not always required
-device		loop			# Network loopback
-# The modern kernel will not build without ethernet
-device		ether			# Ethernet support
-# The kernel should build at this point
-
-# Was bhyve working without this?
-device		acpi
-
-# Do boot it in bhyve, you will want to see serial output
-device		uart			# Generic UART driver
-
-# To get past mountroot
-device		ahci			# AHCI-compatible SATA controllers
-device		scbus			# SCSI bus (required for ATA/SCSI)
-
-# Throws an error but works - Investigate
-options		GEOM_PART_GPT		# GUID Partition Tables.
-
-# Mounting from ufs:/dev/vtbd0p3 failed with error 2: unknown file system.
-options 	FFS			# Berkeley Fast Filesystem
-
-# Add labling handling to support booting from disc1.iso and memstick.img
-options		GEOM_LABEL		# Provides labelization
-
-# Add CD-ROM file system support for booting from disc1.iso
-device		cd			# CD
-options		CD9660			# ISO 9660 Filesystem
-
-# Appears to work with only "virtio" synchronized above with MODULES_OVERRIDE
-# Investigate
-device		virtio			# Generic VirtIO bus (required)
-device		virtio_pci		# VirtIO PCI device
-device		virtio_blk		# VirtIO Block device
-
-# TO BE DETERMINED - NEEDED FOR XEN?
-#device		da			# Direct Access (disks)
-
-# Apparently not needed if virtio device and MODULE_OVERRIDE are specified
-#device		vtnet			# VirtIO Ethernet device
-#device		virtio_scsi		# VirtIO SCSI device
-#device		virtio_balloon		# VirtIO Memory Balloon device
-
-# Luxurious options - sync with build options
-#options	SMP			# Symmetric MultiProcessor Kernel
-#options	INET			# InterNETworking
-#device		iflib
-#device		em			# Intel PRO/1000 Gigabit Ethernet Family
-
-# Adding for cpersiva@/@cpersiva/wiki.freebsd.org/BootTime
-# "Check out the freebsd-boot-profiling repo and run mkflame.sh"
-options		TSLOG
-HERE
-
-
-# Conditional KERNCONF options and devices
-
-if [ "$zfsroot" = "1" ] ; then
-	echo "device	crypto		# core crypto support" \
-		>> $work_dir/OCCAMBSD
-	echo "device	aesni		# AES-NI OpenCrypto module" \
-		>> $work_dir/OCCAMBSD
-fi
-
-if [ "$target" = "xen" ] ; then
-	echo "options	XENHVM	# Xen HVM kernel infrastructure" \
-		>> $work_dir/OCCAMBSD
-	echo "device	xenpci	# Xen HVM Hypervisor services driver" \
-		>> $work_dir/OCCAMBSD
-	if [ "$REVISION" = "14.0" ] ; then
-		echo "device	xentimer	# Xen x86 PV timer device" \
-			>> $work_dir/OCCAMBSD
+	# Assume obj_dir is external to work_dir and should be cleansed
+	if [ -d $obj_dir ] ; then
+		echo ; echo Cleaning object directory
+#		Note: env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir clean
+		chflags -R 0 $obj_dir
+		rm -rf $obj_dir/*
+	fi
+else # work_dir exists and we want to keep the build artifacts
+	if [ "$keep" = "0" ] ; then
+		echo ; echo Cleansing $work_dir
+		rm -rf $work_dir/*
+		mkdir -p $log_dir
+		if [ -d $obj_dir ] ; then
+			echo ; echo Cleaning object directory
+			chflags -R 0 $obj_dir
+			rm -rf $obj_dir/*
+		fi
+	else # PRESERVE and selectively remove target-specific artifacts
+		[ -f $work_dir/occambsd.raw ] && rm $work_dir/occambsd.raw
+		[ -f $work_dir/filetree.txt ] && rm $work_dir/filetree.txt
+		[ -f $work_dir/diskusage.txt ] && rm $work_dir/diskusage.txt
+		[ -f $work_dir/logs/install-dist.log ] && \
+			rm $work_dir/logs/install-dist.log
+		[ -f $work_dir/logs/install-world.log ] && \
+			rm $work_dir/logs/install-world.log
+		[ -f $work_dir/logs/install-kernel.log ] && \
+			rm $work_dir/logs/install-kernel.log
 	fi
 fi
 
-echo ; echo The resulting OCCAMBSD KERNCONF is
-cat $work_dir/OCCAMBSD
 
-[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+# MAKE SRC.CONF/KERNCONF CONDITIONAL ON PRESERVING
+# Shame to make it a MASSIVE long indentation
+
+
+if [ "$keep" = "0" ] ; then
+	echo ; echo Generating $work_dir/all-options.txt
+
+	all_options=$( make -C $src_dir showconfig \
+		__MAKE_CONF=/dev/null SRCCONF=/dev/null \
+		| sort \
+		| sed '
+			s/^MK_//
+			s/=//
+		' | awk '
+		$2 == "yes"	{ printf "WITHOUT_%s=YES\n", $1 }
+		$2 == "no"	{ printf "WITH_%s=YES\n", $1 }
+		'
+	)
+
+	echo "$all_options" > $work_dir/all_options.conf
+
+	#echo ; echo DEBUG all_options.conf reads:
+	#cat $work_dir/all_options.conf
+
+
+	echo ; echo Generating $work_dir/src.conf
+
+	# Prune WITH_ options leaving only WITHOUT_ options
+	IFS=" "
+	without_options=$( echo $all_options | grep -v WITH_ )
+	#echo ; echo without_options reads
+	#echo $without_options
+
+	# Remove enabled_options to result in the desired src.conf
+	IFS=" "
+	for option in $build_options ; do
+#		echo DEBUG looking at $option
+		without_options=$( echo $without_options | grep -v $option )
+	done
+
+	echo $without_options > $work_dir/src.conf
+
+	echo ; echo The generated $work_dir/src.conf tails:
+	tail $work_dir/src.conf
+
+f_quiet
+
+
+# MODULES
+
+	ls /usr/src/sys/modules/ | cat > $work_dir/all_modules.txt
+	echo ; echo All modules are listed in $work_dir/all_modules.txt
+
+
+# DO YOU WANNA BUILD A KERN CONF?
+
+# A space-separated profile file must have:
+# $kernel_modules	i.e. makeoptions	MODULES_OVERRIDE="*module*..."
+# $kernel_options	i.e. options		*SCHED_ULE*
+# $kernel_devices	i.e. device		*pci*
+# $packages		i.e. tmux
+
+	echo "cpu	HAMMER" > $work_dir/OCCAMBSD
+	echo "ident	OCCAMBSD" >> $work_dir/OCCAMBSD
+	echo "makeoptions	MODULES_OVERRIDE=\"$kernel_modules\"" \
+		>> $work_dir/OCCAMBSD
+
+	IFS=" "
+	for kernel_option in $kernel_options ; do
+		echo "options	$kernel_option" >> $work_dir/OCCAMBSD
+	done
+
+	IFS=" "
+	for kernel_device in $kernel_devices ; do
+		echo "device	$kernel_device" >> $work_dir/OCCAMBSD
+	done
+
+	echo cat $work_dir/OCCAMBSD
+
+	echo ; echo The resulting OCCAMBSD KERNCONF is
+	cat $work_dir/OCCAMBSD
+
+	f_quiet
+
+fi # End if keep condition
 
 
 # DIRECTORIES, DISK IMAGES, AND PARTITIONING
+
+# SHOULD THIS BE IN THE DIRECTORY SETUP?
+# NO CONDITIONAL CREATION: ONLY CREATE NEW
+
+echo ; echo Setting up storage target - watch for errors
 
 if [ "$target" = "jail" ] ; then
 	mkdir -p "$work_dir/jail-mnt"
 else
 	mkdir -p "$work_dir/kernel/boot"
 	mkdir -p "$work_dir/kernel/etc"
-	mkdir -p "$work_dir/image-mnt"
+	mkdir -p "$work_dir/device-mnt"
 
-	echo ; echo Truncating occambsd.raw image - consider -t malloc and tmpfs
-	truncate -s "$imagesize" "$work_dir/occambsd.raw" || \
-	{ echo $work_dir/occambsd.raw image truncation failed ; exit 1 ; }
+	if [ "$hardware_device" = "0" ] ; then
+		echo ; echo Truncating occambsd.raw image
 
-	echo ; echo Attaching occambsd.raw VM image
-	mdconfig -a -u "$md_id" -f "$work_dir/occambsd.raw"
+		# Consider -t malloc and tmpfs
+		truncate -s "$imagesize" "$work_dir/occambsd.raw" || \
+		{ echo truncate $work_dir/occambsd.raw image failed ; exit 1 ; }
 
-	[ -e /dev/$md_id ] || \
-		{ echo $md_id did not attach ; exit 1 ; }
+		echo ; echo Attaching occambsd.raw VM image
+		mdconfig -a -u "$device" -f "$work_dir/occambsd.raw"
 
-[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+		[ -e /dev/$device ] || \
+			{ echo $device did not attach ; exit 1 ; }
+	fi
 
-echo ; echo Partitioning and formating $md_id
-	gpart create -s gpt $md_id
-	#gpart add -t freebsd-boot -l bootfs -b 128 -s 128K $md_id
-	gpart add -a 4k -s 512k -t freebsd-boot /dev/$md_id
-	gpart add -t freebsd-swap -s 1G $md_id
+f_quiet
+
+echo ; echo Partitioning and formating $device
+	echo Creating GPT partition layout
+	gpart create -s gpt $device
+
+	echo ; echo Adding freebsd-boot partition
+#	[ -e /dev/gpt/gptboot0 ] && \
+	[ -e /dev/gpt/gptoccamboot0 ] && \
+		{ echo "/dev/gpt/gptoccamboot0 already in use" ; exit 1 ; }
+	#gpart add -t freebsd-boot -l bootfs -b 128 -s 128K $device
+#	gpart add -a 4k -s 512k -t freebsd-boot /dev/$device
+#	gpart add -a 4k -s 512k -l gptboot0 -t freebsd-boot /dev/$device
+	gpart add -a 4k -s 512k -l gptoccamboot0 -t freebsd-boot $device
+#	sleep 1
+	echo ; echo Verifying freebsd-boot partition label gptoccamboot0
+	[ -e /dev/gpt/gptoccamboot0 ] || \
+		{ echo "/dev/gpt/gptoccamboot0 not found" ; exit 1 ; }
+
+	echo Adding freebsd-swap partition
+	[ -e /dev/gpt/occamswap0 ] && \
+		{ echo "/dev/gpt/occamswap0 already in use" ; exit 1 ; }
+	gpart add -l occamswap0 -t freebsd-swap -s 1G $device
+#	sleep 1
+	echo ; echo Verifying freebsd-boot partition label occamswap0
+	[ -e /dev/gpt/occamswap0 ] || \
+		{ echo "/dev/gpt/occamswap0 not found" ; exit 1 ; }
+
+gpart show $device
 
 	if [ "$zfsroot" = "1" ] ; then
-# Moved until after world/stand are built
-#		echo Adding gptzfsboot boot code
-#		gpart bootcode -b $dest_dir/boot/pmbr -p \
-#			$dest_dir/boot/gptzfsboot -i 1 /dev/$md_id || \
-#			{ echo gpart bootcode failed ; exit 1 ; }
+
+# Note that boot code is in stand and must be built before installation
 
 		echo Adding freebsd-zfs partition
-		gpart add -t freebsd-zfs /dev/$md_id || \
-			{ echo gpart add -t freebsd-zfs failed ; exit 1 ; }
+		[ -e /dev/gpt/occamroot0 ] && \
+			{ echo "/dev/gpt/occamroot0 already in use" ; exit 1 ; }
+		gpart add -l occamroot0 -t freebsd-zfs $device || \
+			{ echo "gpart add -t freebsd-zfs failed" ; exit 1 ; }
+#		sleep 1
+		echo ; echo Verifying freebsd-root partition label occamroot0
+		[ -e /dev/gpt/occamroot0 ] || \
+			{ echo "/dev/gpt/occamroot0 not found" ; exit 1 ; }
 
-		echo Creating occambsd zpool
-		# altroot does not appear to be required
-#		zpool create -o altroot=$work_dir/image-mnt \
-		zpool create -O compress=lz4 -R $work_dir/image-mnt \
-			-O atime=off -m none occambsd /dev/${md_id}p3 || \
+		gpart show -l $device
+
+		echo ; echo Creating occambsd zpool
+
+		# Disabling compression while testing -O compress=lz4
+		# Note: copies=2
+		zpool create -R $work_dir/device-mnt \
+			-O atime=off -m none occambsd /dev/gpt/occamroot0 || \
 			{ echo zpool create failed ; exit 1 ; }
+
+		zpool list
 
 		echo Creating boot environment dataset
 		zfs create -o mountpoint=none occambsd/ROOT || \
-			{ echo first zfs create failed ; exit 1 ; }
+			{ echo "zfs create ROOT failed" ; exit 1 ; }
 
 		echo Creating default dataset
 		zfs create -o mountpoint=/ occambsd/ROOT/default || \
-			{ echo default zfs create failed ; exit 1 ; }
+			{ echo "zfs create default failed" ; exit 1 ; }
+
+		# Consider far more to-be-read-only datasets here
 
 		echo setting bootfs
 		zpool set bootfs=occambsd/ROOT/default occambsd || \
-			{ echo zpool set bootfs failed ; exit 1 ; }
+			{ echo "zpool set bootfs failed" ; exit 1 ; }
 
 		# Not needed for kernel-in-image boot, not helpful with kernel
-		#zpool set cachefile=$image-mnt/boot/zfs/zpool.cache occambsd
+		#zpool set cachefile=$device-mnt/boot/zfs/zpool.cache occambsd
 	else
-# Moved until after world/stand are built
-#		gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 /dev/$md_id
-		gpart add -t freebsd-ufs /dev/$md_id
-		newfs -U /dev/${md_id}p3 || \
-			{ echo /dev/${md_id}p3 VM newfs failed ; exit 1 ; }
-		echo ; echo Mounting ${md_id}p3 with \
-		mount /dev/${md_id}p3 $work_dir/image-mnt
-		mount /dev/${md_id}p3 $work_dir/image-mnt || \
-			{ echo image mount failed ; exit 1 ; }
+		gpart add -l occamroot0 -t freebsd-ufs /dev/$device
+		newfs -U /dev/gpt/occamroot0 || \
+			{ echo "/dev/gpt/occamroot0 newfs failed" ; exit 1 ; }
+		echo ; echo Mounting /dev/gpt/occamroot0
+		mount /dev/gpt/occamroot0 $work_dir/device-mnt || \
+			{ echo "/dev/gpt/occamroot0 mount failed" ; exit 1 ; }
 	fi
 fi
 
-[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+f_quiet
 
 
 # USERLAND
 
-if [ "$tmpfs" = "0" ] ; then
-	echo ; echo Cleaning object directory
-#	env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir clean
-	chflags -R 0 $obj_dir
-	rm -rf $obj_dir/*
-fi
-
 if [ "$target" = "jail" ] ; then
 	dest_dir="$work_dir/jail-mnt"
 else
-	dest_dir="$work_dir/image-mnt"
+	dest_dir="$work_dir/device-mnt"
 fi
 
-if [ "$userland" = "0" ] ; then
-        echo ; echo Building world - logging to $log_dir/build-world.log
-        \time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir -j$buildjobs \
-        SRCCONF=$work_dir/src.conf buildworld \
-        > $log_dir/build-world.log || { echo buildworld failed ; exit 1 ; }
+if [ "$keep" = "0" ] ; then
+	if [ "$artisanal_userland" = "0" ] ; then
+		echo ; echo Building world - logging to $log_dir/build-world.log
+		\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
+		-j$buildjobs SRCCONF=$work_dir/src.conf buildworld \
+        	> $log_dir/build-world.log || \
+		{ echo buildworld failed ; exit 1 ; }
+	fi
+fi
 
-[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
-
+if [ "$artisanal_userland" = "0" ] ; then
 	echo ; echo Installing world - logging to $log_dir/install-world.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-		installworld SRCCONF=$work_dir/src.conf \
-		DESTDIR=$dest_dir \
-		NO_FSCHG=YES \
+	installworld SRCCONF=$work_dir/src.conf \
+	DESTDIR=$dest_dir \
+	NO_FSCHG=YES \
 	> $log_dir/install-world.log 2>&1
 
 response="n"
@@ -425,23 +468,21 @@ response="n"
 
 if [ "$response" = "y" ]; then
 	echo Deleting unused locales from $dest_dir
+#	cd $work_dir/kernel/usr/share/locale/
 	cd $dest_dir/usr/share/locale/
 	rm -rf a* b* c* d* e* f* g* h* i* j* k* l* m* n* p* r* s* t* u* z*
 	echo Deleting unused timezone data from $dest_dir
+#	cd $work_dir/kernel/usr/share/zoneinfo
 	cd $dest_dir/usr/share/zoneinfo
 	rm -rf A* B* C* E* F* G* H* I* J* K* L* M* N* P* R* S* T* UCT US W* Z*
-
-#	echo Deleting unused locales from $work_dir/kernel
-#	cd $work_dir/kernel/usr/share/locale/
-#	rm -rf a* b* c* d* e* f* g* h* i* j* k* l* m* n* p* r* s* t* u* z*
-#	echo Deleting unused timezone data from $work_dir/kernel
-#	cd $work_dir/kernel/usr/share/zoneinfo
-#	rm -rf A* B* C* E* F* G* H* I* J* K* L* M* N* P* R* S* T* UCT US W* Z*
 fi
 
+fi # End install non-artisinal world
 
-else
-	echo ; echo Building and installing an artisanal userland!
+# Set up the artisanal userland environment
+if [ "$artisanal_userland" = "1" ] ; then
+
+	echo ; echo Building and installing an artisanal userland
 
 	echo ; echo Making essential userland directories
 	mkdir -p $dest_dir/bin
@@ -520,71 +561,113 @@ lib/libutil
 lib/liby
 lib/libmd"
 
-echo ; echo Static builds!
+fi # End setup artisanal userland environment
 
-IFS="
-"
-for static in $statics ; do
-	util=$(basename $static )
-	echo Making $src_dir/$static
-	env MAKEOBJDIRPREFIX=$obj_dir make -j$buildjobs -C $src_dir/$static \
-	NO_SHARED=YES WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
-	> $log_dir/make-$util.log 2>&1 || \
-		{ echo make $static failed ; exit 1 ; }
 
-#	SRCCONF=$work_dir/src.conf || \
+# ARTISANAL BUILDS
 
-	echo Installing $static
-	env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/$static install \
-	DESTDIR=$dest_dir \
-	WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
-	SRCCONF=$work_dir/src.conf > $log_dir/install-$util.log 2>&1 || \
-		{ echo install $static failed ; exit 1 ; }
-done
-
-echo ; echo Dynamic builds!
+if [ "$artisanal_userland" = "1" ] ; then
+	if [ "$keep" = "0" ] ; then
+		echo ; echo Static builds!
 
 #IFS="
 #"
-for dynamic in $dynamics ; do
-        dyn=$(basename $dynamic )
-        echo Making $src_dir/$dynamic
-        env MAKEOBJDIRPREFIX=$obj_dir make -j$buildjobs -C $src_dir/$dynamic \
-        WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
-        > $log_dir/make-$dyn.log 2>&1 || \
-                { echo make $dynamic failed ; exit 1 ; }
+		for static in $statics ; do
+			util=$(basename $static )
+			echo Making $src_dir/$static
+			env MAKEOBJDIRPREFIX=$obj_dir \
+			make -j$buildjobs -C $src_dir/$static \
+			NO_SHARED=YES WITHOUT_MAN=YES \
+			WITHOUT_MANCOMPRESS=YES \
+			> $log_dir/make-$util.log 2>&1 || \
+			{ echo make $static failed ; exit 1 ; }
+		done
 
-#       SRCCONF=$work_dir/src.conf || \
+		echo ; echo Dynamic builds!
 
-        echo Installing $dynamic
-        env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/$dynamic install \
-	DESTDIR=$dest_dir \
-        WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
-        SRCCONF=$work_dir/src.conf > $log_dir/install-$dyn.log 2>&1 || \
-                { echo install $dynamic failed ; exit 1 ; }
-done
+#IFS="
+#"
+		for dynamic in $dynamics ; do
+			dyn=$(basename $dynamic )
+			echo Making $src_dir/$dynamic
+        		env MAKEOBJDIRPREFIX=$obj_dir \
+			make -j$buildjobs -C $src_dir/$dynamic \
+			WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
+			> $log_dir/make-$dyn.log 2>&1 || \
+			{ echo make $dynamic failed ; exit 1 ; }
+		done
 
-echo Building share/ctypedef
-env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/share/ctypedef \
-	> $log_dir/make-ctypedef.log 2>&1 || \
-		{ echo make /share/ctypedef failed ; exit 1 ; }
+		echo ; echo Building share/ctypedef
+		env MAKEOBJDIRPREFIX=$obj_dir \
+		make -C $src_dir/share/ctypedef \
+		> $log_dir/make-ctypedef.log 2>&1 || \
+			{ echo make /share/ctypedef failed ; exit 1 ; }
 
-echo Copying /usr/share/locale/C.UTF-8/LC_CTYPE
-cp $obj_dir/$src_dir/amd64.amd64/share/ctypedef/C.UTF-8.LC_CTYPE \
+		echo ; echo Building /usr/share/zoneinfo 
+		env MAKEOBJDIRPREFIX=$obj_dir \
+		make -C $src_dir/share/zoneinfo \
+		> $log_dir/make-zoneinfo.log 2>&1 || \
+			{ echo make /share/zoneinfo failed ; exit 1 ; }
+	fi # End if keep
+fi # End if artisanal
+
+
+# ARTISNAL INSTALLS
+
+if [ "$artisanal_userland" = "1" ] ; then
+	for static in $statics ; do
+		echo ; echo Installing $static
+		env MAKEOBJDIRPREFIX=$obj_dir \
+		make -C $src_dir/$static install \
+		DESTDIR=$dest_dir \
+		WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
+		SRCCONF=$work_dir/src.conf > \
+			$log_dir/install-$util.log 2>&1 || \
+			{ echo install $static failed ; exit 1 ; }
+	done
+
+	for dynamic in $dynamics ; do
+		echo ; echo Installing $dynamic
+		env MAKEOBJDIRPREFIX=$obj_dir \
+		make -C $src_dir/$dynamic install \
+		DESTDIR=$dest_dir \
+		WITHOUT_MAN=YES WITHOUT_MANCOMPRESS=YES \
+		SRCCONF=$work_dir/src.conf > $log_dir/install-$dyn.log 2>&1 || \
+			{ echo install $dynamic failed ; exit 1 ; }
+	done
+fi
+
+
+# LOCALES MAY NEED LOVE
+
+echo ; echo "Configuring locale information"
+mkdir -p $dest_dir/usr/share/locale/C.UTF-8
+
+#cp $obj_dir/$src_dir/amd64.amd64/share/ctypedef/C.UTF-8/LC_CTYPE \
+
+# COPYING FROM THE HOST FOR NOW
+
+cp /usr/share/locale/C.UTF-8/LC_CTYPE \
 	$dest_dir/usr/share/locale/C.UTF-8/ || \
-		{ echo C.UTF-8.LC_CTYPE copy from $obj_dir failed ; exit 1 ; }
+		{ echo "C.UTF-8/LC_CTYPE copy from $obj_dir failed" ; exit 1 ; }
 
-echo Building /usr/share/zoneinfo 
-env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/share/zoneinfo \
-	> $log_dir/make-zoneinfo.log 2>&1 || \
-		{ echo make /share/zoneinfo failed ; exit 1 ; }
+[ -f $dest_dir/usr/share/locale/C.UTF-8/LC_CTYPE ] || \
+	{ echo "C.UTF-8/LC_CTYPE copy from $obj_dir failed" ; exit 1 ; }
 
-echo Copying /usr/share/zoneinfo/UTC
-cp $obj_dir/$src_dir/amd64.amd64/share/zoneinfo/builddir/Etc/UTC \
+mkdir -p $dest_dir/usr/share/zoneinfo
+mkdir -p $dest_dir/usr/share/zoneinfo/Etc
+
+#cp $obj_dir/$src_dir/amd64.amd64/share/zoneinfo/builddir/Etc/UTC \
+
+# COPYING FROM THE HOST FOR NOW
+
+cp /usr/share/zoneinfo/UTC \
 	$dest_dir/usr/share/zoneinfo/ || \
-		{ echo make /share/zoneinfo/UTC failed ; exit 1 ; }
+		{ echo "/share/zoneinfo/UTC copy failed" ; exit 1 ; }
 
-fi # End world
+cp /usr/share/zoneinfo/Etc/UTC \
+	$dest_dir/usr/share/zoneinfo/Etc/ || \
+		{ echo "/share/zoneinfo/Etc/UTC copy failed" ; exit 1 ; }
 
 # Alternative: use a known-good full userland
 #cat /usr/freebsd-dist/base.txz | tar -xf - -C $dest_dir
@@ -596,63 +679,70 @@ echo ; echo Adding boot code
 
 if ! [ "$target" = "jail" ] ; then
 	if [ "$zfsroot" = "1" ] ; then
-		echo Adding gptzfsboot boot code
+		echo ; echo Adding gptzfsboot boot code
 		gpart bootcode -b $dest_dir/boot/pmbr -p \
-		$dest_dir/boot/gptzfsboot -i 1 /dev/$md_id || \
+		$dest_dir/boot/gptzfsboot -i 1 /dev/$device || \
 			{ echo gpart bootcode failed ; exit 1 ; }
 	else
 		gpart bootcode -b $dest_dir/boot/pmbr \
-		-p $dest_dir/boot/gptboot -i 1 /dev/$md_id
+		-p $dest_dir/boot/gptboot -i 1 /dev/$device
 	fi
 fi
+
 # Alternatively install from the host
-#	gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 /dev/$md_id
+# gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 /dev/$device
+
+f_quiet
 
 
 # KERNEL
 
 if ! [ "$target" = "jail" ] ; then
 
-[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
-
-	echo ; echo Building kernel - logging to $log_dir/build-kernel.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir -j$buildjobs \
+	if [ "$keep" = "0" ] ; then
+		echo ; echo Building kernel - \
+			logging to $log_dir/build-kernel.log
+		\time -h env MAKEOBJDIRPREFIX=$obj_dir \
+		make -C $src_dir -j$buildjobs \
 		buildkernel KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD \
 		> $log_dir/build-kernel.log || \
 			{ echo buildkernel failed ; exit 1 ; }
 
-	echo ; echo Seeing how big the resulting kernel is
-	ls -lh $obj_dir/$src_dir/amd64.amd64/sys/OCCAMBSD/kernel
+		echo ; echo Seeing how big the resulting kernel is
+		ls -lh $obj_dir/$src_dir/amd64.amd64/sys/OCCAMBSD/kernel
 
-[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+		f_quiet
 
-	echo ; echo Installing the kernel to $dest_dir - \
-		logging to $log_dir/install-kernel.log
+	fi # End keep
+
+echo ; echo Installing the kernel to $dest_dir - \
+	logging to $log_dir/install-kernel.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir installkernel \
 	KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD DESTDIR=$dest_dir \
-		> $log_dir/install-kernel.log 2>&1
+	> $log_dir/install-kernel.log 2>&1
 	[ -f $dest_dir/boot/kernel/kernel ] || \
 		{ echo kernel failed to install to $dest_dir ; exit 1 ; }
 
 	# Need not be nested but the familiar location is familiar
 	echo Copying the kernel to $work_dir/kernel/
-	cp -rp $work_dir/image-mnt/boot/kernel \
+	cp -rp $work_dir/device-mnt/boot/kernel \
 		$work_dir/kernel/boot/
 	[ -f $work_dir/kernel/boot/kernel/kernel ] || \
 		{ echo $work_dir/kernel failed to copy ; exit 1 ; }
 
 	echo Seeing how big the resulting installed kernel is
-	ls -lh $work_dir/image-mnt/boot/kernel/kernel
+	ls -lh $work_dir/device-mnt/boot/kernel/kernel
 fi
 
 
 # DISTRIBUTION
 
-echo Installing distribution to $dest_dir - \
-	logging to $log_dir/distribution.log
+echo ; echo Installing distribution to $dest_dir - \
+	logging to $log_dir/install-dist.log
 \time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
 	SRCCONF=$work_dir/src.conf DESTDIR=$dest_dir \
-		> $log_dir/distribution.log 2>&1
+		> $log_dir/install-dist.log 2>&1
+
 
 # CONFIGURATION
 
@@ -674,10 +764,10 @@ fi
 #	$log_dir/kernel-distribution.log
 #\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
 # SRCCONF=$work_dir/src.conf DESTDIR=$work_dir/kernel \
-#		> $log_dir/kernel-distribution.log 2>&1
+#	> $log_dir/kernel-distribution.log 2>&1
 
 
-[ "$quiet" = "0" ] && { echo ; echo Press ANY key to continue ; read anykey ; }
+f_quiet
 
 if [ "$target" = "jail" ] ; then
 
@@ -695,7 +785,7 @@ else
 	echo ; echo Generating image rc.conf
 
 	echo
-tee -a $work_dir/image-mnt/etc/rc.conf <<HERE
+tee -a $work_dir/device-mnt/etc/rc.conf <<HERE
 hostname="occambsd"
 ifconfig_DEFAULT="DHCP inet6 accept_rtadv"
 growfs_enable="YES"
@@ -703,44 +793,46 @@ HERE
 
 	if [ "$zfsroot" = 1 ] ; then
 		echo Adding rc.conf ZFS entry
-		echo "zfs_enable=\"YES\"" >> $work_dir/image-mnt/etc/rc.conf
+		echo "zfs_enable=\"YES\"" >> $work_dir/device-mnt/etc/rc.conf
 		echo "zfs_enable=\"YES\"" >> $work_dir/kernel/etc/rc.conf
 	fi
 
 	echo ; echo Generating fstab
 
-	if [ "$target" = "bhyve" ] ; then
-		root_dev="vtbd"
-	else
-		root_dev="ada"
-	fi
-	
+# root fstab entry for UFS
 	if [ "$zfsroot" = 0 ] ; then
-echo "/dev/${root_dev}0p3	/	ufs	rw,noatime	1	1" \
-	> "$dest_dir/etc/fstab"
-		cp "$dest_dir/etc/fstab" "$work_dir/kernel/etc/"
+#echo "/dev/${root_dev}0p3	/	ufs	rw,noatime	1	1" \
+echo "/dev/gpt/occamroot0	/	ufs	rw,noatime	1	1" \
+		> "$dest_dir/etc/fstab"
 	fi
 
-	echo "/dev/${root_dev}0p2	none	swap	sw	1	1" \
+# Add swap regardless of if UFS or ZFS
+#	echo "/dev/${root_dev}0p2	none	swap	sw	0	0" \
+	echo "/dev/gpt/occamswap0	none	swap	sw	0	0" \
 		>> "$dest_dir/etc/fstab"
 	cat "$dest_dir/etc/fstab" || \
 		{ echo $dest_dir/etc/fstab generation failed ; exit 1 ; }
-fi
+
+	# Copy for if bhyve boots with -e, superflous for UFS boot
+	cp "$dest_dir/etc/fstab" "$work_dir/kernel/etc/"
+
+fi # End if target = jail
 
 echo ; echo Touching firstboot files
 
 touch "$dest_dir/firstboot"
 
-# VM loader.conf acrobatics
+# loader.conf configuration
 if ! [ "$target" = "jail" ] ; then
-	echo ; echo Generating genernic VM image loader.conf
+	echo ; echo Generating generic device loader.conf
 
 	echo
-	tee -a $work_dir/image-mnt/boot/loader.conf <<HERE
-#kern.geom.label.disk_ident.enable="0"
-#kern.geom.label.gptid.enable="0"
+	tee -a $work_dir/device-mnt/boot/loader.conf <<HERE
+kern.geom.label.disk_ident.enable="0"
+kern.geom.label.gptid.enable="0"
+kern.geom.label.gpt.enable="1"
 autoboot_delay="3"
-boot_verbose="1"
+#boot_verbose="1"
 HERE
 
 	echo ; echo Generating generic kernel loader.conf
@@ -749,16 +841,17 @@ HERE
 	tee -a $work_dir/kernel/boot/loader.conf <<HERE
 kern.geom.label.disk_ident.enable="0"
 kern.geom.label.gptid.enable="0"
+kern.geom.label.gpt.enable="1"
 autoboot_delay="3"
-boot_verbose="1"
+#boot_verbose="1"
 HERE
 
 	if [ "$zfsroot" = "1" ] ; then
 		echo ; echo Adding ZFS loader entries
 		echo "cryptodev_load=\"YES\"" >> \
-			$work_dir/image-mnt/boot/loader.conf
+			$work_dir/device-mnt/boot/loader.conf
 		echo "zfs_load=\"YES\"" >> \
-			$work_dir/image-mnt/boot/loader.conf
+			$work_dir/device-mnt/boot/loader.conf
 
 		# Could copy it over...
 		echo "cryptodev_load=\"YES\"" >> \
@@ -767,20 +860,17 @@ HERE
 			$work_dir/kernel/boot/loader.conf
 		echo "vfs.root.mountfrom=\"zfs:occambsd/ROOT/default\"" >> \
 			$work_dir/kernel/boot/loader.conf
-#	else
-#		echo "vfs.root.mountfrom=\"ufs:/dev/ada0p3\"" >> \
-#			$work_dir/kernel/boot/loader.conf
 	fi
 
 	if [ "$target" = "xen" ] ; then
 		echo ; echo Adding Xen loader.conf entries
 
 		echo "boot_serial=\"YES\"" >> \
-			$work_dir/image-mnt/boot/loader.conf
+			$work_dir/device-mnt/boot/loader.conf
 		echo "comconsole_speed=\"115200\"" >> \
-			$work_dir/image-mnt/boot/loader.conf
+			$work_dir/device-mnt/boot/loader.conf
 		echo "console=\"comconsole\"" >> \
-			$work_dir/image-mnt/boot/loader.conf
+			$work_dir/device-mnt/boot/loader.conf
 	
 		echo "boot_serial=\"YES\"" >> \
 			$work_dir/kernel/boot/loader.conf
@@ -790,22 +880,22 @@ HERE
 			$work_dir/kernel/boot/loader.conf
 
 		echo ; echo Configuring the Xen VM image serial console
-		printf "%s" "-h -S115200" >> $work_dir/image-mnt/boot.config
+		printf "%s" "-h -S115200" >> $work_dir/device-mnt/boot.config
 
 		echo ; echo Configuring the Xen kernel serial console
 		printf "%s" "-h -S115200" >> $work_dir/kernel/boot.config
 
-# Needed for PVH but not HVM?
+		# Needed for PVH but not HVM?
 echo 'xc0	"/usr/libexec/getty Pc"	xterm	onifconsole	secure' \
-		>> $work_dir/image-mnt/etc/ttys
+		>> $work_dir/device-mnt/etc/ttys
 
-	echo $work_dir/image-mnt/boot/loader.conf reads:
-	cat $work_dir/image-mnt/boot/loader.conf || \
-		{ echo image-mnt loader.conf generation failed ; exit 1 ; }
+		echo $work_dir/device-mnt/boot/loader.conf reads:
+		cat $work_dir/device-mnt/boot/loader.conf || \
+			{ echo loader.conf generation failed ; exit 1 ; }
 
-	echo $work_dir/kernel/boot/loader.conf reads:
-	cat $work_dir/kernel/boot/loader.conf || \
-		{ echo kernel loader.conf generation failed ; exit 1 ; }
+		echo $work_dir/kernel/boot/loader.conf reads:
+		cat $work_dir/kernel/boot/loader.conf || \
+			{ echo kernel loader.conf generation failed ; exit 1 ; }
 	fi
 fi # End loader.conf acrobatics
 
@@ -818,32 +908,31 @@ fi # End loader.conf acrobatics
 # DEBUG Need to set on in the kernel directories?
 #tzsetup -s -C $dest_dir UTC
 
-if [ "$target" = "xen" ] ; then
-	# Naturally this may be an issue if the host differs from the sources
-	echo ; echo Installing xen-guest-tools to Xen image
-	pkg -r $work_dir/image-mnt install -y xen-guest-tools
 
-	echo ; echo Running pkg -r $work_dir/image-mnt info
-	pkg -r $work_dir/image-mnt info || \
+# PACKAGES
+
+	echo ; echo Installing packages
+	pkg -r $work_dir/device-mnt install -y $packages
+
+	echo ; echo Running pkg -r $work_dir/device-mnt info
+	pkg -r $work_dir/device-mnt info || \
 		{ echo Package installation failed ; exit 1 ; }
-fi
-
 
 # STATISTICS
 
-echo ; echo Running df -h | grep $md_id
-df -h | grep $md_id
+echo ; echo Running df -h | grep $device
+df -h | grep $device
 
 echo ; echo Finding all files over 1M in size
-find $work_dir/image-mnt -size +1M -exec ls -lh {} +
+find $work_dir/device-mnt -size +1M -exec ls -lh {} +
 
-echo df -h just ran... did you see $md_id
+echo df -h just ran... did you see $device
 df -h
 
 if ! [ "$target" = "jail" ] ; then
-#	cat << HERE >> "$work_dir/image-mnt/etc/rc.local"
+#	cat << HERE >> "$work_dir/device-mnt/etc/rc.local"
 # rc.local appears to be too early, log is short, MS=0
-	cat << HERE >> "$work_dir/image-mnt/collect-ts-data.sh"
+	cat << HERE >> "$work_dir/device-mnt/collect-ts-data.sh"
 TSCEND=\`sysctl -n debug.tslog_user | grep sh | head -1 | cut -f 4 -d ' '\`
 TSCFREQ=\`sysctl -n machdep.tsc_freq\`
 MS=\$((TSCEND * 1000 / TSCFREQ));
@@ -852,7 +941,7 @@ echo \$MS > /root/ts-ms.var
 sysctl -b debug.tslog > /root/ts.log
 HERE
 
-	cat $work_dir/image-mnt/collect-ts-data.sh
+	cat $work_dir/device-mnt/collect-ts-data.sh
 fi
 
 if [ "$target" = "jail" ] ; then
@@ -932,6 +1021,7 @@ if [ "$target" = "bhyve" ] ; then
 		> $work_dir/boot-bhyve-disk-image.sh
 	echo $work_dir/boot-bhyve-disk-image.sh
 	echo "bhyvectl --destroy --vm=occambsd" \
+b
 		> $work_dir/destroy-bhyve.sh
 	echo $work_dir/destroy-bhyve.sh
 elif [ "$target" = "xen" ] ; then
@@ -969,27 +1059,26 @@ fi
 du -h $dest_dir > $work_dir/diskusage.txt
 
 if ! [ "$target" = "jail" ] ; then
-	echo ; echo The VM disk image is still mounted and you could
+	echo ; echo The disk device is still mounted and you could
 	echo exit and rebuild the kernel with:
 	echo ; echo env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir -j$buildjobs buildkernel KERNCONFDIR=$work_dir KERNCONF=OCCAMBSD
 	echo ; echo env MAKEOBJDIRPREFIX=$obj_dir make installkernel KERNCONFDIR=$work_dir DESTDIR=$work_dir/\< jail mnt or root \>
-
-	if [ "$quiet" = "0" ] ; then
-		echo ; echo Press ANY key to unmount the VM disk image
-		read anykey
-	fi
 
 	if [ "$zfsroot" = "1" ] ; then
 		echo Exporting occambsd zpool
 		zpool export -f occambsd
 	else
+		sleep 3
 		echo ; echo Unmounting $dest_dir
 		umount $dest_dir
 	fi
 
-	echo ; echo Destroying $md_id
-	mdconfig -du $md_id
-	mdconfig -lv
+
+	if [ "$hardware_device" = "0" ] ; then
+		echo ; echo Destroying $device
+		mdconfig -du $device
+		mdconfig -lv
+	fi
 fi
 
 if [ "$release" = "1" ] ; then
@@ -1024,30 +1113,25 @@ if [ "$release" = "1" ] ; then
 		> $work_dir/boot-bhyve-memstick.img.sh
 
 	echo ; echo Release contents are in $obj_dir
-else
-	if [ "$tmpfs" = "1" ] ; then
-		echo ; echo Unmounting $obj_dir
-		umount $obj_dir
-	fi
 fi
 
-if ! [ "$target" = "jail" ] ; then
-	cat << HERE >> "$work_dir/attach.img.sh"
-mdconfig -a -u "$md_id" -f "$work_dir/occambsd.raw" || \
+
+# Also skip on ZFS
+	if [ "$hardware_device" = "0" ] ; then
+		if ! [ "$target" = "jail" ] ; then
+			cat << HERE >> "$work_dir/attach.img.sh"
+mdconfig -a -u "$device" -f "$work_dir/occambsd.raw" || \
 	{ echo image mdconfig attach failed ; exit 1 ; }
-mount /dev/${md_id}p3 $work_dir/image-mnt || \
+mount /dev/${device}p3 $work_dir/device-mnt || \
 	{ echo image mount failed ; exit 1 ; }
 HERE
 
-	cat << HERE >> "$work_dir/detach.img.sh"
-umount -f "$work_dir/image-mnt" || \
+			cat << HERE >> "$work_dir/detach.img.sh"
+umount -f "$work_dir/device-mnt" || \
 	{ echo image umount failed ; exit 1 ; }
-mdconfig -d -u "$md_id" || \
+mdconfig -d -u "$device" || \
 	{ echo image mdconfig detach failed ; exit 1 ; }
 HERE
-fi
-
-echo ; echo removing /tmp/revision.txt
-rm /tmp/revision.txt
-
+		fi
+	fi
 exit 0

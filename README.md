@@ -46,19 +46,24 @@ FreeBSD 14-CURRENT is supported as of 2021-11-28
 
 ## Usage
 
-The occambsd.sh script is position independent with one dependency, lib_occambsd.sh
-
-It defaults to a build a bhyve-compatible, root-on-UFS virtual machine and different behavior is controlled by the following flags:
+The occambsd.sh script is position independent and requires a profile such as:
 
 ```
--z	Use root-on-ZFS rather than UFS
--x	Target Xen rather than bhyve
--j	Target Jail rather than bhyve
--u	Build and install a minimum userland without build|installworld
--r	Build a release with bootable disc1 and memstick images
-	(Only supported with a standard userland)
--t	Use tmpfs(5) for the object and work directories
--q	Quiet mode - do not ask to continue at every major step
+sh occambsd.sh -p profile-bhyve.13.1.txt
+```
+
+```
+-p <profile file> (required)
+-s <source directory override>
+-o <object directory override>
+-z (Use ZFS)
+-x (Use Xen)
+-j (Use Jail)
+-u (Use an artisinal userland in place of buildworld
+-r (Also make release)
+-d <device> (Use specific device <device>)
+-q (Quiet mode: Do not ask to proceed at every stage)
+-k (Keep and reuse build output in quiet mode)
 ```
 
 For example, to create a root-on-ZFS virtual machine and note the time it takes to build:
@@ -93,8 +98,6 @@ Note that ARC "warmth" on the host will speed build times
 ## Known Issues/To Do
 
 * Investigate Juniper's static_libpam towards the goal of an optional fully statically-built userland
-* Consider adding release support to the minimum userland
-* Consider adding automatic du(1) and tree(1) (if installed) analysis
 * Consider targeting a Raspberry Pi image
 * Consider placing "bread crumbs" to avoid re-running successful steps
 * The cpersiva@/@cpersiva/wiki.freebsd.org/BootTime TSLOG option is in the kernel but it would be nice to have a script to extract the results
