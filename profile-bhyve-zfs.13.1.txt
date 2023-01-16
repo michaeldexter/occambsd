@@ -1,9 +1,0 @@
-build_options="WITHOUT_AUTHPF WITHOUT_BHYVE WITHOUT_CAROOT WITHOUT_FREEBSD_UPDATE WITHOUT_INET WITHOUT_INET_SUPPORT WITHOUT_JAIL"
-
-kernel_modules="virtio opensolaris zfs cryptodev acl_nfs4 xdr zlib crypto"
-
-kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 TSLOG"
-
-kernel_devices="pci loop ether acpi uart ahci scbus cd virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon aesni crypto"
-
-packages=""
