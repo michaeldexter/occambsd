@@ -1,6 +1,6 @@
 # This is a profile for 14-CURRENT with ZFS support
 
-build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_VI WITHOUT_ZFS WITHOUT_LOADER_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL WITHOUT_LOADER_GELI WITHOUT_DYNAMICROOT"
+build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_ZFS WITHOUT_LOADER_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL WITHOUT_LOADER_GELI WITHOUT_DYNAMICROOT WITHOUT_FP_LIBC WITHOUT_VI"
 
 kernel_modules="virtio opensolaris zfs cryptodev acl_nfs4 xdr zlib crypto"
 
@@ -18,6 +18,7 @@ packages=""
 # WITHOUT_ZFS WITHOUT_LOADER_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL - required for ZFS
 # WITHOUT_LOADER_GELI - required for ZFS on FreeBSD 14-CURRENT
 # WITHOUT_DYNAMICROOT - required by geom, or gpart: Cannot open library: Service unavailable
+# WITHOUT_FP_LIBC - required for utilities like df to show calculated percentages
 # WITHOUT_VI - a text editor to speed development and testing
 
 # KERNEL MODULE NOTES
@@ -43,10 +44,9 @@ packages=""
 # aesni crypto - required for ZFS
 # pass - needed for camcontrol reprobe (verify)
 
-BUGS with this configuration
+# BUGS with this configuration
 
-# df -h, zpool list, and friends show fM and fG which should show "5MB"
-# Copying in a GENERIC kernel does not fix this, suggesting it is a world issue
+# FIXED: df -h, zpool list, and friends show fM and fG which should show "5MB"
 # The default makefs zpool is not set to autoexpand=auto
 # growfs might not support ZFS (handled by imagine)
 # Configuration fails goes dark after the loader on a T480, coping in a full GENERIC kernel solves it
