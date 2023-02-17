@@ -68,12 +68,6 @@ rc.local.sh			A FreeBSD userland
 
 Most of these scripts are position independent unless they depend on one another.
 
-mirror-upstream.sh is hard-coded to use zpool "zroot" but that can be overridden with by appending a zpool name:
-
-```
-sh mirror-upstream.sh tank
-```
-
 occambsd.sh requires a profile and can build a root-on-ZFS image with -z:
 
 
@@ -102,6 +96,13 @@ sh imagine.sh
 imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", or a custom-build vm.raw image and assists with configuring it as a virtual machine disk image or images it to a hardware device for hardware boot.
 
 Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts.
+
+
+mirror-upstream.sh is hard-coded to use zpool "zroot" but that can be overridden with by appending a zpool name:
+
+```
+sh mirror-upstream.sh tank
+```
 
 rc.local.sh will prompt for a root destination directory, or will auto-execute on boot if renamed "/etc/rc.local" (remove .sh)
 
