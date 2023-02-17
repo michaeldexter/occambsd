@@ -297,6 +297,8 @@ rm $work_dir/$version/*.gz > /dev/null 2>&1
 if [ "$target" = "dev" ] ; then
 	if [ "$origin" = "obj" ] ; then
 		echo Imaging vm.raw to /dev/$target_device
+		echo "Device size:"
+		stat -f %z $work_dir/$version/$xzimg
 		\time -h dd of=/dev/$target_device bs=1m status=progress \
 			if=/usr/obj/usr/src/amd64.amd64/release/vm.raw || \
 				{ echo "dd failed" ; exit 1 ; }

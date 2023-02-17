@@ -4,14 +4,10 @@ kernel_modules="virtio opensolaris zfs cryptodev acl_nfs4 xdr zlib crypto"
 
 kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 TSLOG MSDOSFS"
 
-# Noted from T480 boot not here:
-# devices: atkbd atkbdc hda (audio) nvme nvd psm smbios umass xhci vga?
+kernel_devices="pci loop ether acpi uart ahci scbus cd virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon aesni crypto pass atkbdc atkbd psm vga vt vt_vga vt_efifb vt_vbefb xhci usb ukbd umass scbus da hid kbdmux"
 
-# Adding some more...
-kernel_devices="pci loop ether acpi uart ahci scbus cd virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon aesni crypto pass atkbd atkbdc psm vga vt vt_vga vt_efifb vt_vbefb xhci usb umass scbus da"
+# Optional: hda (audio) nvme nvd smbios
+# Unused: uhci ohci ehci 
+# hid for a USB keyboard
 
-# Possibly not on the T480
-# uhci ohci ehci 
-
-# pass for camcontrol reprobe to work?
 packages=""
