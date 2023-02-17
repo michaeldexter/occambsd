@@ -20,14 +20,16 @@ _zp="zroot"
 git_server="file:///b/MAIN/src.git"
 H="/b/HTML/index.html"
 
-branches="releng/13.1
+branches="releng/13.2
+releng/13.1
 stable/13
+stable/12
 main"
 
 [ $( which git ) ] || { echo git not found ; exit 1 ; }
 
 zpool get name $_zp > /dev/null 2>&1 || \
-	{ echo zpool $_zp not found ; exit 1 ; }
+	{ echo "zpool $_zp not found, specify the active pool" ; exit 1 ; }
 
 echo Checking for $_zp/b/MAIN/src.git
 main_missing=1

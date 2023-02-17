@@ -8,8 +8,11 @@ bos-lite.sh		Launched by mirror-upstream.sh and performs an inverse "build optio
 bos-upload.sh		Launched by bos-lite.sh if present for uploating to a web server (not included)
 build-option-smoke-test.sh	A build option CI test proposed to the FreeBSD cluster aministration team
 occambsd.sh		Builds a "svelte", purpose-build FreeBSD bootable disk image using the FreeBSD build(7) system
+profile-minimum.txt	A minimum system configuration for use on a virtual machine
+profile-zfs.txt		The minimum configuration with ZFS added
+profile-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
 imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images
-rc.local.sh		Launched by imagine.sh or renamed to /etc/rc.local, configures FreeBSD system in an idempotent manner
+rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
 
 ## New Approach
 
@@ -29,7 +32,7 @@ The OccamBSD approach can provide:
 * Hopefully the foundation for an update mechanism to replace freebsd-update based on lessons from the up.bsd.lv proof of concept
 * To be determined: The relationship of this to "packaged base"; the Makefile hygiene related to this should prove useful
 
-In short, to help deliver on the unwavering FreeBSD promise to provide a flexible, permissively-licensed operating system for use for nearly any purpose.
+In short, to help deliver on the FreeBSD promise to provide a flexible, permissively-licensed operating system for use for nearly any purpose.
 
 ## Requirements
 
@@ -41,7 +44,7 @@ imagine.sh:			Internet access if using images from ftp.freebsd.org
 build-option-smoke-test.sh	FreeBSD source and object directories, optional git for metadata
 rc.local.sh			A FreeBSD userland
 
-## Layout
+## Output Layout
 
 ```
 /b/				"Build" mount point for mirror-upstream.sh
@@ -55,6 +58,7 @@ rc.local.sh			A FreeBSD userland
 /tmp/occambsd/logs		World, Kernel, and VM-IMAGE build logs
 /tmp/occambsd/src.conf		The generated src.conf excluding components
 /tmp/occambsd/vm.raw		A copy of the generated VM image from /usr/obj
+/tmp/occambsd/disc1.iso		A copy of the generated disk1.iso from /usr/obj
 /tmp/occambsd/cfg		Xen VM configuration file
 /root/imageine-work		Working directory for some imagine.sh operations
 ```
@@ -73,7 +77,7 @@ occambsd.sh requires a profile and can build a root-on-ZFS image with -z:
 
 
 ```
-sh occambsd.sh -z -p profile-bhyve-zfs.14.txt
+sh occambsd.sh -z -p profile-zfs.txt
 ```
 
 The full occambsd.sh usage is:

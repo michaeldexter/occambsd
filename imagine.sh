@@ -73,9 +73,9 @@ vm_name="vm0"
 
 # RELEASE URLS
 
-release_img_url="https://download.freebsd.org/ftp/releases/VM-IMAGES/13.0-RELEASE/amd64/Latest/FreeBSD-13.0-RELEASE-amd64.raw.xz"
+release_img_url="https://download.freebsd.org/ftp/releases/VM-IMAGES/13.1-RELEASE/amd64/Latest/FreeBSD-13.1-RELEASE-amd64.raw.xz"
 
-release_dist_url="https://download.freebsd.org/ftp/releases/amd64/13.0-RELEASE"
+release_dist_url="https://download.freebsd.org/ftp/releases/amd64/13.1-RELEASE"
 
 
 # STABLE URLS
@@ -307,6 +307,8 @@ if [ "$target" = "dev" ] ; then
 		[ -f $work_dir/$version/$xzimg ] || \
 			{ echo $work_dir/$version/$xzimg missing ; exit 1 ; }
 		echo Imaging $work_dir/$version/$xzimg to /dev/$target_device
+		echo "Device size:"
+		stat -f %z $work_dir/$version/$xzimg
 		\time -h cat $work_dir/$version/$xzimg | \
 			xz -d -k | \
 			dd of=/dev/$target_device bs=1m status=progress \

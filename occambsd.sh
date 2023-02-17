@@ -148,10 +148,22 @@ echo ; echo Removing previous vm.raw image if present
 	rm "$obj_dir/$src_dir/amd64.amd64/release/raw.img"  \
 
 [ -d "$obj_dir/$src_dir/amd64.amd64/release/vm-image" ] && \
-	chflags -R 0  "$obj_dir/$src_dir/amd64.amd64/release/vm-image"  \
+	chflags -R 0 "$obj_dir/$src_dir/amd64.amd64/release/vm-image"  \
 
 [ -d "$obj_dir/$src_dir/amd64.amd64/release/vm-image" ] && \
 	rm -rf "$obj_dir/$src_dir/amd64.amd64/release/vm-image"  \
+
+[ -d "$obj_dir/$src_dir/amd64.amd64/release/disc1" ] && \
+	chflags -R 0  "$obj_dir/$src_dir/amd64.amd64/release/disc1"  \
+
+[ -d "$obj_dir/$src_dir/amd64.amd64/release/disc1" ] && \
+	rm -rf "$obj_dir/$src_dir/amd64.amd64/release/disc1*"  \
+
+[ -d "$obj_dir/$src_dir/amd64.amd64/release/bootonly" ] && \
+	chflags -R 0 "$obj_dir/$src_dir/amd64.amd64/release/bootonly"  \
+
+[ -d "$obj_dir/$src_dir/amd64.amd64/release/bootonly" ] && \
+	rm -rf "$obj_dir/$src_dir/amd64.amd64/release/bootonly*"  \
 
 if [ "$reuse_kernel" = "0" ] ; then
 	echo ; echo Cleaning kernel object directory
@@ -269,7 +281,7 @@ fi
 # BUILD THE KERNEL
 
 if [ "$reuse_kernel" = "1" ] ; then
-	echo ; echo Reuse world requested
+	echo ; echo Reuse kernel requested
 	[ -d "$obj_dir/$src_dir/amd64.amd64/sys/$kernconf" ] || \
 		{ echo World artifacts not found for resuse ; exit 1 ; }
 else
@@ -302,10 +314,28 @@ echo ; echo Building vm-image - logging to $log_dir/vm-image.log
 	KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
 	vm-image WITH_VMIMAGES=YES VMFORMATS=raw VMFS=$vmfs \
 		> $log_dir/vm-image.log 2>&1 || \
-			{ echo release failed ; exit 1 ; }
+			{ echo vm-image failed ; exit 1 ; }
 
 echo ; echo Copying $obj_dir/$src_dir/amd64.amd64/release/vm.raw to $work_dir
 cp $obj_dir/$src_dir/amd64.amd64/release/vm.raw $work_dir/
+
+
+# Verify if vm-image would be re-using amd64.amd64/release/dist/
+# Run first if so
+# Why does it do that if it creates amd64.amd64/release/disc1 ?
+
+# BUILD THE ISO
+
+echo ; echo Building CD-ROM ISO - logging to $log_dir/cdrom.log
+\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
+	SRCCONF=$work_dir/src.conf \
+	KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+	cdrom \
+		> $log_dir/cdrom.log 2>&1 || \
+			{ echo cdrom failed ; exit 1 ; }
+
+echo ; echo Copying $obj_dir/$src_dir/amd64.amd64/release/disc1.iso to $work_dir
+cp $obj_dir/$src_dir/amd64.amd64/release/disc1.iso $work_dir/
 
 
 # GENERATE BOOT SCRIPTS

@@ -1,0 +1,52 @@
+# This is a profile for 14-CURRENT and 13.2 with ZFS support
+
+build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_EFI WITHOUT_ZFS WITHOUT_LOADER_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL WITHOUT_LOADER_GELI WITHOUT_DYNAMICROOT WITHOUT_FP_LIBC WITHOUT_VI"
+
+kernel_modules="virtio opensolaris zfs cryptodev acl_nfs4 xdr zlib crypto"
+
+kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 MSDOSFS TSLOG" 
+
+kernel_devices="pci loop ether acpi uart ahci scbus cd virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon aesni crypto pass"
+
+packages=""
+
+# BUILD OPTION NOTES - these build options are excluded/ignored, meaning their components are built
+
+# WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB - required to build
+# WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_EFI - required to boot
+# WITHOUT_LOCALES WITHOUT_ZONEINFO - required for shell
+# WITHOUT_ZFS WITHOUT_LOADER_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL - required for ZFS
+# WITHOUT_LOADER_GELI - required for ZFS on FreeBSD 14-CURRENT
+# WITHOUT_DYNAMICROOT - required by geom, or gpart: Cannot open library: Service unavailable
+# WITHOUT_FP_LIBC - required for utilities like df to show calculated percentages
+# WITHOUT_VI - a text editor to speed development and testing
+
+# KERNEL MODULE NOTES
+
+# virtio - useful for virtual machine booting
+# opensolaris zfs cryptodev acl_nfs4 xdr zlib crypto - required for ZFS
+
+# KERNEL OPTION NOTES
+
+# SCHED_ULE - a scheduler is required. Try them all!
+# GEOM_PART_GPT FFS GEOM_LABEL CD9660 - needed for storage
+# MSDOSFS - needed for the EFI partition
+# TSLOG - added for boot time profiling
+
+# KERNEL DEVICE NOTES
+# pci - required to boot
+# loop - should not be required!
+# ether - required for networking
+# acpi - required to boot
+# uart - required for a serial console
+# ahci scbus cd - required for storage
+# virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon - VirtIO suite for VM boot
+# aesni crypto - required for ZFS
+# pass - needed for camcontrol reprobe (verify)
+
+# BUGS with this configuration
+
+# FIXED: df -h, zpool list, and friends show fM and fG which should show "5MB"
+# The default makefs zpool is not set to autoexpand=auto
+# growfs might not support ZFS (handled by imagine)
+# Configuration fails goes dark after the loader on a T480, coping in a full GENERIC kernel solves it

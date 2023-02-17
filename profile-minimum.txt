@@ -1,6 +1,6 @@
 # This is a minimum profile for bhyve with UFS storage
 
-build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_DYNAMICROOT WITHOUT_VI"
+build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_DYNAMICROOT WITHOUT_FP_LIBC WITHOUT_VI"
 
 kernel_modules="virtio"
 
@@ -9,39 +9,3 @@ kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 MSDOSFS TSLOG"
 kernel_devices="pci loop ether acpi uart ahci scbus cd virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon pass"
 
 packages=""
-
-# BUILD OPTION NOTES - these build options are excluded/ignored, meaning their components are built
-
-# WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB - required to build
-# WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_EFI - required to boot
-# WITHOUT_LOCALES WITHOUT_ZONEINFO - required for shell
-# WITHOUT_DYNAMICROOT - required by geom, or gpart: Cannot open library: Service unavailable
-# WITHOUT_VI - a text editor to speed development and testing
-
-# KERNEL MODULE NOTES
-
-# virtio - useful for virtual machine booting
-
-# KERNEL OPTION NOTES
-
-# SCHED_ULE - a scheduler is required. Try them all!
-# GEOM_PART_GPT FFS GEOM_LABEL CD9660 - needed for storage
-# MSDOSFS - needed for the EFI partition
-# TSLOG - added for boot time profiling
-
-# KERNEL DEVICE NOTES
-# pci - required to boot
-# loop - should not be required!
-# ether - required for networking
-# acpi - required to boot
-# uart - required for a serial console
-# ahci scbus cd - required for storage
-# virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon - VirtIO suite for VM boot
-# pass - needed for camcontrol reprobe (verify)
-
-# BUGS with this configuration
-
-# top, df -h, zpool list, and friends show fM and fG which should show "5MB"
-# CPU:    f% user,    f% nice,    f% system,    f% interrupt,    f% idle
-# Copying in a GENERIC kernel does not fix this, suggesting it is a world issue
-# Configuration fails goes dark after the loader on a T480, coping in a full GENERIC kernel solves it
