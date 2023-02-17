@@ -2,8 +2,8 @@ build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOU
 
 kernel_modules="virtio opensolaris zfs cryptodev acl_nfs4 xdr zlib crypto"
 
-kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 TSLOG MSDOSFS INET"
+kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 MSDOSFS TSLOG INET"
 
-kernel_devices="pci loop ether acpi uart ahci scbus cd virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon aesni crypto pass atkbdc atkbd psm vga vt vt_vga vt_efifb vt_vbefb xhci usb ukbd umass scbus da hid kbdmux iflib em ix bpf"
+kernel_devices="pci loop ether acpi uart ahci scbus cd pass virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon aesni crypto atkbdc atkbd psm vga vt vt_vga vt_efifb vt_vbefb xhci usb ukbd umass scbus da hid kbdmux iflib bpf em ix"
 
 packages=""

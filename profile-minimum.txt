@@ -6,6 +6,67 @@ kernel_modules="virtio"
 
 kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 MSDOSFS TSLOG"
 
-kernel_devices="pci loop ether acpi uart ahci scbus cd virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon pass"
+kernel_devices="pci loop ether acpi uart ahci scbus cd pass virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon" 
 
 packages=""
+
+
+# BUILD OPTION NOTES - these build options are excluded/ignored, meaning their components are built
+
+# WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB - required to build
+# WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_EFI - required to boot
+# WITHOUT_LOCALES WITHOUT_ZONEINFO - required for a shell
+# WITHOUT_FP_LIBC - required for utilities like df to show calculated percentages
+# WITHOUT_VI - a text editor to speed development and testing
+
+# BUILD OPTIONS FOR ZFS SUPPORT
+
+# WITHOUT_ZFS WITHOUT_LOADER_ZFS WITHOUT_CDDL WITHOUT_CRYPT WITHOUT_OPENSSL - required for ZFS
+# WITHOUT_LOADER_GELI - required for ZFS on FreeBSD 14-CURRENT
+# WITHOUT_DYNAMICROOT - required by geom, or gpart: Cannot open library: Service unavailable
+
+
+# BUILD OPTIONS FOR IPv4 SUPPORT
+
+# WITHOUT_INET
+# KERNEL MODULE NOTES
+
+# virtio - useful for virtual machine booting
+
+# KERNEL MODULES FOR ZFS SUPPORT
+
+# opensolaris zfs cryptodev acl_nfs4 xdr zlib crypto - required for ZFS
+
+# KERNEL OPTION NOTES
+
+# SCHED_ULE - a scheduler is required. Try them all!
+# GEOM_PART_GPT FFS GEOM_LABEL CD9660 - needed for storage
+# MSDOSFS - needed for the EFI partition
+# TSLOG - added for boot time profiling
+
+# KERNEL OPTIONS FOR IPv4 SUPPORT
+
+# INET
+
+# KERNEL DEVICE NOTES
+
+# pci - required to boot
+# loop - should not be required!
+# ether - required to build
+# acpi - required to boot
+# uart - required for a serial console
+# ahci scbus cd pass - required for storage
+# pass - needed for camcontrol reprobe (verify)
+# virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon - VirtIO suite for VM boot
+
+# KERNEL DEVICES FOR ZFS SUPPORT
+
+# aesni crypto - required for ZFS
+
+# KERNEL DEVICES FOR HARDWARE BOOT SUPPORT
+
+# atkbdc atkbd psm vga vt vt_vga vt_efifb vt_vbefb xhci usb ukbd umass scbus da hid kbdmux
+
+# KERNEL DEVICES FOR IPv4 SUPPORT (Add NICs as needed)
+
+# iflib bpf em ix

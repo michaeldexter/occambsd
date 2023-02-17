@@ -39,6 +39,7 @@ In short, to help deliver on the FreeBSD promise to provide a flexible, permissi
 
 ## Requirements
 
+```
 mirror-upstream.sh:		Internet access, ZFS, git
 bos-lite.sh			FreeBSD source and object directories
 bos-upload.sh			Depends on your upload strategy
@@ -46,6 +47,7 @@ occambsd.sh:			FreeBSD 13.0 or later, and late 2022 FreeBSD 14-CURRENT for 'make
 imagine.sh:			Internet access if using images from ftp.freebsd.org
 build-option-smoke-test.sh	FreeBSD source and object directories, optional git for metadata
 rc.local.sh			A FreeBSD userland
+```
 
 ## Output Layout
 
