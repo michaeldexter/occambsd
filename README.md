@@ -11,6 +11,7 @@ occambsd.sh		Builds a "svelte", purpose-build FreeBSD bootable disk image using 
 profile-minimum.txt	A minimum system configuration for use on a virtual machine
 profile-zfs.txt		The minimum configuration with ZFS added
 profile-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
+profile-ipv4.txt	The hardware profile plus minimum IPv4 networking
 imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images
 rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
 

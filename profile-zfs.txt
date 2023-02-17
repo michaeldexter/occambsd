@@ -34,6 +34,7 @@ packages=""
 # TSLOG - added for boot time profiling
 
 # KERNEL DEVICE NOTES
+
 # pci - required to boot
 # loop - should not be required!
 # ether - required for networking
@@ -43,10 +44,3 @@ packages=""
 # virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon - VirtIO suite for VM boot
 # aesni crypto - required for ZFS
 # pass - needed for camcontrol reprobe (verify)
-
-# BUGS with this configuration
-
-# FIXED: df -h, zpool list, and friends show fM and fG which should show "5MB"
-# The default makefs zpool is not set to autoexpand=auto
-# growfs might not support ZFS (handled by imagine)
-# Configuration fails goes dark after the loader on a T480, coping in a full GENERIC kernel solves it

@@ -298,7 +298,8 @@ if [ "$target" = "dev" ] ; then
 	if [ "$origin" = "obj" ] ; then
 		echo Imaging vm.raw to /dev/$target_device
 		echo "Device size:"
-		stat -f %z $work_dir/$version/$xzimg
+		echo -n "  "
+		stat -f %z /usr/obj/usr/src/amd64.amd64/release/vm.raw
 		\time -h dd of=/dev/$target_device bs=1m status=progress \
 			if=/usr/obj/usr/src/amd64.amd64/release/vm.raw || \
 				{ echo "dd failed" ; exit 1 ; }
@@ -309,8 +310,6 @@ if [ "$target" = "dev" ] ; then
 		[ -f $work_dir/$version/$xzimg ] || \
 			{ echo $work_dir/$version/$xzimg missing ; exit 1 ; }
 		echo Imaging $work_dir/$version/$xzimg to /dev/$target_device
-		echo "Device size:"
-		stat -f %z $work_dir/$version/$xzimg
 		\time -h cat $work_dir/$version/$xzimg | \
 			xz -d -k | \
 			dd of=/dev/$target_device bs=1m status=progress \
