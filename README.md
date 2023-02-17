@@ -3,6 +3,7 @@ a.k.a. "super svelte stripped down FreeBSD"
 
 This project incorporates several inter-related scripts with the broad goal of producing purpose-build FreeBSD systems:
 
+```
 mirror-upstream.sh	Creates and maintains a local git.freebsd.org repository with releng, stable, and main branches
 bos-lite.sh		Launched by mirror-upstream.sh and performs an inverse "build option survey"
 bos-upload.sh		Launched by bos-lite.sh if present for uploating to a web server (not included)
@@ -14,6 +15,7 @@ profile-hardware.txt	A minimum configuration with ZFS and hardware machine suppo
 profile-ipv4.txt	The hardware profile plus minimum IPv4 networking
 imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images
 rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
+```
 
 ## New Approach
 
