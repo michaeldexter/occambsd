@@ -94,7 +94,7 @@ The full occambsd.sh usage is:
 -z (Create ZFS image)
 ```
 
-occambsd.sh will prompt to launch imagine.sh but it can be used indepenently:
+occambsd.sh will prompt to launch imagine.sh but it can be used independently:
 
 ```
 sh imagine.sh
