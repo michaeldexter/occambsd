@@ -21,19 +21,20 @@ rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures
 
 Earlier version of OccamBSD handcrafted bootable UFS and ZFS disk images but the introduction of 'makefs -t zfs' allows it to use the upstream "VM-IMAGE" release syntax. This change has resulted in a reduction/delay of some features, but reduces the script from over 1100 lines to under 400. While the raw "VM-IMAGE" is intended for virtualization use, it is a full-featured boot image with a full userland and kernel that is compatible with most amd64 hardware.
 
-NB! Root on ZFS support is only supported on 14-CURRENT
+NB! makefs root on ZFS support is only supported on 14-CURRENT
 
 ## Motivations
 
-FreeBSD Jail has long provided a lightweight container for services and applications. Internet-facing services are by definition at risk of remote abuse of the service and/or the operating system hosting them. A "minimum" Jail or virtual machine can theoretically contain only the dependencies to deliver the desired service, and nothing more, reducing the attack surface. In practice, FreeBSD offers a flexible build system with which build options (man src.conf) and kernel configuration options can significantly reduce the kernel and userland of a tailor-build system, rather than using the standard "buildworld". Furthermore, recent progress with "reproducible builds" can guarantee that stock components remain stock. Unfortunately, the supported build option have been inconsistent in their reliability up until the 13.0 release of FreeBSD.
+FreeBSD Jail has long provided a lightweight container for services and applications. Internet-facing services are by definition at risk of remote abuse of the service and/or the operating system hosting them. A "minimum" Jail or virtual machine can theoretically contain only the dependencies to deliver the desired service, and nothing more, reducing the attack surface. In practice, FreeBSD offers a flexible build system with which build options (man src.conf) and kernel configuration options can significantly reduce the kernel and userland of a tailor-built system, rather than using the standard "buildworld". Furthermore, recent progress with "reproducible builds" can guarantee that stock components remain stock. Unfortunately, the supported build option have been inconsistent in their reliability up until the 13.0 release of FreeBSD.
 
 The OccamBSD approach can provide:
 
-* Validation of the FreeBSD build system and its build options
+* Validation of the FreeBSD build system and its build options using build-option-smoke-test.sh
 * The foundation for embedded projects and products
-* An academic tour of the essential components of FreeBSD that are used by virtually all users at all times
+* An academic tour of the essential components of FreeBSD that are used by all users at all times
+* An academic tour of the FreeBSD build system
 * An inventory of the essential components of FreeBSD that must be prioritized for security auditing, quality assurance, and documentation
-* An opportunity to review what's left after a "userland" build for consideration of removal from base
+* An opportunity to review what's left after a "userland" build for consideration of additional build options or removal from base
 * Hopefully the foundation for an update mechanism to replace freebsd-update based on lessons from the up.bsd.lv proof of concept
 * To be determined: The relationship of this to "packaged base"; the Makefile hygiene related to this should prove useful
 
@@ -142,7 +143,7 @@ Note that ARC "warmth" on the host will speed build times
 
 ## build(7) Notes
 
-FreeBSD is traditionally built as a "world" userland and a kernel with "make buildworld" and "make buildkernel" respectively. These are installed to a destination directory "DESTDIR" that can be the build host itself, a jail root directory, a mounted machine boot image, or release directories for packing as "distribution sets" for use by bsdinstall(8), the default FreeBSD installer. The "make vm-image" build target produces .qcow2, .raw, .vhd, and .vmdk boot images and does not require intermediary distribution sets. See:
+FreeBSD is traditionally built as a "world" userland and a kernel with "make buildworld" and "make buildkernel" respectively. These are installed to a destination directory "DESTDIR" that can be the build host itself, a jail root directory, a mounted machine boot image, or release directories for packing as "distribution sets" for use by bsdinstall(8), the default FreeBSD installer. The "make vm-image" build target produces .qcow2, .raw, .vhd, and .vmdk boot images directly from /usr/obj/ artifacts and does not require intermediary distribution sets. See:
 
 ```
 [download.freebsd.org/snapshots/VM-IMAGES](https://download.freebsd.org/snapshots/VM-IMAGES)
