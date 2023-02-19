@@ -25,13 +25,13 @@ packages=""
 # WITHOUT_LOADER_GELI - required for ZFS on FreeBSD 14-CURRENT
 # WITHOUT_DYNAMICROOT - required by geom, or gpart: Cannot open library: Service unavailable
 
-
 # BUILD OPTIONS FOR IPv4 SUPPORT
 
-# WITHOUT_INET
-# KERNEL MODULE NOTES
+# WITHOUT_INET - IPv4 support
+# WITHOUT_OPENSSH - OpenSSH
+# WITHOUT_LDNS WITHOUT_LDNS_UTILS - adds host(1) among other utilities
 
-# virtio - useful for virtual machine booting
+# KERNEL MODULE NOTES
 
 # KERNEL MODULES FOR ZFS SUPPORT
 
