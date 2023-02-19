@@ -1,7 +1,7 @@
 ## OccamBSD: An application of Occam's razor to FreeBSD
 a.k.a. "super svelte stripped down FreeBSD"
 
-This project incorporates several inter-related scripts with the broad goal of producing purpose-build FreeBSD systems:
+This project incorporates several inter-related scripts with the broad goal of producing purpose-built FreeBSD systems:
 
 ```
 mirror-upstream.sh	Creates and maintains a local git.freebsd.org repository with releng, stable, and main branches
@@ -12,7 +12,7 @@ occambsd.sh		Builds a "svelte", purpose-build FreeBSD bootable disk image using 
 profile-minimum.txt	A minimum system configuration for use on a virtual machine
 profile-zfs.txt		The minimum configuration with ZFS added
 profile-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
-profile-ipv4.txt	The hardware profile plus minimum IPv4 networking
+profile-ipv4.txt	The hardware profile plus minimum IPv4 networking with ssh(1) and host(1)
 imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images
 rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
 ```
