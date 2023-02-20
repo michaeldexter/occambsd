@@ -233,7 +233,6 @@ echo ; echo All modules are listed in $work_dir/all_modules.txt
 # $kernel_modules	i.e. makeoptions	MODULES_OVERRIDE="*module*..."
 # $kernel_options	i.e. options		*SCHED_ULE*
 # $kernel_devices	i.e. device		*pci*
-# $packages		i.e. tmux
 
 echo "cpu	HAMMER" > $work_dir/OCCAMBSD
 echo "ident	OCCAMBSD" >> $work_dir/OCCAMBSD
