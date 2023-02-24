@@ -1,5 +1,9 @@
 # This is a minimum profile for bhyve with UFS storage
 
+target="amd64"
+target_arch="amd64"
+cpu="HAMMER"
+
 build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_DYNAMICROOT WITHOUT_FP_LIBC WITHOUT_VI"
 
 kernel_modules="virtio"
@@ -38,7 +42,7 @@ kernel_devices="pci loop ether acpi uart ahci scbus cd pass virtio virtio_pci vi
 # KERNEL OPTION NOTES
 
 # SCHED_ULE - a scheduler is required. Try them all!
-# GEOM_PART_GPT FFS GEOM_LABEL CD9660 - needed for storage
+# GEOM_PART_GPT FFS GEOM_LABEL CD9660 - needed for storage (vfs, labels, ISO support)
 # MSDOSFS - needed for the EFI partition
 # TSLOG - added for boot time profiling
 

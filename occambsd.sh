@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.0
+# Version v6.1
 
 f_usage() {
         echo "USAGE:"
@@ -71,6 +71,10 @@ while getopts p:s:o:wkgz opts ; do
 		{ echo "Profile file $profile not found" ; exit 1 ; }
 		. "$profile" || \
 	        { echo "Profile file $profile failed to source" ; exit 1 ; }
+		[ "$target" ] || \
+		{ "You must specify target in the profile" ; exit 1 ; }
+		[ "$target_arch" ] || \
+		{ "You must specify target_arch in the profile" ; exit 1 ; }
 		;;
 	s)
 		# Optionally override source directory
@@ -89,7 +93,7 @@ while getopts p:s:o:wkgz opts ; do
 		reuse_kernel="1"
 		;;
 	g)
-		kernconf_dir="${src_dir}/sys/amd64/conf"
+		kernconf_dir="${src_dir}/sys/${target}/conf"
 		kernconf="GENERIC"
 		;;
 	z)
@@ -105,7 +109,7 @@ done
 # If no profile specified (rquired)
 [ "$profile" = "0" ] && f_usage
 
-[ -f $src_dir/sys/amd64/conf/GENERIC ] || \
+[ -f $src_dir/sys/${target}/conf/GENERIC ] || \
 	{ echo Sources do not appear to be installed ; exit 1 ; }
 
 
@@ -141,34 +145,34 @@ fi
 
 echo ; echo Removing previous vm.raw image if present
 
-[ -f "$obj_dir/$src_dir/amd64.amd64/release/vm.raw" ] && \
-	rm "$obj_dir/$src_dir/amd64.amd64/release/vm.raw"  \
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] && \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw"  \
 
-[ -f "$obj_dir/$src_dir/amd64.amd64/release/raw.img" ] && \
-	rm "$obj_dir/$src_dir/amd64.amd64/release/raw.img"  \
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img" ] && \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img"  \
 
-[ -d "$obj_dir/$src_dir/amd64.amd64/release/vm-image" ] && \
-	chflags -R 0 "$obj_dir/$src_dir/amd64.amd64/release/vm-image"  \
+[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image" ] && \
+	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"  \
 
-[ -d "$obj_dir/$src_dir/amd64.amd64/release/vm-image" ] && \
-	rm -rf "$obj_dir/$src_dir/amd64.amd64/release/vm-image"  \
+[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image" ] && \
+	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"  \
 
-[ -d "$obj_dir/$src_dir/amd64.amd64/release/disc1" ] && \
-	chflags -R 0  "$obj_dir/$src_dir/amd64.amd64/release/disc1"  \
+[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/disc1" ] && \
+	chflags -R 0  "$obj_dir/$src_dir/${target}.$target_arch/release/disc1"  \
 
-[ -d "$obj_dir/$src_dir/amd64.amd64/release/disc1" ] && \
-	rm -rf "$obj_dir/$src_dir/amd64.amd64/release/disc1*"  \
+[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/disc1" ] && \
+	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/disc1*"  \
 
-[ -d "$obj_dir/$src_dir/amd64.amd64/release/bootonly" ] && \
-	chflags -R 0 "$obj_dir/$src_dir/amd64.amd64/release/bootonly"  \
+[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly" ] && \
+	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly"  \
 
-[ -d "$obj_dir/$src_dir/amd64.amd64/release/bootonly" ] && \
-	rm -rf "$obj_dir/$src_dir/amd64.amd64/release/bootonly*"  \
+[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly" ] && \
+	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly*"  \
 
 if [ "$reuse_kernel" = "0" ] ; then
 	echo ; echo Cleaning kernel object directory
-	[ -d $obj_dir/$src_dir/amd64.amd64/sys/$kernconf ] && chflags -R 0 $obj_dir/$src_dir/amd64.amd64/sys/$kernconf
-	[ -d $obj_dir/$src_dir/amd64.amd64/sys/$kernconf ] && rm -rf  $obj_dir/$src_dir/amd64.amd64/sys/$kernconf
+	[ -d $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf ] && chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
+	[ -d $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf ] && rm -rf  $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
 # This would collide with a mix of kernels
 #	cd $src_dir/sys
 #	make clean
@@ -176,8 +180,8 @@ fi
 
 if [ "$reuse_world" = "0" ] ; then
 	echo ; echo Cleaning world object directory
-#	chflags -R 0 $obj_dir/$src_dir/amd64.amd64
-#	rm -rf  $obj_dir/$src_dir/amd64.amd64/*
+#	chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch
+#	rm -rf  $obj_dir/$src_dir/${target}.$target_arch/*
 # make cleandir appears to do what we want, preserving kernels
 	cd $src_dir
 	make cleandir > $log_dir/cleandir.log
@@ -234,22 +238,34 @@ echo ; echo All modules are listed in $work_dir/all_modules.txt
 # $kernel_options	i.e. options		*SCHED_ULE*
 # $kernel_devices	i.e. device		*pci*
 
-echo "cpu	HAMMER" > $work_dir/OCCAMBSD
+echo "cpu	$cpu" > $work_dir/OCCAMBSD
 echo "ident	OCCAMBSD" >> $work_dir/OCCAMBSD
-echo "makeoptions	MODULES_OVERRIDE=\"$kernel_modules\"" \
-	>> $work_dir/OCCAMBSD
+
+if [ "$kernel_modules" ] ; then
+	echo "makeoptions	MODULES_OVERRIDE=\"$kernel_modules\"" \
+		>> $work_dir/OCCAMBSD
+fi
 
 IFS=" "
-for kernel_option in $kernel_options ; do
-	echo "options	$kernel_option" >> $work_dir/OCCAMBSD
-done
+if [ "$kernel_options" ] ; then
+	for kernel_option in $kernel_options ; do
+		echo "options	$kernel_option" >> $work_dir/OCCAMBSD
+	done
+fi
 
 IFS=" "
-for kernel_device in $kernel_devices ; do
-	echo "device	$kernel_device" >> $work_dir/OCCAMBSD
-done
+if [ "$kernel_devices" ] ; then
+	for kernel_device in $kernel_devices ; do
+		echo "device	$kernel_device" >> $work_dir/OCCAMBSD
+	done
+fi
 
-echo cat $work_dir/OCCAMBSD
+IFS=" "
+if [ "$kernel_includes" ] ; then
+	for kernel_include in $kernel_includes ; do
+		echo "include	\"$kernel_include\"" >> $work_dir/OCCAMBSD
+	done
+fi
 
 echo ; echo The resulting OCCAMBSD KERNCONF is
 cat $work_dir/OCCAMBSD
@@ -264,12 +280,13 @@ if [ "$reuse_world" = "1" ] ; then
 # VERIFY THIS TEST want -f? See what is there but make cleandir leaves... dirs
 
 
-	[ -d "$obj_dir/$src_dir/amd64.amd64/bin/sh" ] || \
+	[ -d "$obj_dir/$src_dir/${target}.$target_arch/bin/sh" ] || \
 		{ echo World artifacts not found for reuse ; exit 1 ; }
 else
 	echo ; echo Building world - logging to $log_dir/build-world.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
 		-j$buildjobs SRCCONF=$work_dir/src.conf buildworld \
+		TARGET=$target TARGET_ARCH=$target_arch \
 		> $log_dir/build-world.log || \
 			{ echo buildworld failed ; exit 1 ; }
 # Current re-use strategy does not preserve work_dir ergo log_dir
@@ -281,20 +298,21 @@ fi
 
 if [ "$reuse_kernel" = "1" ] ; then
 	echo ; echo Reuse kernel requested
-	[ -d "$obj_dir/$src_dir/amd64.amd64/sys/$kernconf" ] || \
+	[ -d "$obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf" ] || \
 		{ echo World artifacts not found for resuse ; exit 1 ; }
 else
 	echo ; echo Building kernel - logging to $log_dir/build-kernel.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir \
 		make -C $src_dir -j$buildjobs \
 		buildkernel KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+		TARGET=$target TARGET_ARCH=$target_arch \
 			> $log_dir/build-kernel.log || \
 				{ echo buildkernel failed ; exit 1 ; }
 #touch $log_dir/kernel.done
 fi
 
 echo ; echo Seeing how big the resulting kernel is
-	ls -lh $obj_dir/$src_dir/amd64.amd64/sys/$kernconf/kernel
+	ls -lh $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel
 
 
 # BUILD THE VM-IMAGE
@@ -312,29 +330,33 @@ echo ; echo Building vm-image - logging to $log_dir/vm-image.log
 	SRCCONF=$work_dir/src.conf \
 	KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
 	vm-image WITH_VMIMAGES=YES VMFORMATS=raw VMFS=$vmfs \
+		TARGET=$target TARGET_ARCH=$target_arch \
 		> $log_dir/vm-image.log 2>&1 || \
 			{ echo vm-image failed ; exit 1 ; }
 
-echo ; echo Copying $obj_dir/$src_dir/amd64.amd64/release/vm.raw to $work_dir
-cp $obj_dir/$src_dir/amd64.amd64/release/vm.raw $work_dir/
+echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw to $work_dir
+cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw $work_dir/
 
 
-# Verify if vm-image would be re-using amd64.amd64/release/dist/
+# Verify if vm-image would be re-using ${target}.$target_arch/release/dist/
 # Run first if so
-# Why does it do that if it creates amd64.amd64/release/disc1 ?
+# Why does it do that if it creates ${target}.$target_arch/release/disc1 ?
 
 # BUILD THE ISO
 
-echo ; echo Building CD-ROM ISO - logging to $log_dir/cdrom.log
-\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
-	SRCCONF=$work_dir/src.conf \
-	KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-	cdrom \
-		> $log_dir/cdrom.log 2>&1 || \
-			{ echo cdrom failed ; exit 1 ; }
+if ! [ "$target" = "arm64" ] ; then
+	echo ; echo Building CD-ROM ISO - logging to $log_dir/cdrom.log
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
+		SRCCONF=$work_dir/src.conf \
+		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+		TARGET=$target TARGET_ARCH=$target_arch \
+		cdrom \
+			> $log_dir/cdrom.log 2>&1 || \
+				{ echo cdrom failed ; exit 1 ; }
+fi
 
-echo ; echo Copying $obj_dir/$src_dir/amd64.amd64/release/disc1.iso to $work_dir
-cp $obj_dir/$src_dir/amd64.amd64/release/disc1.iso $work_dir/
+echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso to $work_dir
+cp $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso $work_dir/
 
 
 # GENERATE BOOT SCRIPTS

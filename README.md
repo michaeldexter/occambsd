@@ -9,10 +9,11 @@ bos-lite.sh		Launched by mirror-upstream.sh and performs an inverse "build optio
 bos-upload.sh		Launched by bos-lite.sh if present for uploating to a web server (not included)
 build-option-smoke-test.sh	A build option CI test proposed to the FreeBSD cluster aministration team
 occambsd.sh		Builds a "svelte", purpose-build FreeBSD bootable disk image using the FreeBSD build(7) system
-profile-minimum.txt	A minimum system configuration for use on a virtual machine
-profile-zfs.txt		The minimum configuration with ZFS added
-profile-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
-profile-ipv4.txt	The hardware profile plus minimum IPv4 networking with ssh(1) and host(1)
+profile-amd64-minimum.txt	A minimum system configuration for use on a virtual machine
+profile-amd64-zfs.txt		The minimum configuration with ZFS added
+profile-amd64-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
+profile-amd64-ipv4.txt	The hardware profile plus minimum IPv4 networking with ssh(1) and host(1)
+profile-arm64-minimum.txt	A minimum configuration file for ARM64 (builds but not tested on qemu|hardware)
 imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images
 rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
 ```
