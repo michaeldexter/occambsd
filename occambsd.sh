@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.1
+# Version v6.2
 
 f_usage() {
         echo "USAGE:"
@@ -334,16 +334,8 @@ HERE
 		$work_dir/boot-jail.sh
 	echo "jls" >> $work_dir/boot-jail.sh
 
-echo breadcrumb 1
-
 [ -f "$work_dir/boot-jail.sh" ] || \
 	{ echo "DUDE $work_dir/boot-jail.sh DID NOT CREATE" ; exit 1 ; }
-
-
-echo breadcrumb 2
-
-
-
 
 	echo "Generating $work_dir/halt-jail.sh script"
 	echo "jail -r occambsd" > $work_dir/halt-jail.sh
@@ -352,15 +344,6 @@ echo breadcrumb 2
 	echo "Jail installation complete"
 	exit 0
 fi
-
-
-
-
-echo breadcrumb 3
-
-
-
-
 
 
 # BUILD THE KERNEL
@@ -474,6 +457,15 @@ echo $work_dir/xen-cleanup.sh
 # Notes while debugging
 #xl console -t pv OccamBSD
 #xl console -t serial OccamBSD
+
+cat << HERE > $work_dir/qemu-boot.sh
+[ $( which qemu-system-aarch64 ) ] || \
+	{ echo "qemu-system-aarch64 not installed" ; exit 1 ; }
+qemu-system-aarch64 -m 1024M -cpu cortex-a57 -machine virt -bios edk2-aarch64-code.fd -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -hda /root/vm.raw
+HERE
+
+
+# HAND OFF TO IMAGINE.SH
 
 cd "$working_directory"
 
