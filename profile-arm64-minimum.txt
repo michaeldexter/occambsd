@@ -6,4 +6,4 @@ cpu="ARM64"
 
 build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_DYNAMICROOT WITHOUT_FP_LIBC WITHOUT_VI"
 
-kernel_includes="std.arm64 std.dev std.al std.allwinner std.altera std.amd std.arm std.broadcom std.cavium std.ec2 std.hyperv std.hisilicon std.imx std.marvell std.nvidia std.nxp std.qcom std.rockchip std.virt std.xilinx"
+kernel_includes="std.arm64 std.dev std.virt"
