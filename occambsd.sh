@@ -228,7 +228,7 @@ tail $work_dir/src.conf
 
 # MODULES
 
-ls /usr/src/sys/modules/ | cat > $work_dir/all_modules.txt
+ls ${src_dir}/sys/modules/ | cat > $work_dir/all_modules.txt
 echo ; echo All modules are listed in $work_dir/all_modules.txt
 
 # DO YOU WANNA BUILD A KERN CONF?
