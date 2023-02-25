@@ -61,7 +61,7 @@ kernconf_dir="$work_dir"
 log_dir="$work_dir/logs"		# Must stay under work_dir
 buildjobs="$(sysctl -n hw.ncpu)"
 
-while getopts p:s:o:wkgz opts ; do
+while getopts p:s:o:wkgzj opts ; do
 	case $opts in
 	p)
 		# REQUIRED
@@ -99,6 +99,9 @@ while getopts p:s:o:wkgz opts ; do
 	z)
 		zfs_root="1"
 		;;
+	j)
+		target_jail="1"
+	;;
 	*)
 		f_usage
 		exit 1
@@ -115,6 +118,7 @@ done
 
 # CLEANUP
 
+# Determine the value and risk of these
 [ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd
 
 if [ $( which xl ) ]; then
@@ -289,9 +293,74 @@ else
 		TARGET=$target TARGET_ARCH=$target_arch \
 		> $log_dir/build-world.log || \
 			{ echo buildworld failed ; exit 1 ; }
-# Current re-use strategy does not preserve work_dir ergo log_dir
-#touch $log_dir/world.done
 fi
+
+
+# Jail target and done
+
+if [ "$target_jail" = "1" ] ; then
+	[ -d ${work_dir}/jail ] || mkdir ${work_dir}/jail
+
+	jls | grep -q occambsd && jail -r occambsd
+
+	echo ; echo Installing Jail world - logging to $log_dir/install-jail-world.log
+
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
+	installworld SRCCONF=$work_dir/src.conf \
+	DESTDIR=${work_dir}/jail/ \
+	NO_FSCHG=YES \
+		> $log_dir/install-jail-world.log 2>&1
+
+echo ; echo Installing Jail distribution - logging to $log_dir/jail-distribution.log
+
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
+	SRCCONF=$work_dir/src.conf DESTDIR=${work_dir}/jail \
+		> $log_dir/jail-distribution.log 2>&1
+
+        echo ; echo Generating jail.conf
+
+cat << HERE > $work_dir/jail.conf
+occambsd {
+	host.hostname = occambsd;
+	path = "$work_dir/jail";
+	mount.devfs;
+	exec.start = "/bin/sh /etc/rc";
+	exec.stop = "/bin/sh /etc/rc.shutdown jail";
+}
+HERE
+
+	echo "Generating $work_dir/boot-jail.sh script"
+	echo "jail -c -f $work_dir/jail.conf occambsd" > \
+		$work_dir/boot-jail.sh
+	echo "jls" >> $work_dir/boot-jail.sh
+
+echo breadcrumb 1
+
+[ -f "$work_dir/boot-jail.sh" ] || \
+	{ echo "DUDE $work_dir/boot-jail.sh DID NOT CREATE" ; exit 1 ; }
+
+
+echo breadcrumb 2
+
+
+
+
+	echo "Generating $work_dir/halt-jail.sh script"
+	echo "jail -r occambsd" > $work_dir/halt-jail.sh
+	echo "jls" >> $work_dir/halt-jail.sh
+
+	echo "Jail installation complete"
+	exit 0
+fi
+
+
+
+
+echo breadcrumb 3
+
+
+
+
 
 
 # BUILD THE KERNEL
