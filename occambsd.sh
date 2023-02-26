@@ -405,11 +405,11 @@ if ! [ "$target" = "arm64" ] ; then
 		cdrom \
 			> $log_dir/cdrom.log 2>&1 || \
 				{ echo cdrom failed ; exit 1 ; }
+
+	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso to $work_dir
+	cp $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso $work_dir/
+
 fi
-
-echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso to $work_dir
-cp $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso $work_dir/
-
 
 # GENERATE BOOT SCRIPTS
 
