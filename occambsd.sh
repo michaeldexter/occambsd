@@ -275,7 +275,7 @@ echo ; echo The resulting OCCAMBSD KERNCONF is
 cat $work_dir/OCCAMBSD
 
 # Uncomment this if you're having issues with META_MODE
-sed -i '' '/WITHOUT_META_MODE/d' ${work_dir}/src.conf
+#sed -i '' '/WITHOUT_META_MODE/d' ${work_dir}/src.conf
 
 # BUILD THE WORLD/USERLAND
 
