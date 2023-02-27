@@ -10,7 +10,7 @@ kernel_modules="virtio"
 
 kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL CD9660 MSDOSFS TSLOG"
 
-kernel_devices="pci loop ether acpi uart ahci scbus cd pass virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon" 
+kernel_devices="pci loop ether acpi uart ahci scbus cd pass virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon"
 
 
 # BUILD OPTION NOTES - these build options are excluded/ignored, meaning their components are built
