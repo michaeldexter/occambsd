@@ -20,11 +20,13 @@ _zp="zroot"
 git_server="file:///b/MAIN/src.git"
 H="/b/HTML/index.html"
 
-branches="releng/13.2
-releng/13.1
-stable/13
+branches="main
 stable/12
-main"
+stable/13
+releng/13.1
+releng/13.2"
+
+# No easy way to do architectures. Thank you arm64.aarch64.
 
 [ $( which git ) ] || { echo git not found ; exit 1 ; }
 
@@ -160,7 +162,6 @@ validation="$( git -C /b/$_br/src branch --format='%(refname:short)' )"
 		echo Setting /b/$_br/lasthash which reads:
 		echo $git_hash > /b/$_br/lasthash
 		cat /b/$_br/lasthash
-
 
 		if [ -f "bos-lite.sh" ] ; then
 			echo "KICKING OFF A bos-lite.sh build for /b/$_br"

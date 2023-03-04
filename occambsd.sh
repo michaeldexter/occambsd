@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.2
+# Version v6.3
 
 f_usage() {
         echo "USAGE:"
@@ -462,19 +462,5 @@ cat << HERE > $work_dir/qemu-boot.sh
 [ $( which qemu-system-aarch64 ) ] || { echo "qemu-system-aarch64 not installed" ; exit 1 ; }
 qemu-system-aarch64 -m 1024M -cpu cortex-a57 -machine virt -bios edk2-aarch64-code.fd -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
-
-
-# HAND OFF TO IMAGINE.SH
-
-cd "$working_directory"
-
-if [ -f "imagine.sh" ] ; then
-	echo ; echo "Image or grow the resulting image imagine.sh?"
-	echo "(Use the \"obj\" option)"
-	echo -n "(y/n): " ; read imagine
-	[ "$imagine" = "y" -o "$imagine" = "n" ] || \
-		{ echo Invalid input ; exit 1 ; }
-	[ "$imagine" = "y" ] && sh ./imagine.sh
-fi
 
 exit 0
