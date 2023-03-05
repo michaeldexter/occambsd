@@ -392,9 +392,10 @@ fi
 
 # CONTINUE IF KERNEL-DEPENDENT TARGETS ARE REQUESTED
 
-if [ "$generate_vm_image" = "0" -o "$generate_isos" = "0" -o "$generate_memstick" = "0" ] ; then
-	exit 0
-fi
+# Rethink this: Build both world and kernel by default?
+#if [ "$generate_vm_image" = "0" -o "$generate_isos" = "0" -o "$generate_memstick" = "0" ] ; then
+#	exit 0
+#fi
 
 
 # BUILD THE KERNEL
