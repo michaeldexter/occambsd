@@ -26,18 +26,25 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.3
+# Version v6.4
 
 f_usage() {
-        echo "USAGE:"
+        echo ; echo "USAGE:"
 	echo "-p <profile file> (required)"
 	echo "-s <source directory override>"
 	echo "-o <object directory override>"
-	echo "-w (Reuse the previous world build)"
-	echo "-k (Reuse the previous kernel build)"
+	echo "-w (Reuse the previous world objects)"
+	echo "-W (Reuse the previous world objects without cleaning)"
+	echo "-k (Reuse the previous kernel objects)"
+	echo "-k (Reuse the previous kernel objects without cleaning)"
 	echo "-g (Use the GENERIC kernel)"
-	echo "-z (Create ZFS image)"
-        exit 1
+	echo "-j (Build for Jail boot)"
+	echo "-v (Generate vm-image)"
+	echo "-z (Generate ZFS vm-image)"
+	echo "-i (Generate disc1.iso and bootonly.iso)"
+	echo "-m (Generate memstick image)"
+	echo
+        exit 0
 }
 
 # occambsd: An application of Occam's razor to FreeBSD
@@ -47,13 +54,8 @@ f_usage() {
 
 # DEFAULT VARIABLES
 
-working_directory=$( pwd )
-profile="0"
+kernconf="OCCAMBSD"			# Can be overridden with GENERIC
 vmfs="ufs"				# Can be overridden with zfs
-reuse_world="0"
-reuse_kernel="0"
-kernconf="OCCAMBSD"
-zfs_root="0"
 src_dir="/usr/src"			# Can be overridden
 obj_dir="/usr/obj"			# Can be overridden
 work_dir="/tmp/occambsd"
@@ -61,7 +63,16 @@ kernconf_dir="$work_dir"
 log_dir="$work_dir/logs"		# Must stay under work_dir
 buildjobs="$(sysctl -n hw.ncpu)"
 
-while getopts p:s:o:wkgzj opts ; do
+# Should any be left unset for use of environment variables?
+profile="0"
+reuse_world="0"
+reuse_world_dirty="0"
+reuse_kernel="0"
+reuse_kernel_dirty="0"
+generate_vm_image="0"
+zfs_vm_image="0"
+
+while getopts p:s:o:wkgzjvzim opts ; do
 	case $opts in
 	p)
 		# REQUIRED
@@ -71,6 +82,7 @@ while getopts p:s:o:wkgzj opts ; do
 		{ echo "Profile file $profile not found" ; exit 1 ; }
 		. "$profile" || \
 	        { echo "Profile file $profile failed to source" ; exit 1 ; }
+		# target and target_arch are obtained from sourcing
 		[ "$target" ] || \
 		{ "You must specify target in the profile" ; exit 1 ; }
 		[ "$target_arch" ] || \
@@ -89,19 +101,33 @@ while getopts p:s:o:wkgzj opts ; do
 	w)
 		reuse_world="1"
 		;;
+	w)
+		reuse_kernel_dirty="1"
+		;;
 	k)
 		reuse_kernel="1"
 		;;
-	g)
-		kernconf_dir="${src_dir}/sys/${target}/conf"
-		kernconf="GENERIC"
+	K)
+		reuse_kernel_dirty="1"
 		;;
-	z)
-		zfs_root="1"
+	g)
+		generic_kernel="1"
 		;;
 	j)
-		target_jail="1"
-	;;
+		generate_jail="1"
+		;;
+	v)
+		generate_vm_image="1"
+		;;
+	z)
+		vmfs="zfs"
+		;;
+	i)
+		generate_isos="1"
+		;;
+	m)
+		generate_memstick="1"
+		;;
 	*)
 		f_usage
 		exit 1
@@ -109,26 +135,30 @@ while getopts p:s:o:wkgzj opts ; do
 	esac
 done
 
-# If no profile specified (rquired)
+# A profile must be specified
 [ "$profile" = "0" ] && f_usage
 
+# target is populated by the required profile file
 [ -f $src_dir/sys/${target}/conf/GENERIC ] || \
-	{ echo Sources do not appear to be installed ; exit 1 ; }
+	{ echo "Sources do not appear to be installed or specified" ; exit 1 ; }
 
-
-# CLEANUP
-
-# Determine the value and risk of these
-[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd
-
-if [ $( which xl ) ]; then
-	xl list | grep OccamBSD && xl destroy OccamBSD
-	xl list | grep OccamBSD && \
-		{ echo "OccamBSD DomU failed to destroy" ; exit 1 ; }
+# Do not perform in opt args in case there is a positional issue
+if [ "$generic_kernel" = "1" ] ; then
+	kernconf_dir="${src_dir}/sys/${target}/conf"
+	kernconf="GENERIC"
 fi
- 
+
+if [ "$vmfs" = "zfs" ] ; then
+	if [ "$generate_vm_image" = "0" ] ; then
+		echo "-z flag is only valid with -v"
+		exit 1
+	fi
+fi
+
 
 # PREPARATION
+
+[ -d ${work_dir}/jail/dev ] && umount ${work_dir}/jail/dev
 
 if ! [ -d $work_dir ] ; then
 	echo Creating $work_dir
@@ -145,34 +175,34 @@ if ! [ -d $obj_dir ] ; then
 	mkdir -p "$obj_dir" || { echo Failed to make $obj_dir ; exit 1 ; }
 fi
 
-# zfs rollback to an empty object directory for cleanup?
-
-echo ; echo Removing previous vm.raw image if present
+echo ; echo Removing previous generated images if present
 
 [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw"  \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw"
 
 [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img"  \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img"
 
 [ -d "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image" ] && \
-	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"  \
+	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"
 
 [ -d "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image" ] && \
-	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"  \
+	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"
 
 [ -d "$obj_dir/$src_dir/${target}.$target_arch/release/disc1" ] && \
-	chflags -R 0  "$obj_dir/$src_dir/${target}.$target_arch/release/disc1"  \
+	chflags -R 0  "$obj_dir/$src_dir/${target}.$target_arch/release/disc1"
 
+# Note asterisk to take image with it
 [ -d "$obj_dir/$src_dir/${target}.$target_arch/release/disc1" ] && \
-	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/disc1*"  \
+	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/disc1*"
 
 [ -d "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly" ] && \
-	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly"  \
+	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly"
 
 [ -d "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly" ] && \
-	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly*"  \
+	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly*"
 
+# Kernel first depending on how aggresively we clean the object directory
 if [ "$reuse_kernel" = "0" ] ; then
 	echo ; echo Cleaning kernel object directory
 	[ -d $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf ] && chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
@@ -180,6 +210,10 @@ if [ "$reuse_kernel" = "0" ] ; then
 # This would collide with a mix of kernels
 #	cd $src_dir/sys
 #	make clean
+else
+	echo ; echo Reuse kernel requested
+	[ -d "$obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf" ] || \
+		{ echo World artifacts not found for resuse ; exit 1 ; }
 fi
 
 if [ "$reuse_world" = "0" ] ; then
@@ -189,6 +223,10 @@ if [ "$reuse_world" = "0" ] ; then
 # make cleandir appears to do what we want, preserving kernels
 	cd $src_dir
 	make cleandir > $log_dir/cleandir.log
+else
+# VERIFY THIS TEST want -f? See what is there but make cleandir leaves... dirs
+	[ -d "$obj_dir/$src_dir/${target}.$target_arch/bin/sh" ] || \
+		{ echo World artifacts not found for reuse ; exit 1 ; }
 fi
 	
 echo ; echo Generating $work_dir/all-options.txt
@@ -232,7 +270,7 @@ tail $work_dir/src.conf
 
 # MODULES
 
-ls ${src_dir}/sys/modules/ | cat > $work_dir/all_modules.txt
+ls ${src_dir}/sys/modules | grep -v "Makefile" > $work_dir/all_modules.txt
 echo ; echo All modules are listed in $work_dir/all_modules.txt
 
 # DO YOU WANNA BUILD A KERN CONF?
@@ -242,6 +280,7 @@ echo ; echo All modules are listed in $work_dir/all_modules.txt
 # $kernel_options	i.e. options		*SCHED_ULE*
 # $kernel_devices	i.e. device		*pci*
 
+# cpu, kernel_modules, and kernel_options, are read from the profile
 echo "cpu	$cpu" > $work_dir/OCCAMBSD
 echo "ident	OCCAMBSD" >> $work_dir/OCCAMBSD
 
@@ -264,12 +303,13 @@ if [ "$kernel_devices" ] ; then
 	done
 fi
 
-IFS=" "
-if [ "$kernel_includes" ] ; then
-	for kernel_include in $kernel_includes ; do
-		echo "include	\"$kernel_include\"" >> $work_dir/OCCAMBSD
-	done
-fi
+# Disabling until the value is determined
+#IFS=" "
+#if [ "$kernel_includes" ] ; then
+#	for kernel_include in $kernel_includes ; do
+#		echo "include	\"$kernel_include\"" >> $work_dir/OCCAMBSD
+#	done
+#fi
 
 echo ; echo The resulting OCCAMBSD KERNCONF is
 cat $work_dir/OCCAMBSD
@@ -277,15 +317,12 @@ cat $work_dir/OCCAMBSD
 
 # BUILD THE WORLD/USERLAND
 
+# World was either cleaned or preserved above with reuse_world=1
+
 if [ "$reuse_world" = "1" ] ; then
-	echo ; echo Reuse world requested
-
-
-# VERIFY THIS TEST want -f? See what is there but make cleandir leaves... dirs
-
-
-	[ -d "$obj_dir/$src_dir/${target}.$target_arch/bin/sh" ] || \
-		{ echo World artifacts not found for reuse ; exit 1 ; }
+	if [ "$reuse_world_dirty" = "0" ] ; then
+		echo ; echo "Using existing world build objects"
+	fi
 else
 	echo ; echo Building world - logging to $log_dir/build-world.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
@@ -296,9 +333,9 @@ else
 fi
 
 
-# Jail target and done
+# GENERATE JAIL
 
-if [ "$target_jail" = "1" ] ; then
+if [ "$generate_jail" = "1" ] ; then
 	[ -d ${work_dir}/jail ] || mkdir ${work_dir}/jail
 
 	jls | grep -q occambsd && jail -r occambsd
@@ -329,7 +366,7 @@ occambsd {
 }
 HERE
 
-	echo "Generating $work_dir/boot-jail.sh script"
+	echo ; echo "Generating $work_dir/boot-jail.sh script"
 	echo "jail -c -f $work_dir/jail.conf occambsd" > \
 		$work_dir/boot-jail.sh
 	echo "jls" >> $work_dir/boot-jail.sh
@@ -337,7 +374,7 @@ HERE
 [ -f "$work_dir/boot-jail.sh" ] || \
 	{ echo "DUDE $work_dir/boot-jail.sh DID NOT CREATE" ; exit 1 ; }
 
-	echo "Generating $work_dir/halt-jail.sh script"
+	echo ; echo "Generating $work_dir/halt-jail.sh script"
 	echo "jail -r occambsd" > $work_dir/halt-jail.sh
 	echo "jls" >> $work_dir/halt-jail.sh
 
@@ -349,9 +386,9 @@ fi
 # BUILD THE KERNEL
 
 if [ "$reuse_kernel" = "1" ] ; then
-	echo ; echo Reuse kernel requested
-	[ -d "$obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf" ] || \
-		{ echo World artifacts not found for resuse ; exit 1 ; }
+	if [ "$reuse_kernel_dirty" = "0" ] ; then
+		echo ; echo "Using existing kernel build objects"
+	fi
 else
 	echo ; echo Building kernel - logging to $log_dir/build-kernel.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir \
@@ -360,77 +397,55 @@ else
 		TARGET=$target TARGET_ARCH=$target_arch \
 			> $log_dir/build-kernel.log || \
 				{ echo buildkernel failed ; exit 1 ; }
-#touch $log_dir/kernel.done
 fi
 
-echo ; echo Seeing how big the resulting kernel is
+echo ; echo Seeing how big the resulting kernel is:
 	ls -lh $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel
 
 
-# BUILD THE VM-IMAGE
+# GENERATE IMAGES
 
-cd $src_dir/release || { echo cd release failed ; exit 1 ; }
+# VM-IMAGE
 
-if [ "$zfs_root" = "1" ] ; then
-	vmfs=zfs
-fi
+if [ "$generate_vm_image" = "1" ] ; then
+	cd $src_dir/release || { echo cd release failed ; exit 1 ; }
 
-# Confirm if this uses KERNCONFDIR
+	# Confirm if this uses KERNCONFDIR
 
-echo ; echo Building vm-image - logging to $log_dir/vm-image.log
-\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
-	SRCCONF=$work_dir/src.conf \
-	KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-	vm-image WITH_VMIMAGES=YES VMFORMATS=raw VMFS=$vmfs \
-		TARGET=$target TARGET_ARCH=$target_arch \
-		> $log_dir/vm-image.log 2>&1 || \
-			{ echo vm-image failed ; exit 1 ; }
+	echo ; echo Building vm-image - logging to $log_dir/vm-image.log
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
+		SRCCONF=$work_dir/src.conf \
+		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+		vm-image WITH_VMIMAGES=YES VMFORMATS=raw VMFS=$vmfs \
+			TARGET=$target TARGET_ARCH=$target_arch \
+			> $log_dir/vm-image.log 2>&1 || \
+				{ echo vm-image failed ; exit 1 ; }
 
-echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw to $work_dir
-cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw $work_dir/
-
+	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw to $work_dir
+	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw $work_dir/
 
 # Verify if vm-image would be re-using ${target}.$target_arch/release/dist/
 # Run first if so
 # Why does it do that if it creates ${target}.$target_arch/release/disc1 ?
 
-# BUILD THE ISO
+	echo ; echo Generating VM scripts
 
-if ! [ "$target" = "arm64" ] ; then
-	echo ; echo Building CD-ROM ISO - logging to $log_dir/cdrom.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
-		SRCCONF=$work_dir/src.conf \
-		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-		TARGET=$target TARGET_ARCH=$target_arch \
-		cdrom \
-			> $log_dir/cdrom.log 2>&1 || \
-				{ echo cdrom failed ; exit 1 ; }
+	echo "kldload vmm" \
+		> $work_dir/bhyve-boot-vmimage.sh
+	echo "[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd" \
+		> $work_dir/bhyve-boot-vmimage.sh
+	echo "sleep 1" >> $work_dir/bhyve-boot-vmimage.sh
+	echo "bhyveload -d $work_dir/vm.raw -m 1024 occambsd" \
+		>> $work_dir/bhyve-boot-vmimage.sh
+	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$work_dir/vm.raw -s 31,lpc -l com1,stdio occambsd" \
+		>> $work_dir/bhyve-boot-vmimage.sh
+	echo $work_dir/bhyve-boot-vmimage.sh
 
-	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso to $work_dir
-	cp $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso $work_dir/
+	echo "bhyvectl --destroy --vm=occambsd" \
+		> $work_dir/bhyve-cleanup-vmimage.sh
+	echo $work_dir/bhyve-cleanup-vmimage.sh
 
-fi
-
-# GENERATE BOOT SCRIPTS
-
-echo ; echo Note these setup and tear-down scripts:
-
-echo "kldload vmm" \
-	> $work_dir/bhyve-boot.sh
-echo "[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd" \
-	> $work_dir/bhyve-boot.sh
-echo "sleep 1" >> $work_dir/bhyve-boot.sh
-echo "bhyveload -d $work_dir/vm.raw -m 1024 occambsd" \
-	>> $work_dir/bhyve-boot.sh
-echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$work_dir/vm.raw -s 31,lpc -l com1,stdio occambsd" \
-	>> $work_dir/bhyve-boot.sh
-echo $work_dir/bhyve-boot.sh
-
-echo "bhyvectl --destroy --vm=occambsd" \
-	> $work_dir/bhyve-cleanup.sh
-echo $work_dir/bhyve-cleanup.sh
-
-echo ; echo Generating xen.cfg
+	echo ; echo Generating xen.cfg
 cat << HERE > $work_dir/xen.cfg
 type = "hvm"
 memory = 2048
@@ -445,22 +460,89 @@ on_crash = 'restart'
 #vif = [ 'bridge=bridge0' ]
 HERE
 
-echo "xl list | grep OccamBSD && xl destroy OccamBSD" \
-	> $work_dir/xen-boot.sh
-echo "xl create -c $work_dir/xen.cfg" \
-	>> $work_dir/xen-boot.sh
-echo $work_dir/xen-boot.sh
+	echo "xl list | grep OccamBSD && xl destroy OccamBSD" \
+		> $work_dir/xen-boot-vmimage.sh
+	echo "xl create -c $work_dir/xen.cfg" \
+	>> $work_dir/xen-boot-vmimage.sh
+	echo $work_dir/xen-boot-vmimage.sh
 
-echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > $work_dir/xen-cleanup.sh
-echo $work_dir/xen-cleanup.sh
+	echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > $work_dir/xen-cleanup.sh
+	echo $work_dir/xen-cleanup.sh
 
 # Notes while debugging
 #xl console -t pv OccamBSD
 #xl console -t serial OccamBSD
 
+	if [ "$target" = "arm64" ] ; then
 cat << HERE > $work_dir/qemu-boot.sh
 [ \$( which qemu-system-aarch64 ) ] || { echo "qemu-system-aarch64 not installed" ; exit 1 ; }
 qemu-system-aarch64 -m 1024M -cpu cortex-a57 -machine virt -bios edk2-aarch64-code.fd -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
+	fi
+
+fi # End: generate_vm_image
+
+
+# ISOs
+
+if [ "$generate_isos" = "1" ] ; then
+	echo ; echo Building CD-ROM ISO - logging to $log_dir/cdrom.log
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
+		SRCCONF=$work_dir/src.conf \
+		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+		TARGET=$target TARGET_ARCH=$target_arch \
+		cdrom \
+			> $log_dir/cdrom.log 2>&1 || \
+				{ echo cdrom failed ; exit 1 ; }
+
+	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso to $work_dir
+	cp $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso $work_dir/
+
+	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/bootonly.iso to $work_dir
+	cp $obj_dir/$src_dir/${target}.$target_arch/release/bootonly.iso $work_dir/
+
+	echo "Generating ISO scripts"
+
+	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/disc1.iso disc1" >> $work_dir/bhyve-boot-disc1.sh 
+	echo $work_dir/bhyve-boot-disc1.sh
+
+	echo "bhyvectl --destroy --vm=disc1" \
+		> $work_dir/bhyve-cleanup-disc1.sh
+	echo $work_dir/bhyve-cleanup-disc1.sh
+
+	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/bootonly.iso bootonly" >> $work_dir/bhyve-boot-bootonly.sh 
+	echo $work_dir/bhyve-boot-bootonly.sh
+
+	echo "bhyvectl --destroy --vm=bootonly" \
+		> $work_dir/bhyve-cleanup-bootonly.sh
+	echo $work_dir/bhyve-cleanup-bootonly.sh
+
+fi
+
+
+# MEMSTICK
+
+if [ "$generate_memstick" = "1" ] ; then
+	echo ; echo Building memstick image - logging to $log_dir/memstick.log
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
+		SRCCONF=$work_dir/src.conf \
+		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+		TARGET=$target TARGET_ARCH=$target_arch \
+		memstick \
+			> $log_dir/memstick.log 2>&1 || \
+				{ echo memstick failed ; exit 1 ; }
+
+	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/memstick.img to $work_dir
+	cp $obj_dir/$src_dir/${target}.$target_arch/release/memstick.img $work_dir/
+
+	echo ; echo "Generating memstick scripts"
+
+	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/memstick.img memstick" >> $work_dir/bhyve-boot-memstick.sh 
+	echo $work_dir/bhyve-boot-memstick.sh
+
+	echo "bhyvectl --destroy --vm=memstick" \
+		> $work_dir/bhyve-cleanup-memstick.sh
+	echo $work_dir/bhyve-cleanup-memstick.sh
+fi
 
 exit 0
