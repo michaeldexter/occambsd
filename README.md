@@ -92,6 +92,8 @@ The full occambsd.sh usage is:
 -j (Build for Jail boot)
 -v (Generate vm-image)
 -z (Generate ZFS vm-image)
+-Z (vm-image siZe i.e. 500m)
+-S (vm-image Swap size i.e. 500m - default is 1g)
 -i (Generate disc1.iso and bootonly.iso)
 -m (Generate memstick image)
 -n (No-op dry-run only generating configuration files)

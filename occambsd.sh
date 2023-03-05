@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.5
+# Version v6.6
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -41,6 +41,8 @@ f_usage() {
 	echo "-j (Build for Jail boot)"
 	echo "-v (Generate vm-image)"
 	echo "-z (Generate ZFS vm-image)"
+	echo "-Z (vm-image siZe i.e. 500m - default is 5g)"
+	echo "-S (vm-image Swap size i.e. 500m - default is 1g)"
 	echo "-i (Generate disc1.iso and bootonly.iso)"
 	echo "-m (Generate memstick image)"
 	echo "-n (No-op dry-run only generating configuration files)"
@@ -74,7 +76,7 @@ generate_vm_image="0"
 zfs_vm_image="0"
 dry_run="0"
 
-while getopts p:s:o:wkgzjvzimn opts ; do
+while getopts p:s:o:wkgzjvzZ:S:imn opts ; do
 	case $opts in
 	p)
 		# REQUIRED
@@ -123,6 +125,13 @@ while getopts p:s:o:wkgzjvzimn opts ; do
 		;;
 	z)
 		vmfs="zfs"
+		;;
+	Z)
+		# Validate input?
+		vm_image_size="${OPTARG}"
+		;;
+	S)
+		vm_swap_size="${OPTARG}"
 		;;
 	i)
 		generate_isos="1"
@@ -427,11 +436,15 @@ if [ "$generate_vm_image" = "1" ] ; then
 
 	# Confirm if this uses KERNCONFDIR
 
+	[ -n "$vm_image_size" ] && vm_size_string="VMSIZE=$vm_image_size"
+	[ -n "$vm_swap_size" ] && vm_swap_string="SWAPSIZE=$vm_swap_size"
+
 	echo ; echo Building vm-image - logging to $log_dir/vm-image.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
 		SRCCONF=$work_dir/src.conf \
 		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-		vm-image WITH_VMIMAGES=YES VMFORMATS=raw VMFS=$vmfs \
+		vm-image WITH_VMIMAGES=YES VMFORMATS=raw \
+			VMFS=$vmfs $vm_size_string $vm_swap_string \
 			TARGET=$target TARGET_ARCH=$target_arch \
 			> $log_dir/vm-image.log 2>&1 || \
 				{ echo vm-image failed ; exit 1 ; }
