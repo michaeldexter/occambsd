@@ -18,11 +18,6 @@ imagine.sh		Images official and OccamBSD bootable disk images to hardware and vi
 rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
 ```
 
-## New Approach
-
-Earlier version of OccamBSD handcrafted bootable UFS and ZFS disk images but the introduction of 'makefs -t zfs' allows it to use the upstream "VM-IMAGE" release syntax. This change has resulted in a reduction/delay of some features, but reduces the script from over 1100 lines to under 400. While the raw "VM-IMAGE" is intended for virtualization use, it is a full-featured boot image with a full userland and kernel that is compatible with most amd64 hardware.
-
-NB! makefs root on ZFS support is only supported on 14-CURRENT
 
 ## Motivations
 
@@ -60,15 +55,9 @@ rc.local.sh			A FreeBSD userland
 /tmp/occambsd/OCCAMBSD		OccamBSD kernel configuration file
 /tmp/occambsd/all_modules.txt	Generated list of all available kernel modules
 /tmp/occambsd/all_options.conf	Generated list of all available build options
-/tmp/occambsd/bhyve-boot.sh	Script to boot the resulting image under bhyve
-/tmp/occambsd/xen-boot.sh	Script to boot the resulting image under Xen
-/tmp/occambsd/bhyve-cleanup.sh Script to destroy the bhyve VM remnants
-/tmp/occambsd/xen-cleanup.sh	Script to destroy the Xen VM remnants
 /tmp/occambsd/logs		World, Kernel, and VM-IMAGE build logs
 /tmp/occambsd/src.conf		The generated src.conf excluding components
-/tmp/occambsd/vm.raw		A copy of the generated VM image from /usr/obj
-/tmp/occambsd/disc1.iso		A copy of the generated disk1.iso from /usr/obj
-/tmp/occambsd/cfg		Xen VM configuration file
+/tmp/occambsd/*.sh		Jail and VM management scripts
 /root/imageine-work		Working directory for some imagine.sh operations
 ```
 
@@ -76,12 +65,18 @@ rc.local.sh			A FreeBSD userland
 
 Most of these scripts are position independent unless they depend on one another.
 
+# occambsd.sh
+
+By default, occambsd.sh will build the requested profile but will only generate Jail and Virtual Machine images with the specified flags.
+
 occambsd.sh requires a profile and can build a root-on-ZFS image with -z:
 
 
 ```
-sh occambsd.sh -z -p profile-zfs.txt
+sh occambsd.sh -v -z -p profile-amd64-zfs.txt
 ```
+
+Note that -z support is only available on FreeBSD 14-CURRENT
 
 The full occambsd.sh usage is:
 
@@ -89,22 +84,34 @@ The full occambsd.sh usage is:
 -p <profile file> (required)
 -s <source directory override>
 -o <object directory override>
--w (Reuse the previous world build)
--k (Reuse the previous kernel build)
+-w (Reuse the previous world objects)
+-W (Reuse the previous world objects without cleaning)
+-k (Reuse the previous kernel objects)
+-K (Reuse the previous kernel objects without cleaning)
 -g (Use the GENERIC kernel)
--z (Create ZFS image)
+-j (Build for Jail boot)
+-v (Generate vm-image)
+-z (Generate ZFS vm-image)
+-i (Generate disc1.iso and bootonly.iso)
+-m (Generate memstick image)
+-n (No-op dry-run only generating configuration files)
 ```
 
-occambsd.sh will prompt to launch imagine.sh but it can be used independently:
+The -W and -K options exist for use with WITH_META_MODE set in /etc/src-env.conf and the filemon.ko kernel module loaded.
 
-```
-sh imagine.sh
-```
+
+# imagine.sh
 
 imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", or a custom-build vm.raw image and assists with configuring it as a virtual machine disk image or images it to a hardware device for hardware boot.
 
 Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts.
 
+```
+sh imagine.sh
+```
+
+
+# mirror-upstream.sh
 
 mirror-upstream.sh is hard-coded to use zpool "zroot" but that can be overridden with by appending a zpool name:
 
@@ -112,13 +119,18 @@ mirror-upstream.sh is hard-coded to use zpool "zroot" but that can be overridden
 sh mirror-upstream.sh tank
 ```
 
+
+# rc.local.sh
+
 rc.local.sh will prompt for a root destination directory, or will auto-execute on boot if renamed "/etc/rc.local" (remove .sh)
 
 ```
 sh rc.local.sh
 ```
 
+
 Read EXACTLY what it is doing and configure it to your needs. Modify, comment out, or delete sections as needed.
+
 
 ## OccamBSD build results from an EPYC 7402p
 

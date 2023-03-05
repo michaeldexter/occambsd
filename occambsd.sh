@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.4
+# Version v6.5
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -36,13 +36,14 @@ f_usage() {
 	echo "-w (Reuse the previous world objects)"
 	echo "-W (Reuse the previous world objects without cleaning)"
 	echo "-k (Reuse the previous kernel objects)"
-	echo "-k (Reuse the previous kernel objects without cleaning)"
+	echo "-K (Reuse the previous kernel objects without cleaning)"
 	echo "-g (Use the GENERIC kernel)"
 	echo "-j (Build for Jail boot)"
 	echo "-v (Generate vm-image)"
 	echo "-z (Generate ZFS vm-image)"
 	echo "-i (Generate disc1.iso and bootonly.iso)"
 	echo "-m (Generate memstick image)"
+	echo "-n (No-op dry-run only generating configuration files)"
 	echo
         exit 0
 }
@@ -71,8 +72,9 @@ reuse_kernel="0"
 reuse_kernel_dirty="0"
 generate_vm_image="0"
 zfs_vm_image="0"
+dry_run="0"
 
-while getopts p:s:o:wkgzjvzim opts ; do
+while getopts p:s:o:wkgzjvzimn opts ; do
 	case $opts in
 	p)
 		# REQUIRED
@@ -127,6 +129,9 @@ while getopts p:s:o:wkgzjvzim opts ; do
 		;;
 	m)
 		generate_memstick="1"
+		;;
+	n)
+		dry_run="1"
 		;;
 	*)
 		f_usage
@@ -264,16 +269,13 @@ done
 
 echo $without_options > $work_dir/src.conf
 
-echo ; echo The generated $work_dir/src.conf tails:
-tail $work_dir/src.conf
-
-
-# MODULES
+#echo ; echo The generated $work_dir/src.conf tails:
+#tail $work_dir/src.conf
 
 ls ${src_dir}/sys/modules | grep -v "Makefile" > $work_dir/all_modules.txt
 echo ; echo All modules are listed in $work_dir/all_modules.txt
 
-# DO YOU WANNA BUILD A KERN CONF?
+# Kernel configuration parameters
 
 # A space-separated profile file must have:
 # $kernel_modules	i.e. makeoptions	MODULES_OVERRIDE="*module*..."
@@ -313,6 +315,9 @@ fi
 
 echo ; echo The resulting OCCAMBSD KERNCONF is
 cat $work_dir/OCCAMBSD
+
+# DRY RUN
+[ "$dry_run" = "1" ] && { echo "Configuration generation complete" ; exit 1 ; }
 
 
 # BUILD THE WORLD/USERLAND
@@ -366,19 +371,28 @@ occambsd {
 }
 HERE
 
-	echo ; echo "Generating $work_dir/boot-jail.sh script"
+	echo ; echo "Generating $work_dir/jail-boot.sh script"
 	echo "jail -c -f $work_dir/jail.conf occambsd" > \
-		$work_dir/boot-jail.sh
-	echo "jls" >> $work_dir/boot-jail.sh
+		$work_dir/jail-boot.sh
+	echo "jls" >> $work_dir/jail-boot.sh
+	echo $work_dir/jail-boot.sh
 
-[ -f "$work_dir/boot-jail.sh" ] || \
-	{ echo "DUDE $work_dir/boot-jail.sh DID NOT CREATE" ; exit 1 ; }
+[ -f "$work_dir/jail-boot.sh" ] || \
+	{ echo "$work_dir/jail-boot.sh failed to create" ; exit 1 ; }
 
-	echo ; echo "Generating $work_dir/halt-jail.sh script"
-	echo "jail -r occambsd" > $work_dir/halt-jail.sh
-	echo "jls" >> $work_dir/halt-jail.sh
+	echo ; echo "Generating $work_dir/jail-halt.sh script"
+	echo "jail -r occambsd" > $work_dir/jail-halt.sh
+	echo "jls" >> $work_dir/jail-halt.sh
+	echo $work_dir/jail-halt.sh
 
-	echo "Jail installation complete"
+[ -f "$work_dir/jail-halt.sh" ] || \
+	{ echo "$work_dir/jail-halt.sh failed to create" ; exit 1 ; }
+fi
+
+
+# CONTINUE IF KERNEL-DEPENDENT TARGETS ARE REQUESTED
+
+if [ "$generate_vm_image" = "0" -o "$generate_isos" = "0" -o "$generate_memstick" = "0" ] ; then
 	exit 0
 fi
 
