@@ -84,6 +84,7 @@ The full occambsd.sh usage is:
 -p <profile file> (required)
 -s <source directory override>
 -o <object directory override>
+-O <output directory override>
 -w (Reuse the previous world objects)
 -W (Reuse the previous world objects without cleaning)
 -k (Reuse the previous kernel objects)
@@ -92,8 +93,8 @@ The full occambsd.sh usage is:
 -j (Build for Jail boot)
 -v (Generate vm-image)
 -z (Generate ZFS vm-image)
--Z (vm-image siZe i.e. 500m)
--S (vm-image Swap size i.e. 500m - default is 1g)
+-Z <size> (vm-image siZe i.e. 500m)
+-S <size> (vm-image Swap size i.e. 500m - default is 1g)
 -i (Generate disc1.iso and bootonly.iso)
 -m (Generate memstick image)
 -n (No-op dry-run only generating configuration files)
@@ -101,6 +102,17 @@ The full occambsd.sh usage is:
 
 The -W and -K options exist for use with WITH_META_MODE set in /etc/src-env.conf and the filemon.ko kernel module loaded.
 
+Want to aggressively build test FreeBSD on a fast system?
+
+Simply excute a list of occambsd.sh commands with separate output directories:
+
+```
+sh occambsd.sh -O /tmp/amd64-minimum -p profile-amd64-minimum.txt
+sh occambsd.sh -O /tmp/amd64-hardware -p profile-amd64-hardware.txt
+sh occambsd.sh -O /tmp/arm64-minimum -p profile-arm64-minimum.txt
+...
+
+```
 
 # imagine.sh
 

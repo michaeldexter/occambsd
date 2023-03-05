@@ -26,13 +26,14 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.6
+# Version v6.7
 
 f_usage() {
         echo ; echo "USAGE:"
 	echo "-p <profile file> (required)"
 	echo "-s <source directory override>"
 	echo "-o <object directory override>"
+	echo "-O <output directory override>"
 	echo "-w (Reuse the previous world objects)"
 	echo "-W (Reuse the previous world objects without cleaning)"
 	echo "-k (Reuse the previous kernel objects)"
@@ -41,8 +42,8 @@ f_usage() {
 	echo "-j (Build for Jail boot)"
 	echo "-v (Generate vm-image)"
 	echo "-z (Generate ZFS vm-image)"
-	echo "-Z (vm-image siZe i.e. 500m - default is 5g)"
-	echo "-S (vm-image Swap size i.e. 500m - default is 1g)"
+	echo "-Z <size> (vm-image siZe i.e. 500m - default is 5g)"
+	echo "-S <size> (vm-image Swap size i.e. 500m - default is 1g)"
 	echo "-i (Generate disc1.iso and bootonly.iso)"
 	echo "-m (Generate memstick image)"
 	echo "-n (No-op dry-run only generating configuration files)"
@@ -63,7 +64,6 @@ src_dir="/usr/src"			# Can be overridden
 obj_dir="/usr/obj"			# Can be overridden
 work_dir="/tmp/occambsd"
 kernconf_dir="$work_dir"
-log_dir="$work_dir/logs"		# Must stay under work_dir
 buildjobs="$(sysctl -n hw.ncpu)"
 
 # Should any be left unset for use of environment variables?
@@ -76,12 +76,12 @@ generate_vm_image="0"
 zfs_vm_image="0"
 dry_run="0"
 
-while getopts p:s:o:wkgzjvzZ:S:imn opts ; do
+while getopts p:s:o:O:wkgzjvzZ:S:imn opts ; do
 	case $opts in
 	p)
 		# REQUIRED
-		[ "${OPTARG}" ] || f_usage
-		profile="${OPTARG}"
+		[ "$OPTARG" ] || f_usage
+		profile="$OPTARG"
 		[ -f "$profile" ] || \
 		{ echo "Profile file $profile not found" ; exit 1 ; }
 		. "$profile" || \
@@ -94,13 +94,16 @@ while getopts p:s:o:wkgzjvzZ:S:imn opts ; do
 		;;
 	s)
 		# Optionally override source directory
-		src_dir="${OPTARG}"
+		src_dir="$OPTARG"
 		[ -d "$src_dir" ] || { echo "$src_dir not found" ; exit 1 ; }
 		;;
 	o)
 		# Optionally override object directory
-		obj_dir="${OPTARG}"
+		obj_dir="$OPTARG"
 		[ -d "$obj_dir" ] || { echo "$obj_dir not found" ; exit 1 ; }
+		;;
+	O)
+		work_dir="$OPTARG"
 		;;
 	w)
 		reuse_world="1"
@@ -128,10 +131,10 @@ while getopts p:s:o:wkgzjvzZ:S:imn opts ; do
 		;;
 	Z)
 		# Validate input?
-		vm_image_size="${OPTARG}"
+		vm_image_size="$OPTARG"
 		;;
 	S)
-		vm_swap_size="${OPTARG}"
+		vm_swap_size="$OPTARG"
 		;;
 	i)
 		generate_isos="1"
@@ -151,6 +154,8 @@ done
 
 # A profile must be specified
 [ "$profile" = "0" ] && f_usage
+
+log_dir="$work_dir/logs"		# Lives under work_dir for mkdir -p
 
 # target is populated by the required profile file
 [ -f $src_dir/sys/${target}/conf/GENERIC ] || \
@@ -423,8 +428,9 @@ else
 				{ echo buildkernel failed ; exit 1 ; }
 fi
 
-echo ; echo Seeing how big the resulting kernel is:
-	ls -lh $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel
+echo ; echo -n "Seeing how big the resulting kernel is:"
+	ls -s $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel \
+		 | cut -d " " -f1
 
 
 # GENERATE IMAGES
