@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.8
+# Version v6.9
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -58,6 +58,7 @@ f_usage() {
 
 # DEFAULT VARIABLES
 
+working_directory=$( pwd )		# Used after cd for cleanup
 kernconf="OCCAMBSD"			# Can be overridden with GENERIC
 vmfs="ufs"				# Can be overridden with zfs
 src_dir="/usr/src"			# Can be overridden
@@ -224,26 +225,32 @@ echo ; echo Removing previous generated images if present
 # Kernel first depending on how aggresively we clean the object directory
 if [ "$reuse_kernel" = "0" ] ; then
 	echo ; echo Cleaning kernel object directory
-	[ -d $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf ] && chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
-	[ -d $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf ] && rm -rf  $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
-# This would collide with a mix of kernels
-#	cd $src_dir/sys
-#	make clean
+	# Only clean the requested kernel
+	if [ -d $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf ] ; then
+		chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
+		rm -rf  $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
+	fi
+	# This would collide with a mix of kernels
+	# cd $src_dir/sys
+	# make clean
 else
 	echo ; echo Reuse kernel requested
-	[ -d "$obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf" ] || \
-		{ echo World artifacts not found for resuse ; exit 1 ; }
+	[ -f "$obj_dir/$src_dir/${target}.$target_arch/sys/${kernconf}/kernel" ] || \
+		{ echo Kernel artifacts not found for resuse ; exit 1 ; }
 fi
 
 if [ "$reuse_world" = "0" ] ; then
 	echo ; echo Cleaning world object directory
-#	chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch
-#	rm -rf  $obj_dir/$src_dir/${target}.$target_arch/*
-# make cleandir appears to do what we want, preserving kernels
-	cd $src_dir
-	make cleandir > $log_dir/cleandir.log
+	# This would take kernels with it
+	# chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch
+	# rm -rf  $obj_dir/$src_dir/${target}.$target_arch/*
+
+	# Only clean if there is something to clean, saving time
+	if [ -d "$obj_dir/$src_dir/${target}.$target_arch" ] ; then
+		cd $src_dir
+		make cleandir > $log_dir/cleandir.log 2>&1
+	fi
 else
-# VERIFY THIS TEST want -f? See what is there but make cleandir leaves... dirs
 	[ -d "$obj_dir/$src_dir/${target}.$target_arch/bin/sh" ] || \
 		{ echo World artifacts not found for reuse ; exit 1 ; }
 fi
@@ -320,6 +327,7 @@ if [ "$kernel_devices" ] ; then
 fi
 
 # Disabling until the value is determined
+# This caused more harm than good on AMD64
 #IFS=" "
 #if [ "$kernel_includes" ] ; then
 #	for kernel_include in $kernel_includes ; do
@@ -327,8 +335,15 @@ fi
 #	done
 #fi
 
-echo ; echo The resulting OCCAMBSD KERNCONF is
-cat $work_dir/OCCAMBSD
+#echo ; echo The resulting OCCAMBSD KERNCONF is
+#cat $work_dir/OCCAMBSD
+
+cd $working_directory
+
+echo ; echo Copying profile $profile file to $work_dir
+
+cp $profile ${work_dir}/ || \
+	{ echo "$profile failed to copy to $work_dir" ; exit 1 ; }
 
 # DRY RUN
 [ "$dry_run" = "1" ] && { echo "Configuration generation complete" ; exit 1 ; }
@@ -346,10 +361,32 @@ else
 	echo ; echo Building world - logging to $log_dir/build-world.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
 		-j$buildjobs SRCCONF=$work_dir/src.conf buildworld \
-		TARGET=$target TARGET_ARCH=$target_arch \
-		> $log_dir/build-world.log || \
+		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
+		> $log_dir/build-world.log 2>&1 || \
 			{ echo buildworld failed ; exit 1 ; }
 fi
+
+
+# BUILD THE KERNEL
+
+if [ "$reuse_kernel" = "1" ] ; then
+	if [ "$reuse_kernel_dirty" = "0" ] ; then
+		echo ; echo "Using existing kernel build objects"
+	fi
+else
+	echo ; echo Building kernel - logging to $log_dir/build-kernel.log
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir \
+		make -C $src_dir -j$buildjobs \
+		buildkernel KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
+			> $log_dir/build-kernel.log 2>&1 || \
+				{ echo buildkernel failed ; exit 1 ; }
+fi
+
+# Humanize this
+echo ; echo -n "Size of the resulting kernel: "
+	ls -s $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel \
+		 | cut -d " " -f1
 
 
 # GENERATE JAIL
@@ -362,7 +399,7 @@ if [ "$generate_jail" = "1" ] ; then
 	echo ; echo Installing Jail world - logging to $log_dir/install-jail-world.log
 
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-	installworld SRCCONF=$work_dir/src.conf \
+	installworld SRCCONF=$work_dir/src.conf $makeoptions \
 	DESTDIR=${work_dir}/jail/ \
 	NO_FSCHG=YES \
 		> $log_dir/install-jail-world.log 2>&1
@@ -404,35 +441,6 @@ HERE
 fi
 
 
-# CONTINUE IF KERNEL-DEPENDENT TARGETS ARE REQUESTED
-
-# Rethink this: Build both world and kernel by default?
-#if [ "$generate_vm_image" = "0" -o "$generate_isos" = "0" -o "$generate_memstick" = "0" ] ; then
-#	exit 0
-#fi
-
-
-# BUILD THE KERNEL
-
-if [ "$reuse_kernel" = "1" ] ; then
-	if [ "$reuse_kernel_dirty" = "0" ] ; then
-		echo ; echo "Using existing kernel build objects"
-	fi
-else
-	echo ; echo Building kernel - logging to $log_dir/build-kernel.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir \
-		make -C $src_dir -j$buildjobs \
-		buildkernel KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-		TARGET=$target TARGET_ARCH=$target_arch \
-			> $log_dir/build-kernel.log || \
-				{ echo buildkernel failed ; exit 1 ; }
-fi
-
-echo ; echo -n "Seeing how big the resulting kernel is:"
-	ls -s $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel \
-		 | cut -d " " -f1
-
-
 # GENERATE IMAGES
 
 # VM-IMAGE
@@ -451,7 +459,7 @@ if [ "$generate_vm_image" = "1" ] ; then
 		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
 		vm-image WITH_VMIMAGES=YES VMFORMATS=raw \
 			VMFS=$vmfs $vm_size_string $vm_swap_string \
-			TARGET=$target TARGET_ARCH=$target_arch \
+			TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
 			> $log_dir/vm-image.log 2>&1 || \
 				{ echo vm-image failed ; exit 1 ; }
 
@@ -533,7 +541,7 @@ if [ "$generate_isos" = "1" ] ; then
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
 		SRCCONF=$work_dir/src.conf \
 		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-		TARGET=$target TARGET_ARCH=$target_arch \
+		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
 		cdrom \
 			> $log_dir/cdrom.log 2>&1 || \
 				{ echo cdrom failed ; exit 1 ; }
@@ -544,7 +552,7 @@ if [ "$generate_isos" = "1" ] ; then
 	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/bootonly.iso to $work_dir
 	cp $obj_dir/$src_dir/${target}.$target_arch/release/bootonly.iso $work_dir/
 
-	echo "Generating ISO scripts"
+	echo ; echo "Generating ISO scripts"
 
 	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/disc1.iso disc1" >> $work_dir/bhyve-boot-disc1.sh 
 	echo $work_dir/bhyve-boot-disc1.sh
@@ -588,4 +596,5 @@ if [ "$generate_memstick" = "1" ] ; then
 	echo $work_dir/bhyve-cleanup-memstick.sh
 fi
 
+echo
 exit 0
