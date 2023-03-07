@@ -60,10 +60,11 @@ fi
 
 hostname="current"
 if [ "$( sysrc -c -R $DESTDIR hostname=$hostname )" ] ; then
-	echo "Hostname is correct"
-	logger "Hostname is correct"
+	echo "Hostname $hostname is correct"
+	logger "Hostname $hostname is correct"
 else
-	echo ; echo Changing hostname to $hostname
+	echo ; echo "Changing hostname to $hostname"
+	logger "Changing Hostname to $hostname"
 	sysrc -R $DESTDIR hostname="$hostname"
 	service hostname restart
 fi
@@ -76,6 +77,7 @@ if [ "$( sysrc -c -R $DESTDIR moused_enable=YES )" ] ; then
 	logger "Mouse daemon is already enabled"
 else
 	echo ; echo "Enabling mouse daemon"
+	logger "Enabling mouse daemon"
 	sysrc -R $DESTDIR moused_enable=YES
 	service moused restart
 fi
@@ -88,6 +90,7 @@ if [ "$( sysrc -c -R $DESTDIR ntpdate_enable=YES )" ] ; then
 	logger "NTP Date daemon is already enabled"
 else
 	echo ; echo "Enabling NTP Date daemon"
+	logger "Enabling NTP Date daemon"
 	sysrc -R $DESTDIR ntpdate_enable=YES
 	service ntpdate restart
 fi
@@ -97,6 +100,7 @@ if [ "$( sysrc -c -R $DESTDIR ntpd_enable=YES )" ] ; then
 	logger "NTP daemon is already enabled"
 else
 	echo ; echo "Enabling NTP daemon"
+	logger "Enabling NTP daemon"
 	sysrc -R $DESTDIR ntpd_enable=YES
 	service ntpd restart
 fi
@@ -109,6 +113,7 @@ if [ "$( sysrc -c -R $DESTDIR dumpdev=AUTO )" ] ; then
 	logger "Dump device is already configured"
 else
 	echo ; echo "Configuring dump device"
+	logger "Configuring dump device"
 	sysrc -R $DESTDIR dumpdev=AUTO
 	service dumpon restart
 fi
@@ -134,10 +139,11 @@ fi
 # AUTOBOOT DELAY
 
 if [ "$( sysrc -c -f ${DESTDIR}/boot/loader.conf autoboot_delay=5 )" ] ; then
-	echo "Autoboot delay is already configured"
-	logger "Autoboot delay is already configured"
+	echo ; echo "Verifying autoboot of $autoboot_delay"
+	logger "Verifying autoboot of $autoboot_delay"
 else
 	echo ; echo "Configuring autoboot delay"
+	logger "Configuring autoboot delay"
 	sysrc -f ${DESTDIR}/boot/loader.conf autoboot_delay=5
 fi
 
@@ -145,10 +151,11 @@ fi
 # VERBOSE LOADING
 
 if [ "$( sysrc -c -f ${DESTDIR}/boot/loader.conf verbose_loading=YES )" ] ; then
-	echo "Verbose loading is already configured"
-	logger "Verbose loading is already configured"
+	echo ; echo "Verifying verbose loading"
+	logger "Verifying verbose loading"
 else
-	echo ; echo "Configuring verbose loading"
+	echo ; echo "Enabling verbose loading"
+	logger "Enabling verbose loading"
 	sysrc -f ${DESTDIR}/boot/loader.conf verbose_loading=YES
 fi
 
@@ -156,10 +163,10 @@ fi
 # VERBOSE BOOTING
 
 #if [ "$( sysrc -c -f ${DESTDIR}/boot/loader.conf boot_verbose=YES )" ] ; then
-#	echo "Verbose boot is already configured"
+#	echo ; echo "Verbose boot is already configured"
 #	logger "Verbose boot is already configured"
 #else
-#	echo ; echo "Configuring verbose boot"
+#	echo ; echo "Enabling verbose boot"
 #	sysrc -f ${DESTDIR}/boot/loader.conf boot_verbose=YES
 #fi
 
@@ -197,8 +204,8 @@ echo "$root_password" | pw -R $DESTDIR usermod -n root -h 0
 # Ideally distinguish bewteen the line being enabled, and the specific configuration
 # "yes" is not the only option IIRC
 if [ "$( grep -q "PermitRootLogin yes" ${DESTDIR}/etc/ssh/sshd_config )" ] ; then
-	echo "PermitRootLogin is already set to yes"
-	logger "PermitRootLogin is already set to yes"
+	echo ; echo "Verifying PermitRootLogin"
+	logger "Verifying PermitRootLogin"
 else
 	echo ; echo "Setting PermitRootLogin yes"
 	sed -i '' -e "s/#PermitRootLogin no/PermitRootLogin yes/" \
@@ -209,10 +216,11 @@ fi
 # Secure Shell Daemon (Already idempotent)
 
 if [ "$( sysrc -c -R $DESTDIR sshd_enable=YES )" ] ; then
-	echo "Secure shell daemon is already enabled"
-	logger "Secure shell daemon is already enabled"
+	echo ; echo "Verifying if secure shell daemon is enabled"
+	logger "Verifying if secure shell daemon is enabled"
 else
 	echo ; echo "Enabling secure shell daemon"
+	logger "Enabling secure shell daemon"
 	sysrc -R $DESTDIR sshd_enable=YES
 	# restart will NOT work on first use
 	service sshd stop ; service sshd start
