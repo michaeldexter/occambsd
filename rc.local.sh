@@ -59,7 +59,7 @@ fi
 # Validate the name first? You probably cannot have an apostrophe in it...
 
 hostname="current"
-if [ "$( sysrc -R $DESTDIR hostname=$hostname )" ] ; then
+if [ "$( sysrc -c -R $DESTDIR hostname=$hostname )" ] ; then
 	echo "Hostname is correct"
 	logger "Hostname is correct"
 else
@@ -71,7 +71,7 @@ fi
 
 # MOUSE DAEMON
 
-if [ "$( sysrc -R $DESTDIR moused_enable=YES )" ] ; then
+if [ "$( sysrc -c -R $DESTDIR moused_enable=YES )" ] ; then
 	echo "Mouse daemon is already enabled"
 	logger "Mouse daemon is already enabled"
 else
@@ -83,7 +83,7 @@ fi
 
 # NETWORK TIME DAEMONS
 
-if [ "$( sysrc -R $DESTDIR ntpdate_enable=YES )" ] ; then
+if [ "$( sysrc -c -R $DESTDIR ntpdate_enable=YES )" ] ; then
 	echo "NTP Date daemon is already enabled"
 	logger "NTP Date daemon is already enabled"
 else
@@ -92,7 +92,7 @@ else
 	service ntpdate restart
 fi
 
-if [ "$( sysrc -R $DESTDIR ntpd_enable=YES )" ] ; then
+if [ "$( sysrc -c -R $DESTDIR ntpd_enable=YES )" ] ; then
 	echo "NTP daemon is already enabled"
 	logger "NTP daemon is already enabled"
 else
@@ -104,7 +104,7 @@ fi
 
 # CRASH DUMP DEVICE
 
-if [ "$( sysrc -R $DESTDIR dumpdev=AUTO )" ] ; then
+if [ "$( sysrc -c -R $DESTDIR dumpdev=AUTO )" ] ; then
 	echo "Dump device is already configured"
 	logger "Dump device is already configured"
 else
@@ -133,7 +133,7 @@ fi
 
 # AUTOBOOT DELAY
 
-if [ "$( sysrc -f ${DESTDIR}/boot/loader.conf autoboot_delay=5 )" ] ; then
+if [ "$( sysrc -c -f ${DESTDIR}/boot/loader.conf autoboot_delay=5 )" ] ; then
 	echo "Autoboot delay is already configured"
 	logger "Autoboot delay is already configured"
 else
@@ -144,7 +144,7 @@ fi
 
 # VERBOSE LOADING
 
-if [ "$( sysrc -f ${DESTDIR}/boot/loader.conf verbose_loading=YES )" ] ; then
+if [ "$( sysrc -c -f ${DESTDIR}/boot/loader.conf verbose_loading=YES )" ] ; then
 	echo "Verbose loading is already configured"
 	logger "Verbose loading is already configured"
 else
@@ -155,7 +155,7 @@ fi
 
 # VERBOSE BOOTING
 
-#if [ "$( sysrc -f ${DESTDIR}/boot/loader.conf boot_verbose=YES )" ] ; then
+#if [ "$( sysrc -c -f ${DESTDIR}/boot/loader.conf boot_verbose=YES )" ] ; then
 #	echo "Verbose boot is already configured"
 #	logger "Verbose boot is already configured"
 #else
@@ -208,7 +208,7 @@ fi
 
 # Secure Shell Daemon (Already idempotent)
 
-if [ "$( sysrc -R $DESTDIR sshd_enable=YES )" ] ; then
+if [ "$( sysrc -c -R $DESTDIR sshd_enable=YES )" ] ; then
 	echo "Secure shell daemon is already enabled"
 	logger "Secure shell daemon is already enabled"
 else
