@@ -247,6 +247,7 @@ elif [ "$target" = "be" ] ; then
 	mustmount="yes"
 	which bectl || { echo bectl not found ; exit 1 ; }
 	bectl check || { echo boot environments not supported ; exit 1 ; }
+	echo
 	zpool list
 	echo ; echo zpool for the new boot environment?
 	echo -n "zpool: " ; read pool
@@ -374,21 +375,27 @@ elif [ "$target" = "be" ] ; then
 				{ echo fetch failed ; exit 1 ; }
 		fi
 
-		# Determine the date stamp of base.txz, date format is 20230406
-		be_epoch_date=$( stat -f %a base.txz )
-		be_date=$( date -f %s "$be_epoch_date" +%Y%m%d )
+		if [ "$version" = "release" ] ; then
+			echo ; echo New boot environment name?
+			echo -n "BE name: " ; read be_name
+		else # stable or current
+			# Determine the date stamp of base.txz
+			be_epoch_date=$( stat -f %a base.txz )
+			be_name=$( date -f %s "$be_epoch_date" +%Y%m%d )
+		fi
 
 # CONSIDER that someone might want a dozen variations on the same snapshot
 # Number them? As for a number?
-		bectl list -H -c name | cut -f1 | grep $be_date && \
-		{ echo $be_name confilicts with existing BE ; exit 1 ; }
 
-	zfs create -o canmount=noauto -o mountpoint=/ $pool/ROOT/$be_date || \
-			{ echo $pool/ROOT/$be_date failed to create ; exit ; }
+		bectl list -H -c name | cut -f1 | grep $be_name && \
+		{ echo $be_name conflicts with existing BE ; exit 1 ; }
+
+	zfs create -o canmount=noauto -o mountpoint=/ $pool/ROOT/$be_name || \
+			{ echo $pool/ROOT/$be_name failed to create ; name ; }
 
 	# Hoping it handles nested datasets should we add them
-		echo Mounting $be_date to /media
-		bectl mount $be_date /media || \
+		echo Mounting $be_name to /media
+		bectl mount $be_name /media || \
 			{ echo bectl mount failed ; exit 1 ; }
 
 		echo ; echo Extracting base.txz to /media
@@ -589,7 +596,7 @@ if [ "$src" = "y" ] ; then
 		df -h | grep media
 	fi
 
-	echo ; echo Listing /media/usr/src ; ls /media/usr/src
+#	echo ; echo Listing /media/usr/src ; ls /media/usr/src
 fi
 
 
