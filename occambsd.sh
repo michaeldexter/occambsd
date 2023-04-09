@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v6.9
+# Version v0.7.0
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -38,14 +38,15 @@ f_usage() {
 	echo "-W (Reuse the previous world objects without cleaning)"
 	echo "-k (Reuse the previous kernel objects)"
 	echo "-K (Reuse the previous kernel objects without cleaning)"
+	echo "-G (Use the GENERIC/stock world)"
 	echo "-g (Use the GENERIC kernel)"
 	echo "-j (Build for Jail boot)"
 	echo "-v (Generate vm-image)"
 	echo "-z (Generate ZFS vm-image)"
 	echo "-Z <size> (vm-image siZe i.e. 500m - default is 5g)"
 	echo "-S <size> (vm-image Swap size i.e. 500m - default is 1g)"
-	echo "-i (Generate disc1.iso and bootonly.iso)"
-	echo "-m (Generate memstick image)"
+	echo "-i (Generate disc1 and bootonly.iso ISOs)"
+	echo "-m (Generate mini-memstick image)"
 	echo "-n (No-op dry-run only generating configuration files)"
 	echo
         exit 0
@@ -65,6 +66,7 @@ src_dir="/usr/src"			# Can be overridden
 obj_dir="/usr/obj"			# Can be overridden
 work_dir="/tmp/occambsd"
 kernconf_dir="$work_dir"
+src_conf="$work_dir/src.conf"
 buildjobs="$(sysctl -n hw.ncpu)"
 
 # Should any be left unset for use of environment variables?
@@ -75,9 +77,11 @@ reuse_kernel="0"
 reuse_kernel_dirty="0"
 generate_vm_image="0"
 zfs_vm_image="0"
+vm_image_size="400m"
+vm_swap_size="100m"
 dry_run="0"
 
-while getopts p:s:o:O:wkgzjvzZ:S:imn opts ; do
+while getopts p:s:o:O:wkGgzjvzZ:S:imn opts ; do
 	case $opts in
 	p)
 		# REQUIRED
@@ -117,6 +121,9 @@ while getopts p:s:o:O:wkgzjvzZ:S:imn opts ; do
 		;;
 	K)
 		reuse_kernel_dirty="1"
+		;;
+	G)
+		generic_world="1"
 		;;
 	g)
 		generic_kernel="1"
@@ -236,7 +243,7 @@ if [ "$reuse_kernel" = "0" ] ; then
 else
 	echo ; echo Reuse kernel requested
 	[ -f "$obj_dir/$src_dir/${target}.$target_arch/sys/${kernconf}/kernel" ] || \
-		{ echo Kernel artifacts not found for resuse ; exit 1 ; }
+		{ echo Kernel objects not found for resuse ; exit 1 ; }
 fi
 
 if [ "$reuse_world" = "0" ] ; then
@@ -252,7 +259,7 @@ if [ "$reuse_world" = "0" ] ; then
 	fi
 else
 	[ -d "$obj_dir/$src_dir/${target}.$target_arch/bin/sh" ] || \
-		{ echo World artifacts not found for reuse ; exit 1 ; }
+		{ echo World objects not found for reuse ; exit 1 ; }
 fi
 	
 echo ; echo Generating $work_dir/all-options.txt
@@ -348,6 +355,12 @@ cp $profile ${work_dir}/ || \
 # DRY RUN
 [ "$dry_run" = "1" ] && { echo "Configuration generation complete" ; exit 1 ; }
 
+# "GENERIC"/stock world for testing
+echo ; echo "Overriding build options with stock ones"
+if [ "$generic_world" = "1" ] ; then
+	src_conf="/dev/null"
+fi
+
 
 # BUILD THE WORLD/USERLAND
 
@@ -360,7 +373,7 @@ if [ "$reuse_world" = "1" ] ; then
 else
 	echo ; echo Building world - logging to $log_dir/build-world.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-		-j$buildjobs SRCCONF=$work_dir/src.conf buildworld \
+		-j$buildjobs SRCCONF=$src_conf buildworld \
 		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
 		> $log_dir/build-world.log 2>&1 || \
 			{ echo buildworld failed ; exit 1 ; }
@@ -383,10 +396,10 @@ else
 				{ echo buildkernel failed ; exit 1 ; }
 fi
 
-# Humanize this
-echo ; echo -n "Size of the resulting kernel: "
-	ls -s $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel \
-		 | cut -d " " -f1
+# Humanize and fix this
+#echo ; echo -n "Size of the resulting kernel: "
+#	ls -s $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel \
+#		 | cut -d " " -f1
 
 
 # GENERATE JAIL
@@ -399,7 +412,7 @@ if [ "$generate_jail" = "1" ] ; then
 	echo ; echo Installing Jail world - logging to $log_dir/install-jail-world.log
 
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-	installworld SRCCONF=$work_dir/src.conf $makeoptions \
+	installworld SRCCONF=$src_conf $makeoptions \
 	DESTDIR=${work_dir}/jail/ \
 	NO_FSCHG=YES \
 		> $log_dir/install-jail-world.log 2>&1
@@ -407,7 +420,7 @@ if [ "$generate_jail" = "1" ] ; then
 echo ; echo Installing Jail distribution - logging to $log_dir/jail-distribution.log
 
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
-	SRCCONF=$work_dir/src.conf DESTDIR=${work_dir}/jail \
+	SRCCONF=$src_conf DESTDIR=${work_dir}/jail \
 		> $log_dir/jail-distribution.log 2>&1
 
         echo ; echo Generating jail.conf
@@ -455,7 +468,7 @@ if [ "$generate_vm_image" = "1" ] ; then
 
 	echo ; echo Building vm-image - logging to $log_dir/vm-image.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
-		SRCCONF=$work_dir/src.conf \
+		SRCCONF=$src_conf \
 		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
 		vm-image WITH_VMIMAGES=YES VMFORMATS=raw \
 			VMFS=$vmfs $vm_size_string $vm_swap_string \
@@ -467,8 +480,6 @@ if [ "$generate_vm_image" = "1" ] ; then
 	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw $work_dir/
 
 # Verify if vm-image would be re-using ${target}.$target_arch/release/dist/
-# Run first if so
-# Why does it do that if it creates ${target}.$target_arch/release/disc1 ?
 
 	echo ; echo Generating VM scripts
 
@@ -537,14 +548,14 @@ fi # End: generate_vm_image
 # ISOs
 
 if [ "$generate_isos" = "1" ] ; then
-	echo ; echo Building CD-ROM ISO - logging to $log_dir/cdrom.log
+	echo ; echo Building CD-ROM ISO images - logging to $log_dir/isos.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
-		SRCCONF=$work_dir/src.conf \
+		SRCCONF=$src_conf \
 		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
 		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
 		cdrom \
-			> $log_dir/cdrom.log 2>&1 || \
-				{ echo cdrom failed ; exit 1 ; }
+			> $log_dir/isos.log 2>&1 || \
+				{ echo "Build ISOs failed" ; exit 1 ; }
 
 	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso to $work_dir
 	cp $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso $work_dir/
@@ -574,26 +585,26 @@ fi
 # MEMSTICK
 
 if [ "$generate_memstick" = "1" ] ; then
-	echo ; echo Building memstick image - logging to $log_dir/memstick.log
+	echo ; echo Building mini-memstick image - logging to $log_dir/mini-memstick.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
-		SRCCONF=$work_dir/src.conf \
+		SRCCONF=$src_conf \
 		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
 		TARGET=$target TARGET_ARCH=$target_arch \
-		memstick \
-			> $log_dir/memstick.log 2>&1 || \
-				{ echo memstick failed ; exit 1 ; }
+		mini-memstick \
+			> $log_dir/mini-memstick.log 2>&1 || \
+				{ echo mini-memstick failed ; exit 1 ; }
 
-	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/memstick.img to $work_dir
-	cp $obj_dir/$src_dir/${target}.$target_arch/release/memstick.img $work_dir/
+	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/mini-memstick.img to $work_dir
+	cp $obj_dir/$src_dir/${target}.$target_arch/release/mini-memstick.img $work_dir/
 
-	echo ; echo "Generating memstick scripts"
+	echo ; echo "Generating mini-memstick scripts"
 
-	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/memstick.img memstick" >> $work_dir/bhyve-boot-memstick.sh 
-	echo $work_dir/bhyve-boot-memstick.sh
+	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/mini-memstick.img mini-memstick" >> $work_dir/bhyve-boot-mini-memstick.sh 
+	echo $work_dir/bhyve-boot-mini-memstick.sh
 
-	echo "bhyvectl --destroy --vm=memstick" \
-		> $work_dir/bhyve-cleanup-memstick.sh
-	echo $work_dir/bhyve-cleanup-memstick.sh
+	echo "bhyvectl --destroy --vm=mini-memstick" \
+		> $work_dir/bhyve-cleanup-mini-memstick.sh
+	echo $work_dir/bhyve-cleanup-mini-memstick.sh
 fi
 
 echo

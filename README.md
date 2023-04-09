@@ -14,7 +14,8 @@ profile-amd64-zfs.txt		The minimum configuration with ZFS added
 profile-amd64-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
 profile-amd64-ipv4.txt	The hardware profile plus minimum IPv4 networking with ssh(1) and host(1)
 profile-arm64-minimum.txt	A minimum configuration file for ARM64 (builds but not tested on qemu|hardware)
-imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images
+imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images, or dist sets or build objects to a boot environment
+make-rescue-iso.sh	A script to make a bootonly.iso rescue ISO with useful tools
 rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
 ```
 
@@ -58,7 +59,7 @@ rc.local.sh			A FreeBSD userland
 /tmp/occambsd/logs		World, Kernel, and VM-IMAGE build logs
 /tmp/occambsd/src.conf		The generated src.conf excluding components
 /tmp/occambsd/*.sh		Jail and VM management scripts
-/root/imageine-work		Working directory for some imagine.sh operations
+/root/imagine-work		Working directory for some imagine.sh operations
 ```
 
 ## Usage
@@ -116,7 +117,7 @@ sh occambsd.sh -O /tmp/arm64-minimum -p profile-arm64-minimum.txt
 
 # imagine.sh
 
-imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", or a custom-build vm.raw image and assists with configuring it as a virtual machine disk image or images it to a hardware device for hardware boot.
+imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", or a custom-build vm.raw image and assists with configuring it as a virtual machine disk image or images it to a hardware device for hardware boot. Alternatively, it can download the base.txz and kernel.txz distribution sets to a new ZFS boot environment, install OccamBSD /usr/obj build objects to a boot environment using /tmp/occambsd/src.conf and the OCCAMBSD kernel configuration file.
 
 Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts.
 

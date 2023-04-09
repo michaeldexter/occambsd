@@ -65,14 +65,14 @@ for _br in $branches ; do
 # Note that some are set in context, which may be wise for all of them
 ############################################################
 
-	echo DEBUG testing for /b/$_br/src
+#	echo DEBUG testing for /b/$_br/src
 # Might want to silence the output for when the test fails
 	branch_validation=1
 	if [ -d "/b/$_br/src" ] ; then
 #		validation="$( git -C /b/$_br/src branch | cut -c 3- )"
 validation="$( git -C /b/$_br/src branch --format='%(refname:short)' )"
 
-		echo DEBUG comparing $_br to $validation
+#		echo DEBUG comparing $_br to $validation
 
 		if [ "$_br" = "$validation" ] ; then
 			echo $_br validation passed
@@ -80,7 +80,7 @@ validation="$( git -C /b/$_br/src branch --format='%(refname:short)' )"
 		fi
 	fi
 
-	echo DEBUG testing if "$branch_validation" = "1"
+#	echo DEBUG testing if "$branch_validation" = "1"
 	if [ "$branch_validation" = "1" ] ; then
 		echo $_br validation failed, scortching earth
 
@@ -130,8 +130,6 @@ validation="$( git -C /b/$_br/src branch --format='%(refname:short)' )"
 	echo Listing /b/$_br/src
 	ls /b/$_br/src
 
-#echo DEBUG look good? ; read good
-
 	echo Obtaining Git date and hash
 #	git_date="$( git -C /b/$_br/src log --format="%at" | head -1 )"
 # Is there a correct way to get around the added timezone info? i.e. 1635972800 -0700
@@ -148,9 +146,9 @@ validation="$( git -C /b/$_br/src branch --format='%(refname:short)' )"
 		last_hash=""
 	fi
 
-	echo DEBUG git_date is $git_date
-	echo DEBUG git_hash is $git_hash
-	echo DEBUG lasthash is $last_hash
+#	echo DEBUG git_date is $git_date
+#	echo DEBUG git_hash is $git_hash
+#	echo DEBUG lasthash is $last_hash
 
 	if [ "$git_hash" = "$last_hash" ] ; then
 		echo ----------------------

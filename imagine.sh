@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v1.0
+# Version v1.1
 
 
 # MAJOR CAVEAT
@@ -37,25 +37,32 @@
 
 # CONDITIONS TO NAVIGATE
 
-# Source: obj|ftp - Is the VM image built or downloaded?
+# Source: obj|ftp|occamobj
+#
 #	obj: /usr/obj/usr/src/amd64.amd64/release/vm.raw
 #
 #	ftp: i.e. https://download.freebsd.org/ftp/snapshots/VM-IMAGES/14.0-CURRENT/amd64/Latest/FreeBSD-14.0-CURRENT-amd64.raw.xz is downloaded to:
 #	/root/imagine-work/current/FreeBSD-14.0-CURRENT-amd64.raw
 #	The downloaded raw.xz image is preserved for re-use
 #
-# Target: dev|img - Is the VM image imaged using dd(1) or does it stay a file?
+#	occamobj: Installworld and kernel from /usr/obj to a boot environment
+#	with src.conf and KERNCONF from /tmp/occambsd (all default paths)
+#
+# Target: dev|img|be - Is the VM image imaged with dd(1), stay a file, or .txzs
+#	are expanded to a boot environment?
 #	dev: A hardware device is used such as /dev/da1
 #
 #	img: Disk image files stay files, optionally grown in size
 #		/root/imagine-work/vm.raw or
 #		i.e. /root/imagine-work/current/FreeBSD-14.0-CURRENT-amd64.raw
+#	be: A new boot environment will be created and populated
 #
 # Options: Grow the disk image (devices are grown automatically)
 #	obj: Optionally copy in /usr/src
 #	img: Optionally copy in src.txz and distribution sets
 #	img: Generate simple bhyve and Xen configuration and boot files 
 #	img: Create a VMDK wrapper for the image, compress the image
+#	be: Optionally copy in src.txz and distribution sets
 
 # TO DO
 
@@ -73,9 +80,9 @@ vm_name="vm0"
 
 # RELEASE URLS
 
-release_img_url="https://download.freebsd.org/ftp/releases/VM-IMAGES/13.1-RELEASE/amd64/Latest/FreeBSD-13.1-RELEASE-amd64.raw.xz"
+release_img_url="https://download.freebsd.org/ftp/releases/VM-IMAGES/13.2-RELEASE/amd64/Latest/FreeBSD-13.2-RELEASE-amd64.raw.xz"
 
-release_dist_url="https://download.freebsd.org/ftp/releases/amd64/13.1-RELEASE"
+release_dist_url="https://download.freebsd.org/ftp/releases/amd64/13.2-RELEASE"
 
 
 # STABLE URLS
@@ -98,15 +105,12 @@ current_dist_url="https://download.freebsd.org/ftp/snapshots/amd64/amd64/14.0-CU
 mustgrow="no"
 mustmount="no"
 
-echo ; echo What VM-IMAGE origin? /usr/obj or ftp.freebsd.org?
-echo -n "(obj/ftp): " ; read origin 
-[ "$origin" = "obj" -o "$origin" = "ftp" ] || { echo Invalid input ; exit 1 ; }
+echo ; echo What origin? /usr/obj, ftp.freebsd.org, or OccamBSD /usr/obj ?
+echo -n "(obj/ftp/occamobj): " ; read origin 
 
 echo ; echo Install matching sources in /usr/src on the destination?
 echo -n "(y/n): " ; read src
 [ "$src" = "y" -o "$src" = "n" ] || { echo Invalid input ; exit 1 ; }
-[ "$src" = "y" ] && mustgrow="yes"
-[ "$src" = "y" ] && mustmount="yes"
 
 # Think this feature through with regard to nested boot scripts
 #echo ; echo Copy the VM image into the destination?
@@ -120,7 +124,9 @@ if [ "$origin" = "obj" ] ; then
 		echo "/usr/obj/usr/src/amd64.amd64/release/vm.raw missing"
 		exit 1
 	fi
-else # ftp
+
+elif [ "$origin" = "ftp" ] ; then
+
 	# These questions only apply to ftp origin
 	echo ; echo What version of FreeBSD would you like to configure?
 	echo -n "(release/stable/current): " ; read version
@@ -150,17 +156,27 @@ else # ftp
 	xzimg="$( basename "$img_url" )"
 	img="${xzimg%.xz}"
 	img_base="${img%.raw}"
+
+elif [ "$origin" = "occamobj" ] ; then
+
+	if ! [ -d /usr/obj/usr/src/amd64.amd64/bin/sh ] ; then
+		echo "World build objects not found"
+		exit 1
+	fi
+else
+	# This condition should never occur
+	echo Invalid input
+	exit 1
 fi
 
-echo ; echo Is the target a disk image or hardware device?
-echo -n "(img/dev): " ; read target
-[ "$target" = "img" -o "$target" = "dev" ] || { echo Invalid input ; exit 1 ; }
+echo ; echo Is the target a disk image, hardware device, or boot environment?
+echo -n "(img/dev/be): " ; read target
 
 if [ "$target" = "img" ] ; then
 
-# NOTE: POSSIBLE FIRST USE OF work_dir bun
+	[ "$src" = "y" ] && mustmount="yes"
+	[ "$src" = "y" ] && mustgrow="yes"
 
-	# work_dir will be used for most if not all operations - handle versioned freebsd-dist separately
 	[ -d "${work_dir}" ] || mkdir -p "${work_dir}"	
 
 	if [ "$mustgrow" = "no" ] ; then
@@ -178,7 +194,29 @@ if [ "$target" = "img" ] ; then
 		echo ; echo -n "New VM image size: " ; read newsize
 # Would be nice to valildate this input
 	fi
-else # dev
+
+	echo ; echo Generate bhyve VM guest boot scripts?
+	echo -n "(y/n): " ; read bhyve
+	[ "$bhyve" = "y" -o "$bhyve" = "n" ] || { echo Invalid input ; exit 1 ; }
+
+	echo ; echo Generate Xen DomU VM guest boot script?
+	echo -n "(y/n): " ; read domu
+	[ "$domu" = "y" -o "$domu" = "n" ] || { echo Invalid input ; exit 1 ; }
+
+	echo ; echo Create a VMDK wrapper for the image?
+	echo WARNING: This will break bhyve and xen script device paths!
+	echo -n "(y/n): " ; read vmdk
+	[ "$vmdk" = "y" -o "$vmdk" = "n" ] || { echo Invalid input ; exit 1 ; }
+
+# Rethink this in the context of raw and pseudo-vmdk images
+#	echo ; echo gzip compress the configured image file?
+#	echo Remember to uncompress the image before use!
+#	echo -n "(y/n): " ; read gzip
+#	[ "$gzip" = "y" -o "$gzip" = "n" ] || { echo Invalid input ; exit 1 ; }
+
+elif [ "$target" = "dev" ] ; then
+
+	[ "$src" = "y" ] && mustmount="yes"
 	mustgrow="yes"
 	devices=$( sysctl -n kern.disks )
 	for device in $devices ; do
@@ -203,27 +241,21 @@ else # dev
 		echo "Running zpool labelclear ${target_device}p4"
 		zpool labelclear -f ${target_device}p4 > /dev/null 2>&1
 	fi
-fi
 
-if [ "$target" = "img" ] ; then
-	echo ; echo Generate bhyve VM guest boot scripts?
-	echo -n "(y/n): " ; read bhyve
-	[ "$bhyve" = "y" -o "$bhyve" = "n" ] || { echo Invalid input ; exit 1 ; }
+elif [ "$target" = "be" ] ; then
 
-	echo ; echo Generate Xen DomU VM guest boot script?
-	echo -n "(y/n): " ; read domu
-	[ "$domu" = "y" -o "$domu" = "n" ] || { echo Invalid input ; exit 1 ; }
-
-	echo ; echo Create a VMDK wrapper for the image?
-	echo WARNING: This will break bhyve and xen script device paths!
-	echo -n "(y/n): " ; read vmdk
-	[ "$vmdk" = "y" -o "$vmdk" = "n" ] || { echo Invalid input ; exit 1 ; }
-
-# Rethink this in the context of raw and pseudo-vmdk images
-#	echo ; echo gzip compress the configured image file?
-#	echo Remember to uncompress the image before use!
-#	echo -n "(y/n): " ; read gzip
-#	[ "$gzip" = "y" -o "$gzip" = "n" ] || { echo Invalid input ; exit 1 ; }
+	mustmount="yes"
+	which bectl || { echo bectl not found ; exit 1 ; }
+	bectl check || { echo boot environments not supported ; exit 1 ; }
+	zpool list
+	echo ; echo zpool for the new boot environment?
+	echo -n "zpool: " ; read pool
+	zpool list -H -o name $pool || \
+		{ echo Requested zpool not found ; exit 1 ; }
+else
+	# This condition should never occur
+	echo Invalid input
+	exit 1
 fi
 
 
@@ -237,48 +269,27 @@ if [ "$mustmount" = "yes" ] ; then
 fi
 
 if [ "$origin" = "ftp" ] ; then
-
-
-# Decide if creating freebsd-dist, even if not used bun
-
-
-
-	[ -d "${work_dir}/$version/freebsd-dist" ] ||  mkdir -p "${work_dir}/$version/freebsd-dist"
+	[ -d "${work_dir}/$version/freebsd-dist" ] || \
+		mkdir -p "${work_dir}/$version/freebsd-dist"
 	[ -d "${work_dir}/$version/freebsd-dist" ] || \
 		{ echo "mkdir -p $work_dir/$version/freebsd-dist failed" ; exit 1 ; }
-
-	if [ -f "$work_dir/$version/$xzimg" ] ; then
-		echo ; echo $xzimg exists. Fetch fresh?
-		echo -n "(y/n): " ; read freshimg
-		[ "$freshimg" = "y" -o "$freshimg" = "n" ] || 
-			{ echo Invalid input ; exit 1 ; }
-		if [ "$freshimg" = "y" ] ; then
-			echo ; echo Moving "$work_dir/$version/$xzimg" to \
-				"$work_dir/$version/${xzimg}.prev"
-			mv "$work_dir/$version/$xzimg" \
-				"$work_dir/$version/${xzimg}.prev"
+	if [ "$target" = "dev" -o "$target" = "img" ] ; then
+		echo Fetching VM-IMAGE
+		if [ -f "$work_dir/$version/$xzimg" ] ; then
+			# -i will indeed fail if the comparison file is missing
+			fetch -a -i "$work_dir/$version/$xzimg" "$img_url" || \
+				{ echo fetch failed ; exit 1 ; }
+		else
+			fetch -a "$img_url" || \
+				{ echo fetch failed ; exit 1 ; }
 		fi
-	else
-		freshimg="y"
-	fi
-
-	if [ "$freshimg" = "y" ] ; then
-		echo ; echo Fetching $img from $img_url
-		cd "$work_dir/$version"
-		# Any need for fetch -i?
-		fetch "$img_url" || \
-			{ echo fetch failed ; exit 1 ; }
 	fi
 fi
 
 # Additional Cleanup - do not remove the compressed images
-
 # Without versions... THESE ARE QUITE WRONG FOR ALL FTP ORIGINS
-
 # IN FACT, the vmdk handling might be wrong given that a vmdk can be vm.raw or versioned...
 
-
-# IS $version EVEN SET AT THIS POINT?
 
 [ -f "$work_dir/vm.raw" ] && \
 	rm "$work_dir/vm.raw"
@@ -294,8 +305,10 @@ rm $work_dir/$version/*.vmdk > /dev/null 2>&1
 rm $work_dir/*.gz > /dev/null 2>&1
 rm $work_dir/$version/*.gz > /dev/null 2>&1
 
+
 if [ "$target" = "dev" ] ; then
-	if [ "$origin" = "obj" ] ; then
+	# These would be one in the same
+	if [ "$origin" = "obj" -o "$origin" = "occamobj" ] ; then
 		echo Imaging vm.raw to /dev/$target_device
 		echo "Device size:"
 		echo -n "  "
@@ -305,8 +318,8 @@ if [ "$target" = "dev" ] ; then
 				{ echo "dd failed" ; exit 1 ; }
 		echo ; echo Recovering $target_device partitioning
 		gpart recover $target_device
-	else # ftp
-# Should exist and not need a test?
+	else # origin = ftp
+		# Redundant test?
 		[ -f $work_dir/$version/$xzimg ] || \
 			{ echo $work_dir/$version/$xzimg missing ; exit 1 ; }
 		echo Imaging $work_dir/$version/$xzimg to /dev/$target_device
@@ -318,27 +331,173 @@ if [ "$target" = "dev" ] ; then
 		echo ; echo Recovering $target_device partitioning
 		gpart recover $target_device
 	fi
-else # img
+
+elif [ "$target" = "img" ] ; then
+
 	if [ "$origin" = "obj" ] ; then
 
-# NOTE: POSSIBLE FIRST USE OF work_dir bun
+# NOTE: POSSIBLE FIRST USE OF work_dir
 # ONLY NEED TO COPY IF TARGET IS IMG
 
 		cp /usr/obj/usr/src/amd64.amd64/release/vm.raw $work_dir/
 
 # SKIP THIS STEP IF GOING DIRECTLY FROM OBJ TO IMG?
 
-
-
-	else # ftp
+	else # origin=ftp
 		cd "$work_dir/$version"
 		echo ; echo Uncompressing "$work_dir/$version/$xzimg"
 # Uncompressed image will be $work_dir/$version/$img with no .xz suffix
 		\time -h unxz --verbose --keep "$work_dir/$version/$xzimg"
 	fi
+
+elif [ "$target" = "be" ] ; then
+
+	if [ "$origin" = "ftp" ] ; then
+
+		cd $work_dir/$version/freebsd-dist/
+		if [ -f "$work_dir/$version/freebsd-dist/base.txz" ] ; then
+			echo Fetching $dist_url/base.txz
+			# -i will indeed fail if the comparison file is missing
+			fetch -a -i base.txz $dist_url/base.txz || \
+				{ echo fetch failed ; exit 1 ; }
+		else
+			fetch -a  $dist_url/base.txz || \
+				{ echo fetch failed ; exit 1 ; }
+		fi
+
+		if [ -f "$work_dir/$version/freebsd-dist/kernel.txz" ] ; then
+			echo Fetching $dist_url/kernel.txz
+			# -i will indeed fail if the comparison file is missing
+			fetch -a -i kernel.txz $dist_url/kernel.txz || \
+				{ echo fetch failed ; exit 1 ; }
+		else
+			fetch -a  $dist_url/kernel.txz || \
+				{ echo fetch failed ; exit 1 ; }
+		fi
+
+		# Determine the date stamp of base.txz, date format is 20230406
+		be_epoch_date=$( stat -f %a base.txz )
+		be_date=$( date -f %s "$be_epoch_date" +%Y%m%d )
+
+echo DEBUG BE DATE IS $be_date, look correct? ; read correct
+
+
+# CONSIDER that someone might want a dozen variations on the same snapshot
+# Number them? As for a number?
+		bectl list -H -c name | cut -f1 | grep $be_date && \
+		{ echo $be_name confilicts with existing BE ; exit 1 ; }
+
+# NOT WHAT WE WANT (It clones the current one)
+#		echo Creating boot environment $be_date
+#		bectl create -r $be_date || \
+#			{ echo bectl create failed ; exit 1 ; }
+
+	zfs create -o canmount=noauto -o mountpoint=/ $pool/ROOT/$be_date || \
+			{ echo $pool/ROOT/$be_date failed to create ; exit ; }
+
+echo DEBUG listing the results ; zfs list | grep $be_date 
+echo look good? ; read good
+
+	# Hoping it handles nested datasets should we add them
+		echo Mounting $be_date to /media
+		bectl mount $be_date /media || \
+			{ echo bectl mount failed ; exit 1 ; }
+
+		echo ; echo Extracting base.txz to /media
+		cat base.txz | tar -xUpf - -C /media/ || \
+			{ echo base.txz extraction failed ; exit 1 ; }
+
+		echo ; echo Extracting kernel.txz to /media
+		cat kernel.txz | tar -xUpf - -C /media/ || \
+			{ echo kernel.txz extraction failed ; exit 1 ; }
+
+
+
+
+
+# No need to update boot blocks if the pool is not updated!
+# Update boot blocks! Sample syntax:
+# Need a second mount point, no?
+#cp ~/boot/loader.efi /mnt/efi/boot/bootx64.efi
+# How to determine the root device of the current pool?
+#gpart bootcode -b ./pmbr -p ./gptzfsboot -i 2 ada0
+
+# REMIND THE USER HOW TO TEMPORARILY ACTIVATE THE NEW BOOT ENVIRONMENT
+# UNMOUNT MEDIA!
+
+	elif [ "$origin" = "occamobj" ] ; then
+
+	echo ; echo New boot environment name?
+	echo -n "BE name: " ; read be_name
+# CONSIDER that someone might want a dozen variations on the same snapshot
+# Number them? As for a number?
+		bectl list -H -c name | cut -f1 | grep $be_name && \
+		{ echo $be_name confilicts with existing BE ; exit 1 ; }
+
+	zfs create -o canmount=noauto -o mountpoint=/ $pool/ROOT/$be_name || \
+			{ echo $pool/ROOT/$be_name failed to create ; exit ; }
+
+	# Hoping it handles nested datasets should we add them
+		echo Mounting $be_name to /media
+		bectl mount $be_name /media || \
+			{ echo bectl mount failed ; exit 1 ; }
+
+	echo Installing world - logging to /tmp/installworld.txt
+	cd /usr/src
+	make installworld SRCCONF=/tmp/occambsd/src.conf \
+		DESTDIR=/media > /tmp/installworld.txt || \
+		{ echo installworld failed ; exit 1 ; }
+
+# OccamBSD Syntax: (Ignoring the customization options)
+#	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
+#	installworld SRCCONF=$src_conf $makeoptions \
+#	DESTDIR=${work_dir}/jail/ \
+#	NO_FSCHG=YES \
+#		> $log_dir/install-jail-world.log 2>&1
+
+	echo Installing kernel - logging to /tmp/installkernel.txt
+	make installkernel KERNCONFDIR=/tmp/occambsd KERNCONF=OCCAMBSD \
+		DESTDIR=/media > /tmp/installkernel.txt || \
+		{ echo installkernel failed ; exit 1 ; }
+
+# Correct and does src.conf have any impact?
+	echo Making distribution - logging to /tmp/distribution.txt
+	make distribution SRCCONF=/tmp/occambsd/src.conf \
+		DESTDIR=/media > /tmp/distribution.txt || \
+		{ echo distribution failed ; exit 1 ; }
+
+# OccamBSD Syntax: (Ignoring the customization options)
+#	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
+#	SRCCONF=$src_conf DESTDIR=${work_dir}/jail \
+#		$log_dir/jail-distribution.log 2>&1
+
+
+	fi
+
+# Common to both origins
+	echo ; echo Copying in configuration files from the host
+	[ -f /etc/fstab ] && \
+		cp /etc/fstab /media/etc || \
+		{ echo fstab copy failed ; exit 1 ; }
+	[ -f /etc/rc.conf ] && \
+		cp /etc/rc.conf /media/etc || \
+		{ echo rc.conf copy failed ; exit 1 ; }
+	[ -f /etc/wpa_supplicant.conf ] && \
+		cp /etc/wpa_supplicant.conf /media/etc || \
+		{ echo wpa_supplicant.conf copy failed ; exit 1 ; }
+	[ -f /etc/sysctl.conf ] && \
+		cp /etc/sysctl.conf /media/etc || \
+		{ echo rc.conf copy failed ; exit 1 ; }
+	[ -f /boot/loader.conf ] && \
+		cp /boot/loader.conf /media/boot || \
+		{ echo rc.conf copy failed ; exit 1 ; }
+else
+	# This condition should never occur
+	echo Invalid input
+	exit 1
 fi
 
-# BARE MINIMUM EFFORT IS COMPLETE
+# MINIMUM STEPS FOR EACH TARGET ARE COMPLETE
 
 
 # EXPAND TARGET IF TYPE DEV AND ADD OPTIONAL CONTENTS
@@ -387,6 +546,7 @@ rootfs="$( gpart show $target_device | tail -2 | head -1 | awk '{print $4}' )"
 			df -h | grep media
 		fi
 	else
+		echo
 		zpool list
 		# SAFETY TEST GIVEN HOW MANY FREEBSD ZPOOLS ARE NAMED \"ZROOT\"
 		# HOWEVER that is our /usr/obj zpool name. Offer to export it?
@@ -415,31 +575,29 @@ fi
 # OPTIONAL SOURCES
 
 if [ "$src" = "y" ] ; then
-	if [ "$origin" = "obj" ] ; then
+	if [ "$origin" = "obj" -o "$origin" = "occamobj" ] ; then
 		echo Copying /usr/src to /media/usr/src
 # Watch those paths
-		tar cf - /usr/src | tar xf - -C /media || \
+		tar cf - /usr/src | tar xpf - -C /media || \
 			{ echo /usr/src failed to copy ; exit 1 ; }
 			df -h | grep media
-	else
-		if [ "$freshimg" = "y" -o ! -f "$work_dir/$version/freebsd-dist/src.txz" ] ; then
-			cd $work_dir/$version/freebsd-dist/
-			[ -f "$work_dir/$version/freebsd-dist/src.txz" ] &&
-				rm src.txz
+	else # ftp
+#		if [ "$freshimg" = "y" -o ! -f "$work_dir/$version/freebsd-dist/src.txz" ] ; then
+		cd $work_dir/$version/freebsd-dist/
+		if [ -f "$work_dir/$version/freebsd-dist/src.txz" ] ; then
 			echo Fetching $dist_url/src.txz
-			fetch $dist_url/src.txz || \
+			# -i will indeed fail if the comparison file is missing
+			fetch -a -i src.txz $dist_url/src.txz || \
 				{ echo fetch failed ; exit 1 ; }
-			srcisfresh=1
+		else
+			fetch -a  $dist_url/src.txz || \
+				{ echo fetch failed ; exit 1 ; }
 		fi
-
-		# Should have src.txz at this point
-
-	[ -f "$work_dir/$version/freebsd-dist/src.txz" ] || \
-			{ echo "SOMETHING WENT VERY WRONG DOWNLOADING src.txz" ; exit 1 ; }
 
 		cd $work_dir/$version/freebsd-dist/
 		echo ; echo Extracting src.txz to /media
-		cat src.txz | tar -xf - -C /media/
+		cat src.txz | tar -xpf - -C /media/ || \
+			{ echo src.txz extraction failed ; exit 1 ; }
 
 		df -h | grep media
 	fi
@@ -458,41 +616,29 @@ if [ "$dist" = "y" ] ; then
 #			cp /usr/obj/usr/src/amd64.amd64/release/base.txz \
 #				/media/usr/freebsd-dist/
 		echo Distribution sets not supported for build images ; sleep 3
-	else # ftp
-		if [ "$freshdist" = "y" -o ! -f "$work_dir/$version/freebsd-dist/base.txz" ] ; then
-			cd $work_dir/$version/freebsd-dist/
-			echo Fetching distributions sets
-			rm MANIFEST
-			fetch $dist_url/MANIFEST || \
-				{ echo fetch failed ; exit 1 ; }
-			rm base*
-			fetch $dist_url/base-dbg.txz || \
-				{ echo fetch failed ; exit 1 ; }
-			fetch $dist_url/base.txz || \
-				{ echo fetch failed ; exit 1 ; }
-			rm kernel*
-			fetch $dist_url/kernel-dbg.txz || \
-				{ echo fetch failed ; exit 1 ; }
-			fetch $dist_url/kernel.txz || \
-				{ echo fetch failed ; exit 1 ; }
-			rm lib32*
-			fetch $dist_url/lib32-dbg.txz || \
-				{ echo fetch failed ; exit 1 ; }
-			fetch $dist_url/lib32.txz || \
-				{ echo fetch failed ; exit 1 ; }
-			rm ports.txz
-			fetch $dist_url/ports.txz || \
-				{ echo fetch failed ; exit 1 ; }
-			rm tests.txz
-			fetch $dist_url/tests.txz || \
-				{ echo fetch failed ; exit 1 ; }
-			if ! [ "$srcisfresh" = "1" ] ; then
-				rm src.txz
-				fetch $dist_url/src.txz
-			fi
-		fi
+	else # ftp or be
 
-		echo Copying distributions sets
+		cd $work_dir/$version/freebsd-dist/
+		echo Fetching fresh distributions sets as needed
+		# Relying on fetch -i for freshness
+
+		[ -f MANIFEST ] || fetch $dist_url/MANIFEST || \
+			{ echo fetch failed ; exit 1 ; }
+
+		cat MANIFEST | cut -f 1 | while read dist_set ; do
+
+			if [ -f "$dist_set" ] ; then
+			fetch -a -i "$dist_set" "$dist_url/$dist_set" || \
+				{ echo fetch failed ; exit 1 ; }
+			else
+			fetch -a "$dist_url/$dist_set" || \
+					{ echo fetch failed ; exit 1 ; }
+			fi
+		done
+
+echo DEBUG listing for success ; ls -l ; echo look good? ; read listing
+
+		echo Copying distributions sets to /media/usr
 		cp -rp $work_dir/$version/freebsd-dist /media/usr/
 
 		df -h | grep media
@@ -660,8 +806,11 @@ if [ "$mustmount" = "yes" ] ; then
 	echo -n "(y/n): " ; read umount
 	[ "$umount" = "y" -o "$umount" = "n" ] || \
 		{ echo Invalid input ; exit 1 ; }
+
+# NEED BE HANDLING HERE - no pool export
+
 	if [ "$umount" = "y" ] ; then
-		if [ "$rootfs" = "freebsd-ufs" ] ; then
+		if [ "$rootfs" = "freebsd-ufs" -o "$target" = "be" ] ; then
 			echo ; echo Unmounting /media
 			umount /media || { echo umount failed ; exit 1 ; }
 		else
