@@ -336,7 +336,6 @@ elif [ "$target" = "img" ] ; then
 
 	if [ "$origin" = "obj" ] ; then
 
-# NOTE: POSSIBLE FIRST USE OF work_dir
 # ONLY NEED TO COPY IF TARGET IS IMG
 
 		cp /usr/obj/usr/src/amd64.amd64/release/vm.raw $work_dir/
@@ -379,24 +378,13 @@ elif [ "$target" = "be" ] ; then
 		be_epoch_date=$( stat -f %a base.txz )
 		be_date=$( date -f %s "$be_epoch_date" +%Y%m%d )
 
-echo DEBUG BE DATE IS $be_date, look correct? ; read correct
-
-
 # CONSIDER that someone might want a dozen variations on the same snapshot
 # Number them? As for a number?
 		bectl list -H -c name | cut -f1 | grep $be_date && \
 		{ echo $be_name confilicts with existing BE ; exit 1 ; }
 
-# NOT WHAT WE WANT (It clones the current one)
-#		echo Creating boot environment $be_date
-#		bectl create -r $be_date || \
-#			{ echo bectl create failed ; exit 1 ; }
-
 	zfs create -o canmount=noauto -o mountpoint=/ $pool/ROOT/$be_date || \
 			{ echo $pool/ROOT/$be_date failed to create ; exit ; }
-
-echo DEBUG listing the results ; zfs list | grep $be_date 
-echo look good? ; read good
 
 	# Hoping it handles nested datasets should we add them
 		echo Mounting $be_date to /media
@@ -411,9 +399,11 @@ echo look good? ; read good
 		cat kernel.txz | tar -xUpf - -C /media/ || \
 			{ echo kernel.txz extraction failed ; exit 1 ; }
 
-
-
-
+echo ; echo You will need to update your boot blocks if you upgrade your zpool
+echo ; echo The new boot environment is NOT activated
+echo Activate it at the loader or with bectl
+echo Listing boot environments ; echo
+bectl list
 
 # No need to update boot blocks if the pool is not updated!
 # Update boot blocks! Sample syntax:
@@ -421,9 +411,6 @@ echo look good? ; read good
 #cp ~/boot/loader.efi /mnt/efi/boot/bootx64.efi
 # How to determine the root device of the current pool?
 #gpart bootcode -b ./pmbr -p ./gptzfsboot -i 2 ada0
-
-# REMIND THE USER HOW TO TEMPORARILY ACTIVATE THE NEW BOOT ENVIRONMENT
-# UNMOUNT MEDIA!
 
 	elif [ "$origin" = "occamobj" ] ; then
 
@@ -635,8 +622,6 @@ if [ "$dist" = "y" ] ; then
 					{ echo fetch failed ; exit 1 ; }
 			fi
 		done
-
-echo DEBUG listing for success ; ls -l ; echo look good? ; read listing
 
 		echo Copying distributions sets to /media/usr
 		cp -rp $work_dir/$version/freebsd-dist /media/usr/
