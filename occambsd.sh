@@ -109,6 +109,7 @@ while getopts p:s:o:O:wWkGgzjvzZ:S:imn opts ; do
 		;;
 	O)
 		work_dir="$OPTARG"
+  		kernconf_dir="$OPTARG"
 		;;
 	w)
 		reuse_world="1"
