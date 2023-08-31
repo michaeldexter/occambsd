@@ -488,26 +488,87 @@ bectl list
 #	SRCCONF=$src_conf DESTDIR=${work_dir}/jail \
 #		$log_dir/jail-distribution.log 2>&1
 
-
 	fi
 
 # Common to both origins
-	echo ; echo Copying in configuration files from the host
-	[ -f /etc/fstab ] && \
-		cp /etc/fstab /media/etc || \
-		{ echo fstab copy failed ; exit 1 ; }
-	[ -f /etc/rc.conf ] && \
-		cp /etc/rc.conf /media/etc || \
-		{ echo rc.conf copy failed ; exit 1 ; }
-	[ -f /etc/wpa_supplicant.conf ] && \
-		cp /etc/wpa_supplicant.conf /media/etc || \
-		{ echo wpa_supplicant.conf copy failed ; exit 1 ; }
-	[ -f /etc/sysctl.conf ] && \
-		cp /etc/sysctl.conf /media/etc || \
-		{ echo rc.conf copy failed ; exit 1 ; }
-	[ -f /boot/loader.conf ] && \
-		cp /boot/loader.conf /media/boot || \
-		{ echo rc.conf copy failed ; exit 1 ; }
+
+	if [ -f /etc/fstab ] ; then
+		echo Copy the host fstab to the destination?
+		echo -n "(y/n): " ; read answer
+		[ "$answer" = "y" -o "$answer" = "n" ] || \
+			{ echo Invalid input ; exit 1 ; }
+		if [ "$answer" = "y" ] ; then
+			cp /etc/fstab /media/etc || \
+				{ echo fstab copy failed ; exit 1 ; }
+		fi
+	fi
+
+	if [ -f /etc/rc.conf ] ; then
+		echo Copy the host rc.conf to the destination?
+		echo -n "(y/n): " ; read answer
+		[ "$answer" = "y" -o "$answer" = "n" ] || \
+			{ echo Invalid input ; exit 1 ; }
+		if [ "$answer" = "y" ] ; then
+			cp /etc/rc.conf /media/etc || \
+				{ echo rc.conf copy failed ; exit 1 ; }
+		fi
+	fi
+
+	if [ -f /etc/resolv.conf ] ; then
+		echo Copy the host resolv.conf to the destination?
+		echo -n "(y/n): " ; read answer
+		[ "$answer" = "y" -o "$answer" = "n" ] || \
+			{ echo Invalid input ; exit 1 ; }
+		if [ "$answer" = "y" ] ; then
+			cp /etc/resolv.conf /media/etc || \
+				{ echo resolv.conf copy failed ; exit 1 ; }
+		fi
+	fi
+
+	if [ -f /etc/wpa_supplicant.conf ] ; then
+		echo Copy the host wpa_supplicant.conf to the destination?
+		echo -n "(y/n): " ; read answer
+		[ "$answer" = "y" -o "$answer" = "n" ] || \
+			{ echo Invalid input ; exit 1 ; }
+		if [ "$answer" = "y" ] ; then
+			cp /etc/wpa_supplicant.conf /media/etc || \
+			{ echo wpa_supplicant.conf copy failed ; exit 1 ; }
+		fi
+	fi
+
+	if [ -f /etc/sysctl.conf ] ; then
+		echo Copy the host sysctl.conf to the destination?
+		echo -n "(y/n): " ; read answer
+		[ "$answer" = "y" -o "$answer" = "n" ] || \
+			{ echo Invalid input ; exit 1 ; }
+		if [ "$answer" = "y" ] ; then
+			cp /etc/sysctl.conf /media/etc || \
+				{ echo sysctl.conf copy failed ; exit 1 ; }
+		fi
+	fi
+
+	if [ -f /boot/loader.conf ] ; then
+		echo Copy the host loader.conf to the destination?
+		echo -n "(y/n): " ; read answer
+		[ "$answer" = "y" -o "$answer" = "n" ] || \
+			{ echo Invalid input ; exit 1 ; }
+		if [ "$answer" = "y" ] ; then
+			cp /boot/loader.conf /media/boot || \
+				{ echo loader.conf copy failed ; exit 1 ; }
+		fi
+	fi
+
+	if [ -d /root/.ssh ] ; then
+		echo Copy the host /root/.ssh to the destination?
+		echo -n "(y/n): " ; read answer
+		[ "$answer" = "y" -o "$answer" = "n" ] || \
+			{ echo Invalid input ; exit 1 ; }
+		if [ "$answer" = "y" ] ; then
+			cp -rp /root/.ssh /media/root || \
+				{ echo loader.conf copy failed ; exit 1 ; }
+		fi
+	fi
+
 else
 	# This condition should never occur
 	echo Invalid input
