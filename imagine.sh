@@ -41,8 +41,8 @@
 #
 #	obj: /usr/obj/usr/src/amd64.amd64/release/vm.raw
 #
-#	ftp: i.e. https://download.freebsd.org/ftp/snapshots/VM-IMAGES/14.0-CURRENT/amd64/Latest/FreeBSD-14.0-CURRENT-amd64.raw.xz is downloaded to:
-#	/root/imagine-work/current/FreeBSD-14.0-CURRENT-amd64.raw
+#	ftp: i.e. https://download.freebsd.org/ftp/snapshots/VM-IMAGES/15.0-CURRENT/amd64/Latest/FreeBSD-15.0-CURRENT-amd64.raw.xz is downloaded to:
+#	/root/imagine-work/current/FreeBSD-15.0-CURRENT-amd64.raw
 #	The downloaded raw.xz image is preserved for re-use
 #
 #	occamobj: Installworld and kernel from /usr/obj to a boot environment
@@ -54,7 +54,7 @@
 #
 #	img: Disk image files stay files, optionally grown in size
 #		/root/imagine-work/vm.raw or
-#		i.e. /root/imagine-work/current/FreeBSD-14.0-CURRENT-amd64.raw
+#		i.e. /root/imagine-work/current/FreeBSD-15.0-CURRENT-amd64.raw
 #	be: A new boot environment will be created and populated
 #
 # Options: Grow the disk image (devices are grown automatically)
@@ -93,10 +93,12 @@ stable_dist_url=""
 
 # CURRENT URLS
 
-current_img_url="https://download.freebsd.org/ftp/snapshots/VM-IMAGES/14.0-CURRENT/amd64/Latest/FreeBSD-14.0-CURRENT-amd64.raw.xz"
-#current_img_url="file:///root/imagine-work/current/mirror/FreeBSD-14.0-CURRENT-amd64.raw.xz"
+current_img_url="https://download.freebsd.org/ftp/snapshots/VM-IMAGES/14.0-ALPHA3/amd64/Latest/FreeBSD-14.0-ALPHA3-amd64.raw.xz"
+#current_img_url="https://download.freebsd.org/ftp/snapshots/VM-IMAGES/15.0-CURRENT/amd64/Latest/FreeBSD-15.0-CURRENT-amd64.raw.xz"
+#current_img_url="file:///root/imagine-work/current/mirror/FreeBSD-15.0-CURRENT-amd64.raw.xz"
 
-current_dist_url="https://download.freebsd.org/ftp/snapshots/amd64/amd64/14.0-CURRENT"
+current_dist_url="https://download.freebsd.org/ftp/snapshots/amd64/amd64/14.0-ALPHA3"
+#current_dist_url="https://download.freebsd.org/ftp/snapshots/amd64/amd64/15.0-CURRENT"
 #current_dist_url="file:///root/imagine-work/current/mirror/freebsd-dist"
 
 
@@ -275,9 +277,29 @@ if [ "$origin" = "ftp" ] ; then
 	[ -d "${work_dir}/$version/freebsd-dist" ] || \
 		{ echo "mkdir -p $work_dir/$version/freebsd-dist failed" ; exit 1 ; }
 	if [ "$target" = "dev" -o "$target" = "img" ] ; then
-		echo Fetching VM-IMAGE
+
+
+
+		cd "$work_dir/$version"
+echo PWD DEBUG
+pwd
+
+
+
+		echo Fetching VM-IMAGE to "$work_dir/$version/$xzimg"
 		if [ -f "$work_dir/$version/$xzimg" ] ; then
 			# -i will indeed fail if the comparison file is missing
+
+
+
+
+# THIS IS PUTTING IT IN THE SCRIPT DIRECTORY
+# RELYING ON A NEW FEATURE?
+
+
+
+
+
 			fetch -a -i "$work_dir/$version/$xzimg" "$img_url" || \
 				{ echo fetch failed ; exit 1 ; }
 		else
@@ -320,7 +342,7 @@ if [ "$target" = "dev" ] ; then
 		echo ; echo Recovering $target_device partitioning
 		gpart recover $target_device
 	else # origin = ftp
-		# Redundant test?
+		# Redundant test? No!
 		[ -f $work_dir/$version/$xzimg ] || \
 			{ echo $work_dir/$version/$xzimg missing ; exit 1 ; }
 		echo Imaging $work_dir/$version/$xzimg to /dev/$target_device
@@ -386,6 +408,7 @@ elif [ "$target" = "be" ] ; then
 
 # CONSIDER that someone might want a dozen variations on the same snapshot
 # Number them? As for a number?
+# This is a very weak test
 
 		bectl list -H -c name | cut -f1 | grep $be_name && \
 		{ echo $be_name conflicts with existing BE ; exit 1 ; }
