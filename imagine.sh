@@ -206,10 +206,6 @@ if [ "$target" = "img" ] ; then
 	echo -n "(y/n): " ; read vmdk
 	[ "$vmdk" = "y" -o "$vmdk" = "n" ] || { echo Invalid input ; exit 1 ; }
 
-	echo ; echo Generate Xen DomU VM guest boot script?
-	echo -n "(y/n): " ; read domu
-	[ "$domu" = "y" -o "$domu" = "n" ] || { echo Invalid input ; exit 1 ; }
-
 elif [ "$target" = "dev" ] ; then
 
 	[ "$src" = "y" ] && mustmount="yes"
@@ -257,11 +253,13 @@ else
 	exit 1
 fi
 
-# Do not prevent generating a bhyve script for a device
 echo ; echo Generate bhyve VM guest boot script?
 echo -n "(y/n): " ; read bhyve
-[ "$bhyve" = "y" -o "$bhyve" = "n" ] || \
-	{ echo Invalid input ; exit 1 ; }
+[ "$bhyve" = "y" -o "$bhyve" = "n" ] || { echo Invalid input ; exit 1 ; }
+
+echo ; echo Generate Xen DomU VM guest boot script?
+echo -n "(y/n): " ; read domu
+[ "$domu" = "y" -o "$domu" = "n" ] || { echo Invalid input ; exit 1 ; }
 
 
 # QUESTIONS ANSWERED, ON TO SLOW OPERATIONS
@@ -306,11 +304,6 @@ fetch -a -i "$work_dir/$version/$xzimg" "$img_url" || \
 	fi
 fi
 
-# Additional Cleanup - do not remove the compressed images
-# Without versions... THESE ARE QUITE WRONG FOR ALL FTP ORIGINS
-# IN FACT, the vmdk handling might be wrong given that a vmdk can be vm.raw or versioned...
-
-
 [ -f "$work_dir/vm.raw" ] && \
 	rm "$work_dir/vm.raw"
 [ -f "$work_dir/$version/$img" ] && \
@@ -322,8 +315,6 @@ rm $work_dir/$version/*.sh > /dev/null 2>&1
 rm $work_dir/$version/*.cfg > /dev/null 2>&1
 rm $work_dir/*.vmdk > /dev/null 2>&1
 rm $work_dir/$version/*.vmdk > /dev/null 2>&1
-rm $work_dir/*.gz > /dev/null 2>&1
-rm $work_dir/$version/*.gz > /dev/null 2>&1
 
 
 if [ "$target" = "dev" ] ; then
@@ -636,20 +627,36 @@ rootfs="$( gpart show $target_device | tail -2 | head -1 | awk '{print $4}' )"
 			{ echo zpool zroot in use and will conflict ; exit 1 ; }
 			# -f does not appear to be needed
 
-		if [ "$mustmount" = "yes" ] ; then
-			zpool import -o autoexpand=on -R /media zroot
-		else
-			zpool import -o autoexpand=on -N zroot
+# New logic: Import for expansion, then mount configuration
+
+		zpool import
+
+# Consider renaming the pool
+
+		echo ; echo Importing zpool for expansion
+#		zpool import -o autoexpand=on -o altroot=/media -N zroot
+		zpool import -o autoexpand=on -N zroot
+
+# Is this behavior different for a memory or hardware device?
+
+		echo ; echo Expanding the zpool root partition
+
+		if [ "$target" = "img" ] ; then
+			zpool online -e zroot /dev/${target_device}p4
+		elif [ "$target" = "dev" ] ; then
+			zpool online -e zroot /dev/gpt/rootfs
 		fi
 
-		zpool online -e zroot /dev/${target_device}p4
-
+		zpool list
 		zpool status zroot
-		echo
-		zpool list zroot
-		echo
-		df -h | grep media
-#rootdev="$( zpool status zroot | grep gptid | awk '{print $1}' )"
+
+		echo ; echo Exporting the zpool
+
+		if [ "$mustmount" = "yes" ] ; then
+			sleep 3
+			echo ; echo Importing zpool
+			zpool import -R /media zroot
+		fi
 	fi
 fi
 
@@ -679,7 +686,7 @@ if [ "$src" = "y" ] ; then
 		cd $work_dir/$version/freebsd-dist/
 		echo ; echo Extracting src.txz to /media
 		cat src.txz | tar -xpf - -C /media/ || \
-			{ echo src.txz extraction failed ; exit 1 ; }
+			{ Echo src.txz extraction failed ; exit 1 ; }
 
 		df -h | grep media
 	fi
@@ -780,17 +787,13 @@ if [ "$bhyve" = "y" -o "$domu" = "y" ] ; then
 	[ "$origin" = "ftp" ] && vm_img="$work_dir/$version/$img"
 	[ "$vmdk" = "y" ] && vm_img="${vmdk_img_base}-flat.vmdk"
 	[ "$target" = "dev" ] && vm_img="/dev/$target_device"
+#	[ "$origin" = "occamobj" ] && vm_img="$work_dir/vm.raw"
 
 # Where to put the VM boot scripts relative to the image origin
-	if [ "$target" = "img" ] ; then
-		vm_path="$work_dir/$version"
-	elif [ "$target" = "dev" ] ; then
-		vm_path="$work_dev"
-	elif [ "$origin" = "obj" ] ; then
-		vm_path="$work_dir"
-	elif [ "$origin" = "occamobj" ] ; then
-		vm_path="$work_dir"
-	fi
+	[ "$target" = "img" ] && vm_path="$work_dir/$version"
+	[ "$target" = "dev" ] && vm_path="$work_dir"
+	[ "$origin" = "obj" ] && vm_path="$work_dir"
+	[ "$origin" = "occamobj" ] && vm_path="$work_dir"
 fi
 
 if [ "$bhyve" = "y" ] ; then
@@ -884,14 +887,21 @@ if [ "$mustmount" = "yes" ] ; then
 		echo "\'mdconfig -du $md_id\' as needed"
 	fi
 else
-	if [ "$rootfs" = "freebsd-zfs" ] ; then
+	if [ "$rootfs" = "freebsd-zfs" -a "$mustgrow" = "yes" ] ; then
 		zpool export zroot || { echo zpool export failed ; exit 1 ; }
+	fi
+
+	if [ "$target" = "img" -a "$mustgrow" = "yes" ] ; then
+		echo ; echo Destroying $target_device
+		mdconfig -du $md_id || \
+	{ echo $target_device destroy failed ; mdconfig -lv ; exit 1 ; }
 	fi
 fi
 
-mdconfig -l | grep -q md$md_id && mdconfig -du $md_id
-mdconfig -l | grep -q md$md_id && { echo md$md_id failed to detach ; exit 1 ; }
+#mdconfig -l | grep -q md$md_id && mdconfig -du $md_id
+#mdconfig -l | grep -q md$md_id && { echo md$md_id failed to detach ; exit 1 ; }
 
+zpool list | grep zroot
 mdconfig -lv
 
 exit 0
