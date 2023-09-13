@@ -195,7 +195,7 @@ bhyve -m 1024 -H \\
 	-l com1,stdio \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\
-	-s 2,nvme,$bhyve_img \\
+	-s 2,virtio-blk,$bhyve_img \\
 	-s 31,lpc \\
 	$vm_name
 
@@ -255,6 +255,6 @@ fi
 
 # Could make this conditional on expanded or device
 echo ; echo You may need to run in the VM:
-echo ; echo growpart /dev/nvme0n1 1
-echo resize2fs /dev/nvme0n1p1
+echo ; echo growpart /dev/vda 1
+echo resize2fs /dev/vda1
 exit 0

@@ -101,7 +101,7 @@ current_img_url="https://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/14.0-BET
 
 current_dist_url="https://ftp.freebsd.org/ftp/releases/amd64/amd64/14.0-BETA1"
 
-# Waiting on 15.0-CURRENT builds
+# Uncomment for true current during the release process
 #current_img_url="https://ftp.freebsd.org/ftp/snapshots/VM-IMAGES/15.0-CURRENT/amd64/Latest/FreeBSD-15.0-CURRENT-amd64.raw.xz"
 
 #current_dist_url="https://ftp.freebsd.org/ftp/snapshots/amd64/amd64/15.0-CURRENT"
@@ -263,6 +263,8 @@ echo -n "(y/n): " ; read domu
 
 
 # QUESTIONS ANSWERED, ON TO SLOW OPERATIONS
+
+# Move this to before the VM script questions now that it asks about reuse?
 
 if [ "$mustmount" = "yes" ] ; then
 # FIND A RELIABLE TEST FOR BEFORE AND AFTER
@@ -809,7 +811,7 @@ bhyve -c 1 -m 1024 -H -A \\
 	-l com1,stdio \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\
-	-s 2,nvme,$vm_img \\
+	-s 2,virtio-blk,$vm_img \\
 	-s 31,lpc \\
 	$vm_name
 
