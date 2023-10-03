@@ -210,6 +210,18 @@ echo ; echo Removing previous generated images if present
 [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img" ] && \
 	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img"
 
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.ufs.raw" ] && \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.ufs.raw"
+
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.raw" ] && \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.raw"
+
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.ufs.img" ] && \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.ufs.img"
+
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.img" ] && \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.img"
+
 [ -d "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image" ] && \
 	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"
 
@@ -356,8 +368,8 @@ cp $profile ${work_dir}/ || \
 [ "$dry_run" = "1" ] && { echo "Configuration generation complete" ; exit 1 ; }
 
 # "GENERIC"/stock world for testing
-echo ; echo "Overriding build options with stock ones"
 if [ "$generic_world" = "1" ] ; then
+	echo ; echo "Overriding build options with stock ones"
 	src_conf="/dev/null"
 fi
 
@@ -476,8 +488,22 @@ if [ "$generate_vm_image" = "1" ] ; then
 			> $log_dir/vm-image.log 2>&1 || \
 				{ echo vm-image failed ; exit 1 ; }
 
+if [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] ; then
 	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw to $work_dir
 	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw $work_dir/
+else
+	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir
+
+output_imgage_size=$( stat -f %z $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw )
+
+[ "$output_imgage_size" = 0 ] && \
+	{ echo "Resulting image is 0 bytes - verify profile" ; exit 1 ; }
+
+	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw \
+		$work_dir/vm.raw
+fi
+
+# DEBUG: ZFS syntax changed? mkimg: partition 1: No such file or directory
 
 # Verify if vm-image would be re-using ${target}.$target_arch/release/dist/
 
