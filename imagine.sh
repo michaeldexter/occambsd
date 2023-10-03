@@ -659,10 +659,10 @@ HERE
 -kernel /usr/local/share/u-boot/u-boot-qemu-riscv64/u-boot.bin \\
 -drive file=${vm_device},format=raw,id=hd0 \\
 -device virtio-blk-device,drive=hd0
-exit
+
 # Devices to consider:
 
--netdev user,id=net0,ipv6=off,hostfwd=tcp::8022-:22 \
+-netdev user,id=net0 \\
 -device virtio-net-device,netdev=net0
 HERE
 			echo ; echo Note: $work_dir/boot-qemu-riscv.sh
