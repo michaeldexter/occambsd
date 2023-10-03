@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v1.0
+# Version v1.1
 
 
 # VARIABLES - NOTE THE VERSIONED ONE
@@ -50,15 +50,20 @@ if [ "$target" = "img" ] ; then
 	[ -d "${work_dir}" ] || mkdir -p "${work_dir}"	
 
 	if [ "$mustgrow" = "no" ] ; then
-		echo ; echo Grow the root partition from from the default 2G?
-		echo -n "(y/n): " ; read grow
-		[ "$grow" = "y" -o "$grow" = "n" ] || \
+		echo ; echo Grow the root partition from the default 2G?
+		echo -n "(n<Size in G> i.e. 10G): " ; read grow
+		# Need a better variable than grow
+		if [ "$grow" -lt 5 ] ; then
 			{ echo Invalid input ; exit 1 ; }
-		[ "$grow" = "y" ] && mustgrow="yes"
+# THIS WILL BE AN ISSUE
+#		[ "$grow" = "y" ] 
+
+			mustgrow="yes"
+		fi
 	fi
 
 	if [ "$mustgrow" = "yes" ] ; then
-		echo ; echo Grow the VM image to how many G from 2G? i.e. 10G
+		echo ; echo Grow the VM image from 2G? i.e. 10G
 		echo ; echo -n "New VM image size: " ; read newsize
 # Would be nice to valildate this input
 	fi
@@ -168,6 +173,11 @@ if [ "$mustgrow" = "yes" ] ; then
 		truncate -s $newsize $work_dir/debian/vm.raw || \
 			{ echo truncate failed ; exit 1 ; }
 		ls -lh $work_dir/debian/vm.raw
+echo DEBUG DID THAT WORK? ; read work
+
+
+
+
 	fi
 else
 	echo Device growth is relying on growfs for now
@@ -191,7 +201,7 @@ if [ "$bhyve" = "y" ] ; then
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
 kldstat -q -m vmm || kldload vmm
 sleep 1
-bhyve -m 1024 -H \\
+bhyve -m 1024 -H -A \\
 	-l com1,stdio \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\

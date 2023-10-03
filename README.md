@@ -46,7 +46,8 @@ mirror-upstream.sh:		Internet access, ZFS, git
 bos-lite.sh			FreeBSD source and object directories
 bos-upload.sh			Depends on your upload strategy
 occambsd.sh:			FreeBSD 13.0 or later, and late 2022 FreeBSD 14-CURRENT for 'makefs -t zfs' support
-imagine.sh:			Internet access if using images from ftp.freebsd.org
+imagine.sh:			Internet access if using images from download.freebsd.org
+				QEMU and Xen packages as needed
 build-option-smoke-test.sh	FreeBSD source and object directories, optional git for metadata
 rc.local.sh			A FreeBSD userland
 ```
@@ -121,10 +122,10 @@ sh occambsd.sh -O /tmp/arm64-minimum -p profile-arm64-minimum.txt
 
 imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", or a custom-build vm.raw image and assists with configuring it as a virtual machine disk image or images it to a hardware device for hardware boot. Alternatively, it can download the base.txz and kernel.txz distribution sets to a new ZFS boot environment, install OccamBSD /usr/obj build objects to a boot environment using /tmp/occambsd/src.conf and the OCCAMBSD kernel configuration file.
 
-Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts.
+Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts. Note the syntax in the EXAMPLES section of the script.
 
 ```
-sh imagine.sh
+sh imagine.sh -r 15.0-CURRENT
 ```
 
 

@@ -26,600 +26,437 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v1.2
+# Version v.0.3
 
 
-# MAJOR CAVEAT
+# CAVEATS
 
-# FreeBSD RE makefs -t zfs VM-IMAGES use the pool name 'zroot', with is the
-# default suggestion in the installer - realistically use the id and rename
+# This intimately follows the FreeBSD Release Engineering mirror layout.
+# If the layout changes, this will break.
+
+# FreeBSD RE 'makefs -t zfs' VM-IMAGES use the pool name 'zroot', with is the
+# default suggestion in the installer - realistically import by id and rename.
+
+# FreeBSD 15.0-CURRENT VM-IMAGES are now 6GB in size.
+
+# The generated bhyve boot scripts require the bhyve-firmware UEFI package.
+
+# The canonical /media temporary mount point is hard-coded.
+
+# The canonical /usr/src directory is hard-coded when using -r obj or a path.
 
 
-# CONDITIONS TO NAVIGATE
+# EXAMPLES
 
-# Source: obj|ftp|occamobj
+# To fetch a 15.0-CURRENT raw boot image to ~/imagine-work/boot.raw
 #
-#	obj: /usr/obj/usr/src/amd64.amd64/release/vm.raw
+# sh imagine.sh -r 15.0-CURRENT
+
+# To fetch a 15.0-CURRENT raw boot image and write to /dev/da1
 #
-#	ftp: i.e. https://ftp.freebsd.org/ftp/snapshots/VM-IMAGES/15.0-CURRENT/amd64/Latest/FreeBSD-15.0-CURRENT-amd64.raw.xz is downloaded to:
-#	/root/imagine-work/current/FreeBSD-15.0-CURRENT-amd64.raw
-#	The downloaded raw.xz image is preserved for re-use
+# sh imagine.sh -r 15.0-CURRENT -t /dev/da1
+ 
+# To copy a "make release" VM image from the canonical object directory:
+#	/usr/obj/usr/src/amd64.amd64/release/vm.raw to ~/imagine-work/boot.raw
 #
-#	occamobj: Installworld and kernel from /usr/obj to a boot environment
-#	with src.conf and KERNCONF from /tmp/occambsd (all default paths)
+# sh imagine.sh -r obj
+
+# To copy a boot image from a custom path and name to a custom path and name:
 #
-# Target: dev|img|be - Is the VM image imaged with dd(1), stay a file, or .txzs
-#	are expanded to a boot environment?
-#	dev: A hardware device is used such as /dev/da1
+# sh imagine.sh -r /tmp/myvm.img -t /tmp/myvmcopy.raw
+
+# Add '-w /tmp/mydir' to override '~/imagine-work' with an existing directory
+# Add '-z' to fetch the root-on-ZFS image
+# Add '-b' to generate a simple bhyve, xen, or QEMU boot scripts depending on the architecture
+# Add '-g 10' to grow boot image to 10GB
+
+# The local and fetched source boot images will be always preserved for re-use
+
+# To generate a 10GB RISC-V system with root-on-ZFS and a QEMU boot script:
 #
-#	img: Disk image files stay files, optionally grown in size
-#		/root/imagine-work/vm.raw or
-#		i.e. /root/imagine-work/current/FreeBSD-15.0-CURRENT-amd64.raw
-#	be: A new boot environment will be created and populated
+# sh imagine.sh -a riscv -r 14.0-BETA4 -z -g 10 -b
 #
-# Options: Grow the disk image (devices are grown automatically)
-#	obj: Optionally copy in /usr/src
-#	img: Optionally copy in src.txz and distribution sets
-#	img: Generate simple bhyve and Xen configuration and boot files 
-#	img: Create a VMDK wrapper for the image, compress the image
-#	be: Optionally copy in src.txz and distribution sets
+# Add '-v' to generate a VMDK that is QEMU compatible, because you can
+#
+# Do increase the RAM with root-on-ZFS systems but it WILL support the 1G default
 
-# TO DO
-
-# A better check if /media is in use
-# mdconfig cleanup prior to running
-# Validate that a target hardware device is over 6G in size
-# Validate disk size inputs i.e. "10G"
-# Consider reordering the questions BUT, they set flags like mustgrow
-# Consider command line arguments
-
-# VARIABLES - NOTE THE VERSIONED ONES
-
-work_dir="/root/imagine-work"
-vm_name="vm0"
-md_id="42"
-
-
-# RELEASE URLS
-
-release_img_url="https://ftp.freebsd.org/ftp/releases/VM-IMAGES/13.2-RELEASE/amd64/Latest/FreeBSD-13.2-RELEASE-amd64.raw.xz"
-
-release_dist_url="https://ftp.freebsd.org/ftp/releases/amd64/13.2-RELEASE"
-
-
-# STABLE URLS
-
-stable_img_url="https://ftp.freebsd.org/pub/snapshots/VM-IMAGES/13.2-STABLE/amd64/Latest/FreeBSD-13.2-STABLE-amd64.raw.xz"
-stable_dist_url="https://ftp.freebsd.org/pub/snapshots/amd64/13.2-STABLE"
-
-
-# CURRENT/ALPHA/BETA/RC URLS
-
-#current_img_url="https://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/14.0-BETA1/amd64/Latest/FreeBSD-14.0-BETA1-amd64.raw.xz"
-
-current_img_url="https://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/14.0-BETA1/amd64/Latest/FreeBSD-14.0-BETA1-amd64-zfs.raw.xz"
-
-current_dist_url="https://ftp.freebsd.org/ftp/releases/amd64/amd64/14.0-BETA1"
-
-# Uncomment for true current during the release process
-#current_img_url="https://ftp.freebsd.org/ftp/snapshots/VM-IMAGES/15.0-CURRENT/amd64/Latest/FreeBSD-15.0-CURRENT-amd64.raw.xz"
-
-#current_dist_url="https://ftp.freebsd.org/ftp/snapshots/amd64/amd64/15.0-CURRENT"
-
-
-# USER INTERACTION: ANSWER ALL QUESTIONS IN ADVANCE
-
-mustgrow="no"
-mustmount="no"
-
-echo ; echo What origin? /usr/obj, ftp.freebsd.org, or OccamBSD /usr/obj ?
-echo -n "(obj/ftp/occamobj): " ; read origin 
-
-echo ; echo Install matching sources in /usr/src on the destination?
-echo -n "(y/n): " ; read src
-[ "$src" = "y" -o "$src" = "n" ] || { echo Invalid input ; exit 1 ; }
-
-# Think this feature through with regard to nested boot scripts
-#echo ; echo Copy the VM image into the destination?
-#echo -n "(y/n): " ; read vmimg
-#[ "$vmimg" = "y" -o "$vmimg" = "n" ] || { echo Invalid input ; exit 1 ; }
-#[ "$vmimg" = "y" ] && mustgrow="yes"
-#[ "$vmimg" = "y" ] && mustmount="yes"
-
-if [ "$origin" = "obj" ] ; then
-	if ! [ -f /usr/obj/usr/src/amd64.amd64/release/vm.raw ] ; then
-		echo "/usr/obj/usr/src/amd64.amd64/release/vm.raw missing"
-		exit 1
-	fi
-
-elif [ "$origin" = "ftp" ] ; then
-
-	# These questions only apply to ftp origin
-	echo ; echo What version of FreeBSD would you like to configure?
-	echo -n "(release/stable/current): " ; read version
-		[ "$version" = "release" -o "$version" = "stable" -o "$version" = "current" ] || \
-			{ echo Invalid input ; exit 1 ; }
-
-	echo ; echo Install all distribution sets to /usr/freebsd-dist ?
-	echo -n "(y/n): " ; read dist
-	[ "$dist" = "y" -o "$dist" = "n" ] || { echo Invalid input ; exit 1 ; }
-
-	[ "$dist" = "y" ] && mustgrow="yes"
-
-	if [ "$version" = "release" ] ; then
-		img_url="$release_img_url"
-		dist_url="$release_dist_url"
-	elif [ "$version" = "stable" ] ; then
-		img_url="$stable_img_url"
-		dist_url="$stable_dist_url"
-	elif [ "$version" = "current" ] ; then
-		img_url="$current_img_url"
-		dist_url="$current_dist_url"
-	else
-		echo Invalid input
-		exit 1
-	fi
-
-	xzimg="$( basename "$img_url" )"
-	img="${xzimg%.xz}"
-	img_base="${img%.raw}"
-
-elif [ "$origin" = "occamobj" ] ; then
-
-	if ! [ -d /usr/obj/usr/src/amd64.amd64/bin/sh ] ; then
-		echo "World build objects not found"
-		exit 1
-	fi
-else
-	# This condition should never occur
-	echo Invalid input
-	exit 1
-fi
-
-echo ; echo Is the target a disk image, hardware device, or boot environment?
-echo -n "(img/dev/be): " ; read target
-
-if [ "$target" = "img" ] ; then
-
-	[ "$src" = "y" ] && mustmount="yes"
-	[ "$src" = "y" ] && mustgrow="yes"
-
-	[ -d "${work_dir}" ] || mkdir -p "${work_dir}"	
-
-	if [ "$mustgrow" = "no" ] ; then
-		echo ; echo Grow the root partition from from the default 5G?
-		echo -n "(y/n): " ; read grow
-		[ "$grow" = "y" -o "$grow" = "n" ] || \
-			{ echo Invalid input ; exit 1 ; }
-		[ "$grow" = "y" ] && mustgrow="yes"
-	fi
-
-	if [ "$mustgrow" = "yes" ] ; then
-		echo ; echo Grow the VM image to how many G from 5G? i.e. 10G
-		echo Matching sources require + 2G
-		echo Distribution sets require + 1G
-		echo ; echo -n "New VM image size: " ; read newsize
-# Would be nice to valildate this input
-	fi
-
-	echo ; echo Create a VMDK wrapper for the image?
-	echo -n "(y/n): " ; read vmdk
-	[ "$vmdk" = "y" -o "$vmdk" = "n" ] || { echo Invalid input ; exit 1 ; }
-
-elif [ "$target" = "dev" ] ; then
-
-	[ "$src" = "y" ] && mustmount="yes"
-	mustgrow="yes"
-	devices=$( sysctl -n kern.disks )
-	for device in $devices ; do
-		echo
-		echo $device
-		diskinfo -v $device | grep descr
-		diskinfo -v $device | grep bytes
-		echo
-	done
-
-	mdconfig -lv
-
-	echo ; echo What device would you like to dd the VM image to?
-	echo -n "(Device): " ; read target_device
-
-	echo ; echo WARNING! ; echo
-	echo Writing to $target_device is destructive!
-	echo ; echo Continue?
-	echo -n "(y/n): " ; read warning
-	[ "$warning" = "y" -o "$warning" = "n" ] || \
-		{ echo Invalid input ; exit 1 ; }
-	if [ "$warning" = "y" ] ; then
-# Add a check if the devices is mounted
-		echo "Running zpool labelclear ${target_device}p4"
-		zpool labelclear -f ${target_device}p4 > /dev/null 2>&1
-	fi
-
-elif [ "$target" = "be" ] ; then
-
-	mustmount="yes"
-	which bectl || { echo bectl not found ; exit 1 ; }
-	bectl check || { echo boot environments not supported ; exit 1 ; }
+f_usage() {
+	echo ; echo "USAGE:"
+	echo "-w <working directory> (Default: /root/imagine-work)"
+	echo "-a <architecture> [ amd64 arm64 i386 riscv ] (Default: amd64)"
+	echo "-r [ obj | /path/to/image | <version> ] (Release - Required)"
+	echo "obj = /usr/obj/usr/src/<target>.<target_arch>/release/vm.raw"
+	echo "/path/to/image for an existing image"
+	echo "<version> i.e. 13.2-RELEASE 14.0-ALPHAn|BETAn|RCn 15.0-CURRENT"
+	echo "-o (Offline mode to re-use fetched releases and src.txz)"
+	echo "-t <target> [ img | /dev/device | /path/myimg ] (Default: img)"
+	echo "-f (FORCE imaging to a device without asking)"
+	echo "-g <gigabytes> (grow image to gigabytes i.e. 10)"
+	echo "-s (Include src.txz or /usr/src as appropriate)"
+	echo "-m (Mount image and keep mounted for further configuration)"
+	echo "-v (Generate VMDK image wrapper)"
+	echo "-b (Genereate boot scripts)"
 	echo
-	zpool list
-	echo ; echo zpool for the new boot environment?
-	echo -n "zpool: " ; read pool
-	zpool list -H -o name $pool || \
-		{ echo Requested zpool not found ; exit 1 ; }
-else
-	# This condition should never occur
-	echo Invalid input
-	exit 1
-fi
-
-echo ; echo Generate bhyve VM guest boot script?
-echo -n "(y/n): " ; read bhyve
-[ "$bhyve" = "y" -o "$bhyve" = "n" ] || { echo Invalid input ; exit 1 ; }
-
-echo ; echo Generate Xen DomU VM guest boot script?
-echo -n "(y/n): " ; read domu
-[ "$domu" = "y" -o "$domu" = "n" ] || { echo Invalid input ; exit 1 ; }
+	exit 0
+}
 
 
-# QUESTIONS ANSWERED, ON TO SLOW OPERATIONS
+# INTERNAL VARIABLES AND DEFAULTS
 
-# Move this to before the VM script questions now that it asks about reuse?
+#work_dir="/root/imagine-work"	# Default
+#work_dir="~/imagine-work"	# Default
+work_dir=~/imagine-work		# Default - fails if quoted
+arch_input="amd64"		# Default
+hw_platform="amd64"
+cpu_arch="amd64"
+image_arch="amd64"
+release_input=""
+offline_mode=0
+release_type=""
+release_name=""
+release_image_file=""
+release_branch=""
+release_image_xz=""
+rootfs=""
+rootpart=""
+zfs_string=""
+target_input="img"		# Default
+target_type=""
+target_path=""
+target_prefix=""
+force=0
+grow_required=0
+grow_size=""
+include_src=0
+must_mount=0
+keep_mounted=0
+vmdk=0
+boot_scripts=0
+vm_device=""
+vm_name="vm0"			# Default
+md_id=42			# Default
 
-if [ "$mustmount" = "yes" ] ; then
-# FIND A RELIABLE TEST FOR BEFORE AND AFTER
-	echo Unmouting /media
-	mount | grep "media" && umount -f /media # || \
-#		{ echo /media failed to unmount ; exit 1 ; }
-fi
 
-mdconfig -l | grep -q md$md_id && mdconfig -du $md_id
-mdconfig -l | grep -q md$md_id && { echo md$md_id failed to detach ; exit 1 ; }
+# USER INPUT AND VARIABLE OVERRIDES
 
-if [ "$origin" = "ftp" ] ; then
-	[ -d "${work_dir}/$version/freebsd-dist" ] || \
-		mkdir -p "${work_dir}/$version/freebsd-dist"
-	[ -d "${work_dir}/$version/freebsd-dist" ] || \
-		{ echo "mkdir -p $work_dir/$version/freebsd-dist failed" ; exit 1 ; }
-	if [ "$target" = "dev" -o "$target" = "img" ] ; then
+while getopts w:a:r:zt:ofg:smvb opts ; do
+	case $opts in
+	w)
+		work_dir="$OPTARG"
+		;;
+	a)
+		case "$OPTARG" in
+			amd64|arm64|i386|riscv)
+				arch_input="$OPTARG"
+			;;
+			*)
+				echo "Invalid architecture"
+				f_usage
+			;;
+		esac
 
-		# Need to retrieve a VM image
-		cd "$work_dir/$version"
+		case "$arch_input" in
+			amd64)
+				hw_platform="amd64"
+				cpu_arch="amd64"
+				image_arch="amd64"
+			;;
+			arm64)
+				hw_platform="arm64"
+				cpu_arch="aarch64"
+				image_arch="arm64-aarch64"
+			;;
+			i386)
+				hw_platform="i386"
+				cpu_arch="i386"
+				image_arch="i386"
+			;;
+			riscv)
+				hw_platform="riscv"
+				cpu_arch="riscv64"
+				image_arch="riscv-riscv64"
+			;;
 
-		if [ -f "$work_dir/$version/$xzimg" ] ; then
-			echo ; echo "$work_dir/$version/$xzimg exists. Reuse?"
-			echo -n "(y/n): " ; read reuse
-			[ "$reuse" = "y" -o "$reuse" = "n" ] || \
-				{ echo Invalid input ; exit 1 ; }
+		esac
+		;;
+	r) 
+		[ "$OPTARG" ] || f_usage
+		release_input="$OPTARG"
+		;;
+	o)
+		offline_mode=1
+		;;
+	z)
+		zfs_string="-zfs"
+		;;
+	t)
+		[ "$OPTARG" ] || f_usage
+		target_input="$OPTARG"
+		;;
+	f)
+		force=1
+		;;
+	g)
+		grow_size="$OPTARG"
+		# Implied numeric validation
+		[ "$grow_size" -gt 7 ] || \
+			{ echo "-g must be a number larger than 7" ; exit 1 ; }
+		grow_required=1
+		;;
+	s)
+		include_src=1
+		grow_required=1
+		must_mount=1
+		;;
+	m)
+		must_mount=1
+		keep_mounted=1
+		;;
+	v)
+		vmdk=1
+		;;
+	b)
+		boot_scripts=1
+		;;
+	*)
+		f_usage
+		;;
+	esac
+done
 
-			if [ "$reuse" = "n" ] ; then
 
-echo "Fetching fresh VM-IMAGE to $work_dir/$version/$xzimg if out of date"
-				# -i will fail if the comparison file is missing
-fetch -a -i "$work_dir/$version/$xzimg" "$img_url" || \
-	{ echo fetch failed ; exit 1 ; }
+[ -n "$release_input" ] || { echo "-r Release required" ; f_usage ; exit 1 ; }
+
+
+# HEAVY LIFTING FLAG -r RELEASE
+
+if [ "$release_input" = "obj" ] ; then
+	release_type="file"
+release_image_file="/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.raw"
+		[ -r "$release_image_file" ] || \
+			{ echo "$release_image_file not found" ; exit 1 ; }
+
+elif [ -r "$release_input" ] ; then # Path to an image
+	release_type="file"
+	# Consider the vmrun.sh "file" test for boot blocks
+	release_image_file="$release_input"
+	[ -r "$release_image_file" ] || \
+		{ echo "$release_image_file not found" ; exit 1 ; }
+
+	[ "$include_src" = 1 ] && \
+		{ echo "-s src not available with a custom image" ; exit 1 ; }
+
+else # release version i.e. 15.0-CURRENT
+	release_type="ftp"
+	echo "$release_input" | grep -q "-" || \
+		{ echo "Invalid release" ; exit 1 ; }
+	echo "$release_input" | grep -q "FreeBSD" && \
+		{ echo "Invalid release" ; exit 1 ; }
+	release_name="$release_input"
+	release_version=$( echo "$release_input" | cut -d "-" -f 1 )
+	# Further validate the numeric version?
+	release_build=$( echo "$release_input" | cut -d "-" -f 2 )
+	case "$release_build" in
+		CURRENT|STABLE)
+			release_branch="snapshot"
+		;;
+		*)
+			release_branch="release"
+			# This is a false assumption for ALPHA builds
+		;;
+	esac
+
+	release_image_url="https://download.freebsd.org/${release_branch}s/VM-IMAGES/${release_name}/${cpu_arch}/Latest/FreeBSD-${release_name}-${image_arch}${zfs_string}.raw.xz"
+	release_image_xz="${work_dir}/${release_name}/FreeBSD-${release_name}-${image_arch}${zfs_string}.raw.xz"
+
+# Create the work directory if missing
+	[ -d "${work_dir}/${release_name}" ] || \
+		mkdir -p "${work_dir}/${release_name}"
+	[ -d "${work_dir}/${release_name}" ] || \
+		{ echo "mkdir ${work_dir}/${release_name} failed" ; exit 1 ; }
+
+	# Needed for fetch to save the upstream file name
+	cd "${work_dir}/${release_name}"
+
+	# fetch is not idempotent - check if exists before fetch -i
+	if [ -r $release_image_xz ] ; then
+		if [ "$offline_mode" = 0 ] ; then
+		fetch -a -i "$release_image_xz" "$release_image_url" || \
+			{ echo "$release_image_url fetch failed" ; exit 1 ; }
+		fi
+	else
+	fetch -a "$release_image_url" || \
+		{ echo "$release_image_url fetch failed" ; exit 1 ; }
+	fi
+
+release_dist_url="https://download.freebsd.org/${release_branch}s/$image_arch/$release_name"
+src_url="https://download.freebsd.org/${release_branch}s/${hw_platform}/${cpu_arch}/${release_name}/src.txz"
+
+	if [ "$include_src" = 1 ] ; then
+		if [ -r	"src.txz" ] ; then
+			if [ "$offline_mode" = 0 ] ; then
+				fetch -a -i src.txz "$src_url" || \
+				{ echo "$src_url fetch failed" ; exit 1 ; }
 			fi
-		else
-			fetch -a "$img_url" || \
-				{ echo fetch failed ; exit 1 ; }
+	else
+			fetch -a "$src_url" || \
+				{ echo "$src_url fetch failed" ; exit 1 ; }
 		fi
 	fi
-fi
-
-[ -f "$work_dir/vm.raw" ] && \
-	rm "$work_dir/vm.raw"
-[ -f "$work_dir/$version/$img" ] && \
-	rm "$work_dir/$version/$img"
-[ -f "$work_dir/$version/$img" ] && rm "$work_dir/$version/$img"
-rm $work_dir/*.sh > /dev/null 2>&1
-rm $work_dir/*.cfg > /dev/null 2>&1
-rm $work_dir/$version/*.sh > /dev/null 2>&1
-rm $work_dir/$version/*.cfg > /dev/null 2>&1
-rm $work_dir/*.vmdk > /dev/null 2>&1
-rm $work_dir/$version/*.vmdk > /dev/null 2>&1
+	# Better test for invalid input?
+fi # End -r RELEASE HEAVY LIFTING
 
 
-if [ "$target" = "dev" ] ; then
-	# These would be one in the same
-	if [ "$origin" = "obj" -o "$origin" = "occamobj" ] ; then
-		echo Imaging vm.raw to /dev/$target_device
-		echo "Device size:"
-		echo -n "  "
-		stat -f %z /usr/obj/usr/src/amd64.amd64/release/vm.raw
-		\time -h dd of=/dev/$target_device bs=1m status=progress \
-			if=/usr/obj/usr/src/amd64.amd64/release/vm.raw || \
-				{ echo "dd failed" ; exit 1 ; }
-		echo ; echo Recovering $target_device partitioning
-		gpart recover $target_device
-	else # origin = ftp
-		# Redundant test? No!
-		[ -f $work_dir/$version/$xzimg ] || \
-			{ echo $work_dir/$version/$xzimg missing ; exit 1 ; }
-		echo Imaging $work_dir/$version/$xzimg to /dev/$target_device
-		\time -h cat $work_dir/$version/$xzimg | \
-			xz -d -k | \
-			dd of=/dev/$target_device bs=1m status=progress \
-				iflag=fullblock || \
-					{ echo unxz/dd failed ; exit 1 ; }
-		echo ; echo Recovering $target_device partitioning
-		gpart recover $target_device
+# HEAVY LIFTING FLAG -t TARGET
+
+target_prefix=$( printf %.1s "$target_input" )
+
+if [ "$target_input" = "img" ] ; then
+	target_type="img"
+	target_path="${work_dir}/boot.raw"
+
+	[ -d "$work_dir" ] || mkdir -p "$work_dir"
+	[ -d "$work_dir" ] || { echo "mkdir -p $work_dir failed" ; exit 1 ; }
+
+elif [ "$target_prefix" = "/" ] ; then
+	if [ "$( echo "$target_input" | cut -d "/" -f 2 )" = "dev" ] ; then
+
+		target_type="dev"
+
+		[ "$( id -u )" = 0 ] || { echo "Must be root for -t dev" ; exit 1 ; } 
+
+		target_device="$target_input"
+		grow_required=1
+
+	else # image path
+		[ -d $( dirname "$target_input" ) ] || \
+			{ echo "-t directory path does not exist" ; exit 1 ; }
+		[ -w $( dirname "$target_input" ) ] || \
+			{ echo "-t directory path is not writable" ; exit 1 ; }
+		target_type="path"
+		target_path="$target_input"
 	fi
-
-elif [ "$target" = "img" ] ; then
-
-	if [ "$origin" = "obj" ] ; then
-
-# ONLY NEED TO COPY IF TARGET IS IMG
-
-		cp /usr/obj/usr/src/amd64.amd64/release/vm.raw $work_dir/
-
-# SKIP THIS STEP IF GOING DIRECTLY FROM OBJ TO IMG?
-
-	else # origin=ftp
-		cd "$work_dir/$version"
-		echo ; echo Uncompressing "$work_dir/$version/$xzimg"
-# Uncompressed image will be $work_dir/$version/$img with no .xz suffix
-		\time -h unxz --verbose --keep "$work_dir/$version/$xzimg"
-	fi
-
-elif [ "$target" = "be" ] ; then
-
-	if [ "$origin" = "ftp" ] ; then
-
-		cd $work_dir/$version/freebsd-dist/
-		if [ -f "$work_dir/$version/freebsd-dist/base.txz" ] ; then
-			echo Fetching $dist_url/base.txz
-			# -i will indeed fail if the comparison file is missing
-			fetch -a -i base.txz $dist_url/base.txz || \
-				{ echo fetch failed ; exit 1 ; }
-		else
-			fetch -a  $dist_url/base.txz || \
-				{ echo fetch failed ; exit 1 ; }
-		fi
-
-		if [ -f "$work_dir/$version/freebsd-dist/kernel.txz" ] ; then
-			echo Fetching $dist_url/kernel.txz
-			# -i will indeed fail if the comparison file is missing
-			fetch -a -i kernel.txz $dist_url/kernel.txz || \
-				{ echo fetch failed ; exit 1 ; }
-		else
-			fetch -a  $dist_url/kernel.txz || \
-				{ echo fetch failed ; exit 1 ; }
-		fi
-
-		if [ "$version" = "release" ] ; then
-			echo ; echo New boot environment name?
-			echo -n "BE name: " ; read be_name
-		else # stable or current
-			# Determine the date stamp of base.txz
-			be_epoch_date=$( stat -f %a base.txz )
-			be_name=$( date -f %s "$be_epoch_date" +%Y%m%d )
-		fi
-
-# CONSIDER that someone might want a dozen variations on the same snapshot
-# Number them? As for a number?
-# This is a very weak test
-
-		bectl list -H -c name | cut -f1 | grep $be_name && \
-		{ echo $be_name conflicts with existing BE ; exit 1 ; }
-
-	zfs create -o canmount=noauto -o mountpoint=/ $pool/ROOT/$be_name || \
-			{ echo $pool/ROOT/$be_name failed to create ; name ; }
-
-	# Hoping it handles nested datasets should we add them
-		echo Mounting $be_name to /media
-		bectl mount $be_name /media || \
-			{ echo bectl mount failed ; exit 1 ; }
-
-		echo ; echo Extracting base.txz to /media
-		cat base.txz | tar -xUpf - -C /media/ || \
-			{ echo base.txz extraction failed ; exit 1 ; }
-
-		echo ; echo Extracting kernel.txz to /media
-		cat kernel.txz | tar -xUpf - -C /media/ || \
-			{ echo kernel.txz extraction failed ; exit 1 ; }
-
-echo ; echo You will need to update your boot blocks if you upgrade your zpool
-echo ; echo The new boot environment is NOT activated
-echo Activate it at the loader or with bectl
-echo Listing boot environments ; echo
-bectl list
-
-# No need to update boot blocks if the pool is not updated!
-# Update boot blocks! Sample syntax:
-# Need a second mount point, no?
-#cp ~/boot/loader.efi /mnt/efi/boot/bootx64.efi
-# How to determine the root device of the current pool?
-#gpart bootcode -b ./pmbr -p ./gptzfsboot -i 2 ada0
-
-	elif [ "$origin" = "occamobj" ] ; then
-
-	echo ; echo New boot environment name?
-	echo -n "BE name: " ; read be_name
-# CONSIDER that someone might want a dozen variations on the same snapshot
-# Number them? As for a number?
-		bectl list -H -c name | cut -f1 | grep $be_name && \
-		{ echo $be_name confilicts with existing BE ; exit 1 ; }
-
-	zfs create -o canmount=noauto -o mountpoint=/ $pool/ROOT/$be_name || \
-			{ echo $pool/ROOT/$be_name failed to create ; exit ; }
-
-	# Hoping it handles nested datasets should we add them
-		echo Mounting $be_name to /media
-		bectl mount $be_name /media || \
-			{ echo bectl mount failed ; exit 1 ; }
-
-	echo Installing world - logging to /tmp/installworld.txt
-	cd /usr/src
-	make installworld SRCCONF=/tmp/occambsd/src.conf \
-		DESTDIR=/media > /tmp/installworld.txt || \
-		{ echo installworld failed ; exit 1 ; }
-
-# OccamBSD Syntax: (Ignoring the customization options)
-#	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-#	installworld SRCCONF=$src_conf $makeoptions \
-#	DESTDIR=${work_dir}/jail/ \
-#	NO_FSCHG=YES \
-#		> $log_dir/install-jail-world.log 2>&1
-
-	echo Installing kernel - logging to /tmp/installkernel.txt
-	make installkernel KERNCONFDIR=/tmp/occambsd KERNCONF=OCCAMBSD \
-		DESTDIR=/media > /tmp/installkernel.txt || \
-		{ echo installkernel failed ; exit 1 ; }
-
-# Correct and does src.conf have any impact?
-	echo Making distribution - logging to /tmp/distribution.txt
-	make distribution SRCCONF=/tmp/occambsd/src.conf \
-		DESTDIR=/media > /tmp/distribution.txt || \
-		{ echo distribution failed ; exit 1 ; }
-
-# OccamBSD Syntax: (Ignoring the customization options)
-#	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
-#	SRCCONF=$src_conf DESTDIR=${work_dir}/jail \
-#		$log_dir/jail-distribution.log 2>&1
-
-	fi
-
-# Common to both origins
-
-	if [ -f /etc/fstab ] ; then
-		echo Copy the host fstab to the destination?
-		echo -n "(y/n): " ; read answer
-		[ "$answer" = "y" -o "$answer" = "n" ] || \
-			{ echo Invalid input ; exit 1 ; }
-		if [ "$answer" = "y" ] ; then
-			cp /etc/fstab /media/etc || \
-				{ echo fstab copy failed ; exit 1 ; }
-		fi
-	fi
-
-	if [ -f /etc/rc.conf ] ; then
-		echo Copy the host rc.conf to the destination?
-		echo -n "(y/n): " ; read answer
-		[ "$answer" = "y" -o "$answer" = "n" ] || \
-			{ echo Invalid input ; exit 1 ; }
-		if [ "$answer" = "y" ] ; then
-			cp /etc/rc.conf /media/etc || \
-				{ echo rc.conf copy failed ; exit 1 ; }
-		fi
-	fi
-
-	if [ -f /etc/resolv.conf ] ; then
-		echo Copy the host resolv.conf to the destination?
-		echo -n "(y/n): " ; read answer
-		[ "$answer" = "y" -o "$answer" = "n" ] || \
-			{ echo Invalid input ; exit 1 ; }
-		if [ "$answer" = "y" ] ; then
-			cp /etc/resolv.conf /media/etc || \
-				{ echo resolv.conf copy failed ; exit 1 ; }
-		fi
-	fi
-
-	if [ -f /etc/wpa_supplicant.conf ] ; then
-		echo Copy the host wpa_supplicant.conf to the destination?
-		echo -n "(y/n): " ; read answer
-		[ "$answer" = "y" -o "$answer" = "n" ] || \
-			{ echo Invalid input ; exit 1 ; }
-		if [ "$answer" = "y" ] ; then
-			cp /etc/wpa_supplicant.conf /media/etc || \
-			{ echo wpa_supplicant.conf copy failed ; exit 1 ; }
-		fi
-	fi
-
-	if [ -f /etc/sysctl.conf ] ; then
-		echo Copy the host sysctl.conf to the destination?
-		echo -n "(y/n): " ; read answer
-		[ "$answer" = "y" -o "$answer" = "n" ] || \
-			{ echo Invalid input ; exit 1 ; }
-		if [ "$answer" = "y" ] ; then
-			cp /etc/sysctl.conf /media/etc || \
-				{ echo sysctl.conf copy failed ; exit 1 ; }
-		fi
-	fi
-
-	if [ -f /boot/loader.conf ] ; then
-		echo Copy the host loader.conf to the destination?
-		echo -n "(y/n): " ; read answer
-		[ "$answer" = "y" -o "$answer" = "n" ] || \
-			{ echo Invalid input ; exit 1 ; }
-		if [ "$answer" = "y" ] ; then
-			cp /boot/loader.conf /media/boot || \
-				{ echo loader.conf copy failed ; exit 1 ; }
-		fi
-	fi
-
-	if [ -d /root/.ssh ] ; then
-		echo Copy the host /root/.ssh to the destination?
-		echo -n "(y/n): " ; read answer
-		[ "$answer" = "y" -o "$answer" = "n" ] || \
-			{ echo Invalid input ; exit 1 ; }
-		if [ "$answer" = "y" ] ; then
-			cp -rp /root/.ssh /media/root || \
-				{ echo loader.conf copy failed ; exit 1 ; }
-		fi
-	fi
-
 else
-	# This condition should never occur
-	echo Invalid input
-	exit 1
+	f_usage
+fi # End -t TARGET HEAVY LIFTING
+
+
+if [ "$target_type" = "img" -o "$target_type" = "path" ] ; then
+	if [ "$grow_required" = 1 ] ; then
+		[ -n "$grow_size" ] || { echo "-g size is required" ; exit 1 ; }
+	fi
 fi
 
-# MINIMUM STEPS FOR EACH TARGET ARE COMPLETE
+case "$target_type" in
+	img|path)
+		[ -f "$target_path" ] && rm "$target_path"
 
-
-# EXPAND TARGET IF TYPE DEV AND ADD OPTIONAL CONTENTS
-
-if [ "$mustgrow" = "yes" ] ; then
-# target-image is already set for a target type dev
-	if [ "$target" = "img" ] ; then
-		if [ "$origin" = "obj" ] ; then
-			echo ; echo Truncating $work_dir/vm.raw
-			truncate -s $newsize $work_dir/vm.raw || \
-				{ echo truncate failed ; exit 1 ; }
-
-			echo ; echo Attaching $work_dir/vm.raw 
-#			target_device=$( mdconfig -af $work_dir/vm.raw ) || \
-			mdconfig -a -u $md_id -f $work_dir/vm.raw || \
-				{ echo mdconfig failed ; exit 1 ; }
-			target_device="md$md_id"
-			mdconfig -lv
-			echo
-
-
-		else # ftp
-			echo ; echo Truncating $work_dir/$version/$img
-			truncate -s $newsize $work_dir/$version/$img || \
-				{ echo truncate failed ; exit 1 ; }
-
-			echo ; echo Attaching $work_dir/$version/$img
-#		target_device=$( mdconfig -af $work_dir/$version/$img ) || \
-			mdconfig -a -u $md_id -f $work_dir/$version/$img || \
-				{ echo mdconfig failed ; exit 1 ; }
-			target_device="md$md_id"
-			mdconfig -lv
-			echo
+		if [ "$release_type" = "ftp" ] ; then
+			# -c implies --keep but just in case
+			echo ; echo "Extracting $release_image_xz"
+			unxz --verbose --keep -c "$release_image_xz" \
+				> "$target_path" || \
+				{ echo "unxz failed" ; exit 1 ; }
+			echo ; echo "Output boot image is $target_path"
+		else # file
+			cp "$release_image_file" "$target_path"
+			# release_image_file and target_path are both full-path
+			echo ; echo "Output boot image is $target_path"
 		fi
-# Already performed on target type dev
-		echo ; echo Recovering $target_device partitioning
+
+		mdconfig -lv | grep "$target_path" && \
+			{ echo "Warning: $target_path is attached with mdconfig" ; exit 1 ; }
+		;;
+	dev)
+		if [ -n "$release_image_file" ] ; then
+
+			if [ "$force" = 0 ] ; then
+				echo "WARNING! Writing to $target_device!"
+				diskinfo -v $target_device
+				echo -n "Continue? (y/n): " ; read warning
+				[ "$warning" = "y" ] || exit 1
+			fi
+
+		\time -h dd if="$release_image_file" of="$target_device" \
+			bs=1m status=progress || \
+				{ echo "dd failed" ; exit 1 ; }
+
+		elif [ -n "$release_image_xz" ] ; then
+
+			if [ "$force" = 0 ] ; then
+				echo "WARNING! Writing to $target_device!"
+				diskinfo -v $target_device
+				echo -n "Continue? (y/n): " ; read warning
+				[ "$warning" = "y" ] || exit 1
+			fi
+
+			\time -h cat "$release_image_xz" | 
+				xz -d -k | \
+				dd of="$target_device" \
+				bs=1m status=progress \
+				iflag=fullblock || \
+					{ echo "dd failed" ; exit 1 ; }
+		else
+			echo "Something went wrong"
+			exit 1
+		fi
 		gpart recover $target_device || \
 			{ echo gpart recover failed ; exit 1 ; }
+		gpart show $target_device
+		;;
+esac
+
+
+if [ "$grow_required" = 1 ] ; then
+
+	[ "$( id -u )" = 0 ] || { echo "Must be root for image growth" ; exit 1 ; } 
+
+	case "$target_type" in
+		img|path)
+			echo ; echo "Truncating $target_path"
+			truncate -s ${grow_size}G "$target_path" || \
+				{ echo truncate failed ; exit 1 ; }
+
+			mdconfig -lv | grep -q "md$md_id" && \
+				{ echo "md$md_id in use" ; exit 1 ; }
+
+			echo ; echo "Attaching $target_path"
+			mdconfig -a -f "$target_path" -u $md_id || \
+				{ echo mdconfig failed ; exit 1 ; }
+			target_device="/dev/md$md_id"
+
+			mdconfig -lv
+
+			gpart recover $target_device || \
+				{ echo gpart recover failed ; exit 1 ; }
+			;;
+	esac
+
+# /dev/${target_device}pN is now dev/img agnostic at this point
+
+	if [ "$( gpart show $target_device | grep freebsd-zfs )" ] ; then
+		rootfs="freebsd-zfs"
+	else
+		rootfs="freebsd-ufs"
 	fi
 
-# (/dev/)${target_device}p4 is now dev/img agnostic at this point
+	rootpart="$( gpart show $target_device | grep $rootfs | awk '{print $3}' )"
 
-	echo ; echo Resizing ${target_device}p4
-	gpart resize -i 4 "$target_device"
+	echo ; echo "Resizing ${target_device}p${rootpart}"
+	gpart resize -i "$rootpart" "$target_device"
 	gpart show "$target_device"
 
-rootfs="$( gpart show $target_device | tail -2 | head -1 | awk '{print $4}' )"
+mount | grep "on /media" && { echo "/media mount point in use" ; exit 1 ; }
 
 	if [ "$rootfs" = "freebsd-ufs" ] ; then
-		echo ; echo Growing /dev/${target_device}p4
-		growfs -y "/dev/${target_device}p4"
+		echo ; echo Growing ${target_device}p${rootpart}
+		growfs -y "${target_device}p${rootpart}" || \
+			{ echo "growfs failed" ; exit 1 ; }
 
-		if [ "$mustmount" = "yes" ] ; then
-			mount /dev/${target_device}p4 /media || \
+		if [ "$must_mount" = 1 ] ; then
+			mount | grep "on /media" && \
+				{ echo "/media mount point in use" ; exit 1 ; }
+			mount ${target_device}p${rootpart} /media || \
 				{ echo mount failed ; exit 1 ; }
 			df -h | grep media
 		fi
@@ -629,22 +466,18 @@ rootfs="$( gpart show $target_device | tail -2 | head -1 | awk '{print $4}' )"
 			{ echo zpool zroot in use and will conflict ; exit 1 ; }
 			# -f does not appear to be needed
 
-# New logic: Import for expansion, then mount configuration
-
 		zpool import
 
-# Consider renaming the pool
+		# Rename the pool without heavy regex?
 
 		echo ; echo Importing zpool for expansion
-#		zpool import -o autoexpand=on -o altroot=/media -N zroot
-		zpool import -o autoexpand=on -N zroot
-
-# Is this behavior different for a memory or hardware device?
+		zpool import -o autoexpand=on -N zroot || \
+			{ echo "zroot failed to import" ; exit 1 ; }
 
 		echo ; echo Expanding the zpool root partition
 
-		if [ "$target" = "img" ] ; then
-			zpool online -e zroot /dev/${target_device}p4
+		if [ "$target_type" = "img" ] ; then
+			zpool online -e zroot ${target_device}p${rootpart}
 		elif [ "$target" = "dev" ] ; then
 			zpool online -e zroot /dev/gpt/rootfs
 		fi
@@ -652,12 +485,17 @@ rootfs="$( gpart show $target_device | tail -2 | head -1 | awk '{print $4}' )"
 		zpool list
 		zpool status zroot
 
-		echo ; echo Exporting the zpool
+		echo ; echo "Exporting the zpool for re-import"
 
-		if [ "$mustmount" = "yes" ] ; then
+		zpool export zroot
+
+		if [ "$must_mount" = 1 ] ; then
+			mount | grep "on /media" && \
+				{ echo "/media mount point in use" ; exit 1 ; }
 			sleep 3
 			echo ; echo Importing zpool
-			zpool import -R /media zroot
+			zpool import -R /media zroot || \
+				{ echo "zroot failed to import" ; exit 1 ; }
 		fi
 	fi
 fi
@@ -665,100 +503,41 @@ fi
 
 # OPTIONAL SOURCES
 
-if [ "$src" = "y" ] ; then
-	if [ "$origin" = "obj" -o "$origin" = "occamobj" ] ; then
-		echo Copying /usr/src to /media/usr/src
-# Watch those paths
+if [ "$include_src" = 1 ] ; then
+	if [ "$release_type" = "ftp" ] ; then
+
+	# Add dpv(1) progress?
+	echo "Extracting ${work_dir}/${release_name}/src.txz"
+	cat "${work_dir}/${release_name}/src.txz" | tar -xpf - -C /media/ || \
+		{ echo "src.txz extraction failed" ; exit 1 ; }
+	else
+		echo ; echo "Copying /usr/src"
 		tar cf - /usr/src | tar xpf - -C /media || \
-			{ echo /usr/src failed to copy ; exit 1 ; }
+			{ echo "/usr/src failed to copy" ; exit 1 ; }
 			df -h | grep media
-	else # ftp
-#		if [ "$freshimg" = "y" -o ! -f "$work_dir/$version/freebsd-dist/src.txz" ] ; then
-		cd $work_dir/$version/freebsd-dist/
-		if [ -f "$work_dir/$version/freebsd-dist/src.txz" ] ; then
-			echo Fetching $dist_url/src.txz
-			# -i will indeed fail if the comparison file is missing
-			fetch -a -i src.txz $dist_url/src.txz || \
-				{ echo fetch failed ; exit 1 ; }
-		else
-			fetch -a  $dist_url/src.txz || \
-				{ echo fetch failed ; exit 1 ; }
-		fi
-
-		cd $work_dir/$version/freebsd-dist/
-		echo ; echo Extracting src.txz to /media
-		cat src.txz | tar -xpf - -C /media/ || \
-			{ Echo src.txz extraction failed ; exit 1 ; }
-
-		df -h | grep media
 	fi
-
-#	echo ; echo Listing /media/usr/src ; ls /media/usr/src
+	[ -f "/media/usr/src/Makefile" ] || { echo "/usr/src failed to copy" ; exit 1 ; }
 fi
-
-
-# OPTIONAL DISTRIBUTION SETS
-#	CONSIDER LOOKING FOR THEM FOR VM.RAW, BUT THIS FUNDAMENTALLY SIDE STEPS THEM
-
-if [ "$dist" = "y" ] ; then
-	if [ "$origin" = "obj" ] ; then
-# Could loop on .txz files in the release directory
-#		[ -f /usr/obj/usr/src/amd64.amd64/release/base.txz ] && \ 
-#			cp /usr/obj/usr/src/amd64.amd64/release/base.txz \
-#				/media/usr/freebsd-dist/
-		echo Distribution sets not supported for build images ; sleep 3
-	else # ftp or be
-
-		cd $work_dir/$version/freebsd-dist/
-		echo Fetching fresh distributions sets as needed
-		# Relying on fetch -i for freshness
-
-		[ -f MANIFEST ] || fetch $dist_url/MANIFEST || \
-			{ echo fetch failed ; exit 1 ; }
-
-		cat MANIFEST | cut -f 1 | while read dist_set ; do
-
-			if [ -f "$dist_set" ] ; then
-			fetch -a -i "$dist_set" "$dist_url/$dist_set" || \
-				{ echo fetch failed ; exit 1 ; }
-			else
-			fetch -a "$dist_url/$dist_set" || \
-				{ echo fetch failed ; exit 1 ; }
-			fi
-		done
-
-		echo Copying distributions sets to /media/usr
-		cp -rp $work_dir/$version/freebsd-dist /media/usr/
-
-		df -h | grep media
-	fi
-fi
-
 
 # OPTIONAL VMDK WRAPPER
 
-if [ "$vmdk" = "y" ] ; then
-	if [ "$origin" = "obj" ] ; then
-		vmdk_img="$work_dir/vm.raw"
-	else # ftp
-		vmdk_img="$work_dir/$version/$img"
-	fi
-
-	vmdk_img_base="${vmdk_img%.raw}"
+if [ "$vmdk" = 1 ] ; then
+	vmdk_image="$target_path"
+	vmdk_image_base="${vmdk_image%.raw}"
 
 	# Assuming blocksize of 512
-	size_bytes="$( stat -f %z "$vmdk_img" )"
+	size_bytes="$( stat -f %z "$vmdk_image" )"
 	RW=$(( "$size_bytes" / 512 ))
 	cylinders=$(( "$RW" / 255 / 63 ))
 
-cat << EOF > "${vmdk_img_base}.vmdk"
+	cat << EOF > "${vmdk_image_base}.vmdk"
 # Disk DescriptorFile
 version=1
 CID=12345678
 parentCID=ffffffff
 createType="vmfs"
 
-RW $(( "$size_bytes" / 512 )) VMFS "${vmdk_img_base}-flat.vmdk"
+RW $(( "$size_bytes" / 512 )) VMFS "${vmdk_image_base}-flat.vmdk"
 
 # The Disk Data Base 
 #DDB
@@ -774,70 +553,66 @@ ddb.toolsVersion = "2147483647"
 ddb.virtualHWVersion = "4"
 EOF
 
-#	echo ; echo The resulting "${vmdk_img_base}.vmdk" wrapper reads: ; echo
-#	cat "${vmdk_img_base}.vmdk"
-
-	echo ; echo Renaming "$vmdk_img" to "${vmdk_img_base}-flat.vmdk"
-	mv "$vmdk_img" "${vmdk_img_base}-flat.vmdk"
+	echo ; echo Renaming "$vmdk_image" to "${vmdk_image_base}-flat.vmdk"
+	mv "$vmdk_image" "${vmdk_image_base}-flat.vmdk"
 fi
 
 
-# OPTIONAL VM SUPPORT
-if [ "$bhyve" = "y" -o "$domu" = "y" ] ; then
+# OPTIONAL VM BOOT SCRIPT SUPPORT
 
-	[ "$origin" = "obj" ] && vm_img="$work_dir/vm.raw"
-	[ "$origin" = "ftp" ] && vm_img="$work_dir/$version/$img"
-	[ "$vmdk" = "y" ] && vm_img="${vmdk_img_base}-flat.vmdk"
-	[ "$target" = "dev" ] && vm_img="/dev/$target_device"
-#	[ "$origin" = "occamobj" ] && vm_img="$work_dir/vm.raw"
+if [ "$boot_scripts" = 1 ] ; then
 
-# Where to put the VM boot scripts relative to the image origin
-	[ "$target" = "img" ] && vm_path="$work_dir/$version"
-	[ "$target" = "dev" ] && vm_path="$work_dir"
-	[ "$origin" = "obj" ] && vm_path="$work_dir"
-	[ "$origin" = "occamobj" ] && vm_path="$work_dir"
-fi
+	[ -d "$work_dir" ] || mkdir -p "$work_dir"
+	[ -d "$work_dir" ] || { echo "mkdir -p $work_dir failed" ; exit 1 ; }
 
-if [ "$bhyve" = "y" ] ; then
+	if [ -n "$target_path" ] ; then
+		if [ "$vmdk" = 1 ] ; then
+			vm_device="${vmdk_image_base}-flat.vmdk"
+		else
+			vm_device="$target_path"
+		fi
+	elif [ -n "$target_device" ] ; then
+		vm_device="$target_device"
+	else
+		echo "Something went wrong"
+		exit 1
+	fi
 
-# Provide some vmm.ko loading code
-	cat << EOF > "${vm_path}/boot-bhyve.sh"
+	case "$arch_input" in
+		amd64|i386)
+			cat << EOF > "${work_dir}/boot-bhyve.sh"
+#!/bin/sh
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
+[ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
+	{ echo \"BHYVE_UEFI.fd missing\" ; exit 1 ; }
 kldstat -q -m vmm || kldload vmm
 sleep 1
-#bhyveload -d $vm_img -m 1024 $vm_name
+#bhyveload -d $vm_device -m 1024 $vm_name
 #sleep 1
 bhyve -c 1 -m 1024 -H -A \\
 	-l com1,stdio \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\
-	-s 2,virtio-blk,$vm_img \\
+	-s 2,virtio-blk,$vm_device \\
 	-s 31,lpc \\
 	$vm_name
 
-# Devices you may want to add:
+# Devices to consider:
 
-# -l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 # -s 30:0,fbuf,tcp=0.0.0.0:5900,w=1024,h=768,wait \\
 # -s 3,virtio-net,tap0 \\
 
 sleep 2
 bhyvectl --destroy --vm=$vm_name
 EOF
-	echo ; echo Note: ${vm_path}/boot-bhyve.sh
-fi
+			echo ; echo Note: ${work_dir}/boot-bhyve.sh
 
-
-# OPTIONAL XEN DOMU SUPPORT
-
-if [ "$domu" = "y" ] ; then
-
-cat << HERE > $vm_path/xen.cfg
+			cat << HERE > $work_dir/xen.cfg
 type = "hvm"
 memory = 1024
 vcpus = 1
 name = "$vm_name"
-disk = [ '$vm_img,raw,hda,w' ]
+disk = [ '$vm_device,raw,hda,w' ]
 boot = "c"
 serial = 'pty'
 on_poweroff = 'destroy'
@@ -846,64 +621,77 @@ on_crash = 'restart'
 #vif = [ 'bridge=bridge0' ]
 HERE
 
-echo ; echo Note: $vm_path/xen.cfg
+			echo ; echo "Note: $work_dir/xen.cfg"
 
 	echo "xl list | grep $vm_name && xl destroy $vm_name" \
-		> $vm_path/boot-xen.sh
-	echo "xl create -c $vm_path/xen.cfg" \
-		>> $vm_path/boot-xen.sh
-	echo ; echo Note: $vm_path/boot-xen.sh
+		> $work_dir/boot-xen.sh
+	echo "xl create -c $work_dir/xen.cfg" \
+		>> $work_dir/boot-xen.sh
+	echo ; echo Note: $work_dir/boot-xen.sh
 
 	echo "xl shutdown $vm_name ; xl destroy $vm_name ; xl list" > \
-		$vm_path/destroy-xen.sh
-	echo ; echo Note: $vm_path/destroy-xen.sh
+		$work_dir/destroy-xen.sh
+			echo ; echo Note: $work_dir/destroy-xen.sh
+			;;
+		arm64)
+			cat << HERE > $work_dir/boot-qemu-arm64.sh
+#!/bin/sh
+[ -f /usr/local/share/u-boot/u-boot-qemu-arm64/u-boot.bin ] || \\
+	{ echo \"u-boot.bin missing\" ; exit 1 ; }
+# pkg install qemu u-boot-qemu-arm64
+/usr/local/bin/qemu-system-aarch64 -m 1024 \
+-cpu cortex-a57 -M virt \
+-drive file=${vm_device},format=raw \
+-bios /usr/local/share/u-boot/u-boot-qemu-arm64/u-boot.bin \
+-nographic
+HERE
+			echo ; echo Note: $work_dir/boot-qemu-arm64.sh
+			;;
+		riscv)
+			cat << HERE > $work_dir/boot-qemu-riscv.sh
+#!/bin/sh
+#pkg install qemu opensbi u-boot-qemu-riscv64
+[ -f /usr/local/share/opensbi/lp64/generic/firmware/fw_jump.elf ] || \\
+        { echo "Missing opensbi package" ; exit 1 ; }
+
+/usr/local/bin/qemu-system-riscv64 -machine virt -m 1024 -nographic \\
+-bios /usr/local/share/opensbi/lp64/generic/firmware/fw_jump.elf \\
+-kernel /usr/local/share/u-boot/u-boot-qemu-riscv64/u-boot.bin \\
+-drive file=${vm_device},format=raw,id=hd0 \\
+-device virtio-blk-device,drive=hd0
+exit
+# Devices to consider:
+
+-netdev user,id=net0,ipv6=off,hostfwd=tcp::8022-:22 \
+-device virtio-net-device,netdev=net0
+HERE
+			echo ; echo Note: $work_dir/boot-qemu-riscv.sh
+			;;
+	esac
 fi
 
-
-# FINAL REVIEW BEFORE UNMOUNTING/EXPORTING
-
-if [ "$mustmount" = "yes" ] ; then
-	echo ; echo About to unmount /media
-	echo Last chance to make final changes to the mounted image at /media
-	echo ; echo Unmount /media ?
-	echo -n "(y/n): " ; read unmount
-	[ "$unmount" = "y" -o "$unmount" = "n" ] || \
-		{ echo Invalid input ; exit 1 ; }
-
-	if [ "$unmount" = "y" ] ; then
-		if [ "$rootfs" = "freebsd-ufs" -o "$target" = "be" ] ; then
-			echo ; echo Unmounting /media
-			umount /media || { echo umount failed ; exit 1 ; }
-		else
-			zpool export zroot || \
-				{ echo zpool export failed ; exit 1 ; }
-		fi
-		if [ "$target" = "img" ] ; then
-			echo ; echo Destroying $target_device
-			mdconfig -du $md_id || \
-		{ echo $target_device destroy failed ; mdconfig -lv ; exit 1 ; }
-		fi
+if [ "$keep_mounted" = 0 -a "$must_mount" = 1 ] ; then
+	# umount/clean up if not requested to keep_mounted
+	if [ "$rootfs" = "freebsd-ufs" ] ; then
+		echo ; echo "Unmounting /media"
+		umount /media || { echo "umount failed" ; exit 1 ; }
 	else
-		echo ; echo "You can manually run \'umount /media\' or"
-		echo "\'zpool export zroot\' and"
-		echo "\'mdconfig -du $md_id\' as needed"
+		zpool export zroot || { echo "zpool export failed" ; exit 1 ; }
 	fi
-else
-	if [ "$rootfs" = "freebsd-zfs" -a "$mustgrow" = "yes" ] ; then
-		zpool export zroot || { echo zpool export failed ; exit 1 ; }
+	if [ "$target_type" = "img" ] ; then
+		echo ; echo "Destroying $target_device"
+		mdconfig -du $md_id || \
+			{ echo "$target_device mdconfig -du failed" ; mdconfig -lv ; exit 1 ; }
+	fi
+elif [ "$keep_mounted" = 1 ] ; then
+	if [ "$rootfs" = "freebsd-ufs" ] ; then
+		echo ; echo "Run 'umount /media' when finished"
+	else
+		echo ; echo "Run 'zpool export zroot' when finished"
 	fi
 
-	if [ "$target" = "img" -a "$mustgrow" = "yes" ] ; then
-		echo ; echo Destroying $target_device
-		mdconfig -du $md_id || \
-	{ echo $target_device destroy failed ; mdconfig -lv ; exit 1 ; }
+	if [ "$target_type" = "img" ] ; then
+		echo "Run 'mdconfig -du $md_id' when finished"
 	fi
 fi
-
-#mdconfig -l | grep -q md$md_id && mdconfig -du $md_id
-#mdconfig -l | grep -q md$md_id && { echo md$md_id failed to detach ; exit 1 ; }
-
-zpool list | grep zroot
-mdconfig -lv
-
 exit 0

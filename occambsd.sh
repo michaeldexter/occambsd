@@ -156,7 +156,6 @@ while getopts p:s:o:O:wWkGgzjvzZ:S:imn opts ; do
 		;;
 	*)
 		f_usage
-		exit 1
 		;;
 	esac
 done
