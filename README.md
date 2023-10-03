@@ -77,7 +77,7 @@ occambsd.sh requires a profile and can build a root-on-ZFS image with -z:
 
 
 ```
-sh occambsd.sh -v -z -p profile-amd64-zfs.txt
+sudo sh occambsd.sh -v -z -p profile-amd64-zfs.txt
 ```
 
 Note that -z support is only available on FreeBSD 14-CURRENT
@@ -111,9 +111,9 @@ Want to aggressively build test FreeBSD on a fast system?
 Simply excute a list of occambsd.sh commands with separate output directories:
 
 ```
-sh occambsd.sh -O /tmp/amd64-minimum -p profile-amd64-minimum.txt
-sh occambsd.sh -O /tmp/amd64-hardware -p profile-amd64-hardware.txt
-sh occambsd.sh -O /tmp/arm64-minimum -p profile-arm64-minimum.txt
+sudo sh occambsd.sh -O /tmp/amd64-minimum -p profile-amd64-minimum.txt
+sudo sh occambsd.sh -O /tmp/amd64-hardware -p profile-amd64-hardware.txt
+sudo sh occambsd.sh -O /tmp/arm64-minimum -p profile-arm64-minimum.txt
 ...
 
 ```
@@ -125,9 +125,17 @@ imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", 
 Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts. Note the syntax in the EXAMPLES section of the script.
 
 ```
-sh imagine.sh -r 15.0-CURRENT
+sudo sh imagine.sh -r 15.0-CURRENT
 ```
 
+# Example Scenario
+
+Example usage on a FreeBSD 14.0 system with 'makefs -t zfs' support to produce a minimum root-on-ZFS image that is grown to 10GB in size and boots in seconds:
+
+```
+sudo sh occambsd.sh -p profile-amd64-zfs.txt -v -z
+sudo sh imagine.sh -r obj -g 10 -b -z
+```
 
 # mirror-upstream.sh
 

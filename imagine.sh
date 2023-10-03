@@ -235,9 +235,18 @@ done
 
 # HEAVY LIFTING FLAG -r RELEASE
 
+# Shorten these paths
+# Kludgy 13.x and 14.x makefs -t zfs workarounds
+
 if [ "$release_input" = "obj" ] ; then
 	release_type="file"
+if [ -f "/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.raw" ] ; then
 release_image_file="/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.raw"
+elif [ -n "$zfs_string" ] ; then
+release_image_file="/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.zfs.raw"
+else
+release_image_file="/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.ufs.raw"
+fi
 		[ -r "$release_image_file" ] || \
 			{ echo "$release_image_file not found" ; exit 1 ; }
 
