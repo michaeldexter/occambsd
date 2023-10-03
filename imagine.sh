@@ -45,6 +45,11 @@
 
 # The canonical /usr/src directory is hard-coded when using -r obj or a path.
 
+# 'fetch -i' only checks date stamps, allow for false matches on interrupted downlods.
+
+# Running imagine.sh in the work directory will cause existing release versions to be
+# misinterpreted as image paths to be copied
+
 
 # EXAMPLES
 
@@ -236,12 +241,14 @@ release_image_file="/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.raw"
 		[ -r "$release_image_file" ] || \
 			{ echo "$release_image_file not found" ; exit 1 ; }
 
-elif [ -r "$release_input" ] ; then # Path to an image
+elif [ -r "$release_input" ] ; then # path to an image
 	release_type="file"
 	# Consider the vmrun.sh "file" test for boot blocks
 	release_image_file="$release_input"
 	[ -r "$release_image_file" ] || \
 		{ echo "$release_image_file not found" ; exit 1 ; }
+	[ -d "$release_image_file" ] || \
+		{ echo "$release_image_file is a directory" ; exit 1 ; }
 
 	[ "$include_src" = 1 ] && \
 		{ echo "-s src not available with a custom image" ; exit 1 ; }
