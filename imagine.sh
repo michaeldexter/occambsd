@@ -89,7 +89,7 @@ f_usage() {
 	echo ; echo "USAGE:"
 	echo "-w <working directory> (Default: /root/imagine-work)"
 	echo "-a <architecture> [ amd64 arm64 i386 riscv ] (Default: amd64)"
-	echo "-r [ obj | /path/to/image | <version> ] (Release - Required)"
+	echo "-r [ obj | debian | /path/to/image | <version> ] (Release - Required)"
 	echo "obj = /usr/obj/usr/src/<target>.<target_arch>/release/vm.raw"
 	echo "/path/to/image for an existing image"
 	echo "<version> i.e. 13.2-RELEASE 14.0-ALPHAn|BETAn|RCn 15.0-CURRENT"
@@ -247,23 +247,50 @@ release_image_file="/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.zfs.r
 else
 release_image_file="/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.ufs.raw"
 fi
-		[ -r "$release_image_file" ] || \
-			{ echo "$release_image_file not found" ; exit 1 ; }
+	[ -r "$release_image_file" ] || \
+		{ echo "$release_image_file not found" ; exit 1 ; }
 
-elif [ -r "$release_input" ] ; then # path to an image
+elif [ "$release_input" = "debian" ] ; then
+	release_type="file"
+	release_image_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-nocloud-amd64.raw"
+	release_name="debian"
+	release_image_file="debian-12-nocloud-amd64.raw"
+# bun may regret this
+#	release_branch=""
+	[ "$include_src" = 1 ] && \
+		{ echo "-s src not available with Debian images" ; exit 1 ; }
+# Redundant from FreeBSD/xz - refactor!
+# Create the work directory if missing
+	[ -d "${work_dir}/${release_name}" ] || \
+		mkdir -p "${work_dir}/${release_name}"
+	[ -d "${work_dir}/${release_name}" ] || \
+		{ echo "mkdir ${work_dir}/${release_name} failed" ; exit 1 ; }
+
+	# Needed for fetch to save the upstream file name
+	cd "${work_dir}/${release_name}"
+
+	# fetch is not idempotent - check if exists before fetch -i
+	if [ -r $release_image_file ] ; then
+		if [ "$offline_mode" = 0 ] ; then
+		fetch -a -i "$release_image_file" "$release_image_url" || \
+			{ echo "$release_image_url fetch failed" ; exit 1 ; }
+		fi
+	else
+	fetch -a "$release_image_url" || \
+		{ echo "$release_image_url fetch failed" ; exit 1 ; }
+	fi
+elif [ -f "$release_input" ] ; then # path to an image
 	release_type="file"
 	# Consider the vmrun.sh "file" test for boot blocks
 	release_image_file="$release_input"
 	[ -r "$release_image_file" ] || \
 		{ echo "$release_image_file not found" ; exit 1 ; }
-	[ -d "$release_image_file" ] || \
-		{ echo "$release_image_file is a directory" ; exit 1 ; }
 
 	[ "$include_src" = 1 ] && \
 		{ echo "-s src not available with a custom image" ; exit 1 ; }
 
 else # release version i.e. 15.0-CURRENT
-	release_type="ftp"
+	release_type="xz"
 	echo "$release_input" | grep -q "-" || \
 		{ echo "Invalid release" ; exit 1 ; }
 	echo "$release_input" | grep -q "FreeBSD" && \
@@ -367,7 +394,7 @@ case "$target_type" in
 	img|path)
 		[ -f "$target_path" ] && rm "$target_path"
 
-		if [ "$release_type" = "ftp" ] ; then
+		if [ "$release_type" = "xz" ] ; then
 			# -c implies --keep but just in case
 			echo ; echo "Extracting $release_image_xz"
 			unxz --verbose --keep -c "$release_image_xz" \
@@ -381,7 +408,7 @@ case "$target_type" in
 		fi
 
 		mdconfig -lv | grep "$target_path" && \
-			{ echo "Warning: $target_path is attached with mdconfig" ; exit 1 ; }
+		{ echo "$target_path is attached with mdconfig" ; exit 1 ; }
 		;;
 	dev)
 		if [ -n "$release_image_file" ] ; then
@@ -448,17 +475,25 @@ if [ "$grow_required" = 1 ] ; then
 			;;
 	esac
 
-# /dev/${target_device}pN is now dev/img agnostic at this point
+# FreeBSD /dev/${target_device}pN is now dev/img agnostic at this point
 
-	if [ "$( gpart show $target_device | grep freebsd-zfs )" ] ; then
-		rootfs="freebsd-zfs"
-	else
+	if [ "$( gpart show $target_device | grep freebsd-ufs )" ] ; then
 		rootfs="freebsd-ufs"
+	elif [ "$( gpart show $target_device | grep freebsd-zfs )" ] ; then
+		rootfs="freebsd-zfs"
+	elif [ "$( gpart show $target_device | grep linux-data )" ] ; then
+		rootfs="linux-data"
+	else
+		echo "Unrecognized root file system"
+		exit 1
 	fi
 
-	rootpart="$( gpart show $target_device | grep $rootfs | awk '{print $3}' )"
+	# Should be file system-agnostic
+rootpart="$( gpart show $target_device | grep $rootfs | awk '{print $3}' )"
 
+	# Should be file system-agnostic
 	echo ; echo "Resizing ${target_device}p${rootpart}"
+	# Should be file system-agnostic
 	gpart resize -i "$rootpart" "$target_device"
 	gpart show "$target_device"
 
@@ -476,7 +511,7 @@ mount | grep "on /media" && { echo "/media mount point in use" ; exit 1 ; }
 				{ echo mount failed ; exit 1 ; }
 			df -h | grep media
 		fi
-	else # freebsd-zfs
+	elif [ "$rootfs" = "freebsd-zfs" ] ; then
 		zpool list
 		zpool get name zroot > /dev/null 2>&1 && \
 			{ echo zpool zroot in use and will conflict ; exit 1 ; }
@@ -513,6 +548,25 @@ mount | grep "on /media" && { echo "/media mount point in use" ; exit 1 ; }
 			zpool import -R /media zroot || \
 				{ echo "zroot failed to import" ; exit 1 ; }
 		fi
+	elif [ "$rootfs" = "linux-data" ] ; then
+		[ $( which resize2fs ) ] || \
+			{ echo "fusefs-ext2 no installed" ; exit 1 ; }
+
+		echo ; echo Growing ${target_device}p1
+		resize2fs "${target_device}p1" || \
+			{ echo "resize2fs failed" ; exit 1 ; }
+
+		if [ "$must_mount" = 1 ] ; then
+			mount | grep "on /media" && \
+				{ echo "/media mount point in use" ; exit 1 ; }
+			kldstat -q -m fusefs || kldload fusefs
+			fuse-ext2 /dev/md${md_id}p1 /media -o rw+ || \
+				{ echo fuse-ext2 mount failed ; exit 1 ; }
+			df -h | grep media
+		fi
+	else
+		echo "Something went very wrong"
+		exit 1
 	fi
 fi
 
@@ -520,7 +574,7 @@ fi
 # OPTIONAL SOURCES
 
 if [ "$include_src" = 1 ] ; then
-	if [ "$release_type" = "ftp" ] ; then
+	if [ "$release_type" = "xz" ] ; then
 
 	# Add dpv(1) progress?
 	echo "Extracting ${work_dir}/${release_name}/src.txz"
