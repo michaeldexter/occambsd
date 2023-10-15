@@ -81,7 +81,7 @@ vm_image_size="400m"
 vm_swap_size="100m"
 dry_run="0"
 
-while getopts p:s:o:O:wWkGgzjvzZ:S:imn opts ; do
+while getopts p:s:o:O:wWkKGgzjvzZ:S:imn opts ; do
 	case $opts in
 	p)
 		# REQUIRED
