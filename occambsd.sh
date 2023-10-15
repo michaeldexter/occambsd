@@ -81,7 +81,7 @@ vm_image_size="400m"
 vm_swap_size="100m"
 dry_run="0"
 
-while getopts p:s:o:O:wWkGgzjvzZ:S:imn opts ; do
+while getopts p:s:o:O:wWkKGgzjvzZ:S:imn opts ; do
 	case $opts in
 	p)
 		# REQUIRED
@@ -115,12 +115,14 @@ while getopts p:s:o:O:wWkGgzjvzZ:S:imn opts ; do
 		reuse_world="1"
 		;;
 	W)
+		reuse_world="1"
 		reuse_world_dirty="1"
 		;;
 	k)
 		reuse_kernel="1"
 		;;
 	K)
+		reuse_kernel="1"
 		reuse_kernel_dirty="1"
 		;;
 	G)
