@@ -529,7 +529,7 @@ mount | grep "on /media" && { echo "/media mount point in use" ; exit 1 ; }
 
 		if [ "$target_type" = "img" ] ; then
 			zpool online -e zroot ${target_device}p${rootpart}
-		elif [ "$target" = "dev" ] ; then
+		elif [ "$target_type" = "dev" ] ; then
 			zpool online -e zroot /dev/gpt/rootfs
 		fi
 
