@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.3
+# Version v.0.3.1
 
 
 # CAVEATS
@@ -79,7 +79,7 @@
 
 # To generate a 10GB RISC-V system with root-on-ZFS and a QEMU boot script:
 #
-# sh imagine.sh -a riscv -r 14.0-BETA4 -z -g 10 -b
+# sh imagine.sh -a riscv -r 14.0-RELEASE -z -g 10 -b
 #
 # Add '-v' to generate a VMDK that is QEMU compatible, because you can
 #
@@ -88,19 +88,20 @@
 f_usage() {
 	echo ; echo "USAGE:"
 	echo "-w <working directory> (Default: /root/imagine-work)"
-	echo "-a <architecture> [ amd64 arm64 i386 riscv ] (Default: amd64)"
+	echo "-a <architecture> [ amd64 | arm64 | i386 | riscv - default amd64 ]"
 	echo "-r [ obj | debian | /path/to/image | <version> ] (Release - Required)"
 	echo "obj = /usr/obj/usr/src/<target>.<target_arch>/release/vm.raw"
 	echo "/path/to/image for an existing image"
-	echo "<version> i.e. 13.2-RELEASE 14.0-ALPHAn|BETAn|RCn 15.0-CURRENT"
+	echo "<version> i.e. 14.0-RELEASE | 15.0-CURRENT | 15.0-ALPHAn|BETAn|RCn"
 	echo "-o (Offline mode to re-use fetched releases and src.txz)"
-	echo "-t <target> [ img | /dev/device | /path/myimg ] (Default: img)"
+	echo "-t <target> [ img | /dev/device | /path/myimg - default img ]"
 	echo "-f (FORCE imaging to a device without asking)"
 	echo "-g <gigabytes> (grow image to gigabytes i.e. 10)"
 	echo "-s (Include src.txz or /usr/src as appropriate)"
 	echo "-m (Mount image and keep mounted for further configuration)"
 	echo "-v (Generate VMDK image wrapper)"
 	echo "-b (Genereate boot scripts)"
+	echo "-z (Use a 14.0-RELEASE or newer root on ZFS image)"
 	echo
 	exit 0
 }

@@ -206,6 +206,10 @@ fi
 
 echo ; echo Removing previous generated images if present
 
+mount -t devfs | \
+	grep ${target}.$target_arch/release/vm-image/dev && \
+	umount $obj_dir/$src_dir/${target}.$target_arch/release/vm-image/dev
+
 [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] && \
 	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw"
 
@@ -223,6 +227,12 @@ echo ; echo Removing previous generated images if present
 
 [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.img" ] && \
 	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.img"
+
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/raw.ufs.img" ] && \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.ufs.img"
+
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/raw.zfs.img" ] && \
+	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.zfs.img"
 
 [ -d "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image" ] && \
 	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"
@@ -473,7 +483,7 @@ fi
 # VM-IMAGE
 
 if [ "$generate_vm_image" = "1" ] ; then
-	cd $src_dir/release || { echo cd release failed ; exit 1 ; }
+	cd $src_dir/release || { echo cd $src_dir/release failed ; exit 1 ; }
 
 	# Confirm if this uses KERNCONFDIR
 
@@ -492,7 +502,8 @@ if [ "$generate_vm_image" = "1" ] ; then
 
 if [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] ; then
 	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw to $work_dir
-	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw $work_dir/
+	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw \
+		$work_dir/ || { echo vm-image copy failed ; exit 1 ; }
 else
 	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir
 
@@ -502,7 +513,8 @@ output_imgage_size=$( stat -f %z $obj_dir/$src_dir/${target}.$target_arch/releas
 	{ echo "Resulting image is 0 bytes - verify profile" ; exit 1 ; }
 
 	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw \
-		$work_dir/vm.raw
+		$work_dir/vm.raw || { echo vm-image copy failed ; exit 1 ; }
+
 fi
 
 # DEBUG: ZFS syntax changed? mkimg: partition 1: No such file or directory
