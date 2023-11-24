@@ -10,7 +10,7 @@ bos-upload.sh		Launched by bos-lite.sh if present for uploating to a web server 
 build-option-smoke-test.sh	A build option CI test proposed to the FreeBSD cluster aministration team
 occambsd.sh		Builds a "svelte", purpose-build FreeBSD bootable disk image using the FreeBSD build(7) system
 profile-amd64-minimum13.txt	A minimum system configuration for use on a virtual machine for FreeBSD 13.x
-profile-amd64-minimum14.txt	A minimum system configuration for use on a virtual machine for FreeBSD 14.x
+profile-amd64-minimum.txt	A minimum system configuration for use on a UFS-booted virtual machine
 profile-amd64-zfs.txt		The minimum configuration with ZFS added
 profile-amd64-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
 profile-amd64-ipv4.txt	The hardware profile plus minimum IPv4 networking with ssh(1) and host(1)
@@ -93,14 +93,15 @@ The full occambsd.sh usage is:
 -W (Reuse the previous world objects without cleaning)
 -k (Reuse the previous kernel objects)
 -K (Reuse the previous kernel objects without cleaning)
+-G (Use the GENERIC/stock world)
 -g (Use the GENERIC kernel)
 -j (Build for Jail boot)
 -v (Generate vm-image)
 -z (Generate ZFS vm-image)
--Z <size> (vm-image siZe i.e. 500m)
+-Z <size> (vm-image siZe i.e. 500m - default is 5g)
 -S <size> (vm-image Swap size i.e. 500m - default is 1g)
--i (Generate disc1.iso and bootonly.iso)
--m (Generate memstick image)
+-i (Generate disc1 and bootonly.iso ISOs)
+-m (Generate mini-memstick image)
 -n (No-op dry-run only generating configuration files)
 ```
 

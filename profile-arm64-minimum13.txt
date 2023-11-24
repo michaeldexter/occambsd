@@ -8,6 +8,8 @@ build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOU
 
 kernel_modules="virtio"
 
-kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL MSDOSFS TSLOG VFP FDT"
+#kernel_includes="std.arm64 std.dev std.virt"
 
-kernel_devices="pci loop ether gpio pl011 acpi acpi_ged uart clk phy regulator ahci scbus da cd pass virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon virtio_mmio"
+kernel_options="SCHED_ULE GEOM_PART_GPT FFS GEOM_LABEL MSDOSFS VFP FDT HWPMC_HOOKS TSLOG INTRNG"
+
+kernel_devices="pci loop ether gpio pl011 acpi uart clk phy regulator ahci scbus da cd pass virtio virtio_pci virtio_blk vtnet virtio_scsi virtio_balloon virtio_mmio"
