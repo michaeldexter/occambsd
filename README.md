@@ -11,7 +11,8 @@ build-option-smoke-test.sh	A build option CI test proposed to the FreeBSD cluste
 occambsd.sh		Builds a "svelte", purpose-build FreeBSD bootable disk image using the FreeBSD build(7) system
 profile-amd64-minimum13.txt	A minimum system configuration for use on a virtual machine for FreeBSD 13.x
 profile-amd64-minimum.txt	A minimum system configuration for use on a UFS-booted virtual machine
-profile-amd64-zfs.txt		The minimum configuration with ZFS added
+profile-amd64-zfs13.txt		The minimum configuration with ZFS added for 13.x
+profile-amd64-zfs14.txt		The minimum configuration with ZFS added for 14.0R
 profile-amd64-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
 profile-amd64-ipv4.txt	The hardware profile plus minimum IPv4 networking with ssh(1) and host(1)
 profile-arm64-minimum.txt	A minimum configuration file for ARM64 (builds but not tested on qemu|hardware)
