@@ -665,6 +665,7 @@ bhyve -c 1 -m 1024 -H -A \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\
 	-s 2,virtio-blk,$vm_device \\
+	-s 30,xhci,tablet \\
 	-s 31,lpc \\
 	$vm_name
 
