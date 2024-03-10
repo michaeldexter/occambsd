@@ -2,7 +2,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright 2022, 2023, 2024 Michael Dexter
+# Copyright 2024 Michael Dexter
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,17 +26,17 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v1.1
+# Version v1.0
 
 
 # VARIABLES - NOTE THE VERSIONED ONE
 
 work_dir="/root/imagine-work"
-vm_name="debian0"
+vm_name="omnios0"
 
-image_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-nocloud-amd64.raw"
+image_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151048.cloud.raw.zst"
 
-image=$( basename $image_url )
+zst_image=$( basename $image_url )
 
 # USER INTERACTION: ANSWER ALL QUESTIONS IN ADVANCE
 
@@ -51,7 +51,7 @@ if [ "$target" = "img" ] ; then
 
 	if [ "$mustgrow" = "no" ] ; then
 		echo ; echo Grow the root partition from the default 2G?
-		echo -n "(n<Size in G> i.e. 10G): " ; read grow
+		echo -n "(n<Size in G> i.e. 10 for 10G): " ; read grow
 		# Need a better variable than grow
 		if [ "$grow" -lt 5 ] ; then
 			{ echo Invalid input ; exit 1 ; }
@@ -96,6 +96,7 @@ elif [ "$target" = "dev" ] ; then
 	[ "$warning" = "y" -o "$warning" = "n" ] || \
 		{ echo Invalid input ; exit 1 ; }
 	if [ "$warning" = "y" ] ; then
+		continue
 # Add a check if the devices is mounted?
 	fi
 
@@ -112,45 +113,56 @@ echo -n "(y/n): " ; read bhyve
 
 # QUESTIONS ANSWERED, ON TO SLOW OPERATIONS
 
-[ -d "${work_dir}/debian" ] || \
-	mkdir -p "${work_dir}/debian"
-[ -d "${work_dir}/debian" ] || \
-	{ echo "mkdir -p $work_dir/debian failed" ; exit 1 ; }
+[ -d "${work_dir}/omnios" ] || \
+	mkdir -p "${work_dir}/omnios"
+[ -d "${work_dir}/omnios" ] || \
+	{ echo "mkdir -p $work_dir/omnios failed" ; exit 1 ; }
 
-cd "$work_dir/debian"
+cd "$work_dir/omnios"
 
-if [ -f "$work_dir/debian/$image" ] ; then
-	echo ; echo $work_dir/debian/$image exists. Reuse?
+if [ -f "$work_dir/omnios/$zst_image" ] ; then
+	echo ; echo $work_dir/omnios/$zst_image exists. Reuse?
 	echo -n "(y/n):" ; read reuse
 	[ "$reuse" = "y" -o "$reuse" = "n" ] || \
 		{ echo Invalid input ; exit 1 ; }
 	if [ "$reuse" = "n" ] ; then
 
 echo
-echo "Fetching fresh nocloud image to $work_dir/debian/$image if out of date"
+echo "Fetching fresh OmniOS image to $work_dir/omnios/$zst_image if out of date"
 # -i will fail if the comparison file is missing
 # Is the -i test failing on Debian?
-		fetch -a -i "$work_dir/debian/$image" "$image_url" || \
+		fetch -a -i "$work_dir/omnios/$zst_image" "$image_url" || \
 		        { echo fetch failed ; exit 1 ; }
 	fi
 else
-		echo "Fetching nocloud image to $work_dir/debian/$image"
+		echo "Fetching OmniOS image to $work_dir/omnios/$zst_image"
 		fetch -a "$image_url" || \
 			{ echo fetch failed ; exit 1 ; }
 fi
 
-[ -f $work_dir/debian/$image ] || { echo fetch failed ; exit 1 ; }
+[ -f $work_dir/omnios/$zst_image ] || { echo fetch failed ; exit 1 ; }
 
-[ -f "$work_dir/debian/debian.raw" ] && rm "$work_dir/debian/debian.raw"
-rm $work_dir/debian/*.sh > /dev/null 2>&1
-rm $work_dir/debian/*.vmdk > /dev/null 2>&1
+[ -f "$work_dir/omnios/omnios.raw" ] && rm "$work_dir/omnios/omnios.raw"
+rm $work_dir/omnios/*.sh > /dev/null 2>&1
+rm $work_dir/omnios/*.vmdk > /dev/null 2>&1
+
+
+# image=omnios-r151048.cloud.raw.zst
+image="${zst_image%.zst}"
+
+echo Expanding $zst_image
+zstd -d -k $zst_image
+
+[ -f "$work_dir/omnios/$image" ] || \
+	{ echo $zst_image failed to expand ; exit 1 ; }
+
 
 if [ "$target" = "dev" ] ; then
-	[ -f $work_dir/debian/$image ] || \
-		{ echo $work_dir/debian/$image missing ; exit 1 ; }
+#	[ -f $work_dir/omnios/$image ] || \
+#		{ echo $work_dir/omnios/$image missing ; exit 1 ; }
 
-	echo Imaging $work_dir/debian/$image to /dev/$target_device
-	\time -h dd if=/$work_dir/debian/$image \
+	echo Imaging $work_dir/omnios/$image to /dev/$target_device
+	\time -h dd if=/$work_dir/omnios/$image \
 		of=/dev/$target_device bs=1m status=progress \
 		iflag=fullblock || \
 			{ echo dd failed ; exit 1 ; }
@@ -158,21 +170,21 @@ if [ "$target" = "dev" ] ; then
 	echo ; echo Recovering $target_device partitioning
 	gpart recover $target_device
 else
-	echo ; echo Copying $work_dir/debian/$image to $work_dir/debian.raw
-	cp -p $work_dir/debian/$image $work_dir/debian/debian.raw || \
+	echo ; echo Copying $work_dir/omnios/$image to $work_dir/omnios.raw
+	cp -p $work_dir/omnios/$image $work_dir/omnios/omnios.raw || \
 		{ echo cp failed ; exit 1 ; }
 
-	[ -f "$work_dir/debian/debian.raw" ] || { echo cp failed ; exit 1 ; }
+	[ -f "$work_dir/omnios/omnios.raw" ] || { echo cp failed ; exit 1 ; }
 fi
 
 
 if [ "$mustgrow" = "yes" ] ; then
 	if [ "$target" = "img" ] ; then
 		# Relying on growfs for now!
-		echo ; echo Truncating $work_dir/debian/debian.raw
-		truncate -s $newsize $work_dir/debian/debian.raw || \
+		echo ; echo Truncating $work_dir/omnios/omnios.raw
+		truncate -s $newsize $work_dir/omnios/omnios.raw || \
 			{ echo truncate failed ; exit 1 ; }
-		ls -lh $work_dir/debian/debian.raw
+		ls -lh $work_dir/omnios/omnios.raw
 echo DEBUG DID THAT WORK? ; read work
 
 
@@ -189,19 +201,19 @@ fi
 if [ "$bhyve" = "y" ] ; then
 	if [ "$target" = "img" ] ; then
 		if [ "$vmdk" = "y" ] ; then
-			bhyve_img="$work_dir/debian/vm-flat.vmdk"
+			bhyve_img="$work_dir/omnios/vm-flat.vmdk"
 		else
-			bhyve_img="$work_dir/debian/debian.raw"
+			bhyve_img="$work_dir/omnios/omnios.raw"
 		fi
 	else
 		bhyve_img="/dev/$target_device"
 	fi
 
-	cat << EOF > "${work_dir}/debian/boot-debian-bhyve.sh"
+	cat << EOF > "${work_dir}/omnios/boot-omnios-bhyve.sh"
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
 kldstat -q -m vmm || kldload vmm
 sleep 1
-bhyve -m 1024 -H -A \\
+bhyve -m 4G -H \\
 	-l com1,stdio \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\
@@ -211,12 +223,12 @@ bhyve -m 1024 -H -A \\
 
 # Devices you may want to add:
 # -s 30:0,fbuf,tcp=0.0.0.0:5900,w=1024,h=768,wait \\
-# -s 3,virtio-net,tap2 \\
+# -s 3,virtio-net,tap1 \\
 
 sleep 2
 bhyvectl --destroy --vm=$vm_name
 EOF
-	echo ; echo Note: ${work_dir}/debian/boot-debian-bhyve.sh
+	echo ; echo Note: ${work_dir}/omnios/boot-omnios-bhyve.sh
 fi
 
 
@@ -225,7 +237,7 @@ fi
 # THIS WILL RENAME THE DISK IMAGE AND BREAK BHYVE/XEN
 
 if [ "$vmdk" = "y" ] ; then
-	vmdk_img="$work_dir/debian/debian.raw"
+	vmdk_img="$work_dir/omnios/omnios.raw"
 
 	vmdk_img_base="${vmdk_img%.raw}"
 
@@ -263,8 +275,14 @@ EOF
 	mv "$vmdk_img" "${vmdk_img_base}-flat.vmdk"
 fi
 
-# Could make this conditional on expanded or device
-echo ; echo You may need to run in the VM:
-echo ; echo growpart /dev/vda 1
-echo resize2fs /dev/vda1
+echo ; echo The default login is root with no password
+
+echo ; echo Note that r151048 may exhibit a long delay during boot under bhyve
+
+echo you can add /boot/conf.d/verbose  with:
+echo boot_verbose=\"YES\"
+echo boot_debug=\"YES\"
+
+
 exit 0
+

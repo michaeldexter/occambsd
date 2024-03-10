@@ -2,7 +2,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright 2022, 2023 Michael Dexter
+# Copyright 2022, 2023, 2024 Michael Dexter
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.3.1
+# Version v.0.3.2
 
 
 # CAVEATS
@@ -53,7 +53,7 @@
 
 # EXAMPLES
 
-# To fetch a 15.0-CURRENT raw boot image to ~/imagine-work/boot.raw
+# To fetch a 15.0-CURRENT raw boot image to ~/imagine-work/freebsd.raw
 #
 # sh imagine.sh -r 15.0-CURRENT
 
@@ -62,7 +62,7 @@
 # sh imagine.sh -r 15.0-CURRENT -t /dev/da1
  
 # To copy a "make release" VM image from the canonical object directory:
-#	/usr/obj/usr/src/amd64.amd64/release/vm.raw to ~/imagine-work/boot.raw
+#	/usr/obj/usr/src/amd64.amd64/release/vm.raw to ~/imagine-work/freebsd.raw
 #
 # sh imagine.sh -r obj
 
@@ -139,7 +139,7 @@ keep_mounted=0
 vmdk=0
 boot_scripts=0
 vm_device=""
-vm_name="vm0"			# Default
+vm_name="freebsd0"		# Default
 md_id=42			# Default
 
 
@@ -149,16 +149,16 @@ while getopts w:a:r:zt:ofg:smvb opts ; do
 	case $opts in
 	w)
 		work_dir="$OPTARG"
-		;;
+	;;
 	a)
 		case "$OPTARG" in
 			amd64|arm64|i386|riscv)
 				arch_input="$OPTARG"
-			;;
+		;;
 			*)
 				echo "Invalid architecture"
 				f_usage
-			;;
+		;;
 		esac
 
 		case "$arch_input" in
@@ -166,67 +166,67 @@ while getopts w:a:r:zt:ofg:smvb opts ; do
 				hw_platform="amd64"
 				cpu_arch="amd64"
 				image_arch="amd64"
-			;;
+		;;
 			arm64)
 				hw_platform="arm64"
 				cpu_arch="aarch64"
 				image_arch="arm64-aarch64"
-			;;
+		;;
 			i386)
 				hw_platform="i386"
 				cpu_arch="i386"
 				image_arch="i386"
-			;;
+		;;
 			riscv)
 				hw_platform="riscv"
 				cpu_arch="riscv64"
 				image_arch="riscv-riscv64"
-			;;
+		;;
 
 		esac
-		;;
+	;;
 	r) 
 		[ "$OPTARG" ] || f_usage
 		release_input="$OPTARG"
-		;;
+	;;
 	o)
 		offline_mode=1
-		;;
+	;;
 	z)
 		zfs_string="-zfs"
-		;;
+	;;
 	t)
 		[ "$OPTARG" ] || f_usage
 		target_input="$OPTARG"
-		;;
+	;;
 	f)
 		force=1
-		;;
+	;;
 	g)
 		grow_size="$OPTARG"
 		# Implied numeric validation
 		[ "$grow_size" -gt 7 ] || \
 			{ echo "-g must be a number larger than 7" ; exit 1 ; }
 		grow_required=1
-		;;
+	;;
 	s)
 		include_src=1
 		grow_required=1
 		must_mount=1
-		;;
+	;;
 	m)
 		must_mount=1
 		keep_mounted=1
-		;;
+	;;
 	v)
 		vmdk=1
-		;;
+	;;
 	b)
 		boot_scripts=1
-		;;
+	;;
 	*)
 		f_usage
-		;;
+	;;
 	esac
 done
 
@@ -357,7 +357,7 @@ target_prefix=$( printf %.1s "$target_input" )
 
 if [ "$target_input" = "img" ] ; then
 	target_type="img"
-	target_path="${work_dir}/boot.raw"
+	target_path="${work_dir}/freebsd.raw"
 
 	[ -d "$work_dir" ] || mkdir -p "$work_dir"
 	[ -d "$work_dir" ] || { echo "mkdir -p $work_dir failed" ; exit 1 ; }
@@ -517,7 +517,7 @@ mount | grep "on /media" && { echo "/media mount point in use" ; exit 1 ; }
 		zpool get name zroot > /dev/null 2>&1 && \
 			{ echo zpool zroot in use and will conflict ; exit 1 ; }
 			# -f does not appear to be needed
-
+echo
 		zpool import
 
 		# Rename the pool without heavy regex?
@@ -535,6 +535,7 @@ mount | grep "on /media" && { echo "/media mount point in use" ; exit 1 ; }
 		fi
 
 		zpool list
+echo
 		zpool status zroot
 
 		echo ; echo "Exporting the zpool for re-import"
@@ -651,7 +652,7 @@ if [ "$boot_scripts" = 1 ] ; then
 
 	case "$arch_input" in
 		amd64|i386)
-			cat << EOF > "${work_dir}/boot-bhyve.sh"
+			cat << EOF > "${work_dir}/boot-freebsd-bhyve.sh"
 #!/bin/sh
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
 [ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
@@ -677,7 +678,7 @@ bhyve -c 1 -m 1024 -H -A \\
 sleep 2
 bhyvectl --destroy --vm=$vm_name
 EOF
-			echo ; echo Note: ${work_dir}/boot-bhyve.sh
+			echo ; echo Note: ${work_dir}/boot-freebsd-bhyve.sh
 
 			cat << HERE > $work_dir/xen.cfg
 type = "hvm"
@@ -696,17 +697,17 @@ HERE
 			echo ; echo "Note: $work_dir/xen.cfg"
 
 	echo "xl list | grep $vm_name && xl destroy $vm_name" \
-		> $work_dir/boot-xen.sh
+		> $work_dir/boot-freebsd-xen.sh
 	echo "xl create -c $work_dir/xen.cfg" \
-		>> $work_dir/boot-xen.sh
-	echo ; echo Note: $work_dir/boot-xen.sh
+		>> $work_dir/boot-freebsd-xen.sh
+	echo ; echo Note: $work_dir/boot-freebsd-xen.sh
 
 	echo "xl shutdown $vm_name ; xl destroy $vm_name ; xl list" > \
 		$work_dir/destroy-xen.sh
 			echo ; echo Note: $work_dir/destroy-xen.sh
 			;;
 		arm64)
-			cat << HERE > $work_dir/boot-qemu-arm64.sh
+			cat << HERE > $work_dir/boot-freebsd-qemu-arm64.sh
 #!/bin/sh
 [ -f /usr/local/share/u-boot/u-boot-qemu-arm64/u-boot.bin ] || \\
 	{ echo \"u-boot.bin missing\" ; exit 1 ; }
@@ -717,10 +718,10 @@ HERE
 -bios /usr/local/share/u-boot/u-boot-qemu-arm64/u-boot.bin \
 -nographic
 HERE
-			echo ; echo Note: $work_dir/boot-qemu-arm64.sh
+			echo ; echo Note: $work_dir/boot-freebsd-qemu-arm64.sh
 			;;
 		riscv)
-			cat << HERE > $work_dir/boot-qemu-riscv.sh
+			cat << HERE > $work_dir/boot-freebsd-qemu-riscv.sh
 #!/bin/sh
 #pkg install qemu opensbi u-boot-qemu-riscv64
 [ -f /usr/local/share/opensbi/lp64/generic/firmware/fw_jump.elf ] || \\
@@ -737,7 +738,7 @@ HERE
 -netdev user,id=net0 \\
 -device virtio-net-device,netdev=net0
 HERE
-			echo ; echo Note: $work_dir/boot-qemu-riscv.sh
+			echo ; echo Note: $work_dir/boot-freebsd-qemu-riscv.sh
 			;;
 	esac
 fi

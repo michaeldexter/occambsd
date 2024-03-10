@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- https://www.winreflection.com/windows-server-2019-unattended-installation/ -->
+    <unattend xmlns="urn:schemas-microsoft-com:unattend">
+        <settings pass="windowsPE">
+            <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <DiskConfiguration>
+                    <Disk wcm:action="add">
+                        <CreatePartitions>
+                            <CreatePartition wcm:action="add">
+                                <Type>EFI</Type>
+                                <Size>512</Size>
+                                <Order>1</Order>
+                            </CreatePartition>
+                            <CreatePartition wcm:action="add">
+                                <Extend>false</Extend>
+                                <Type>MSR</Type>
+                                <Order>2</Order>
+                                <Size>128</Size>
+                            </CreatePartition>
+<!--                            <CreatePartition wcm:action="add">
+                                <Type>Primary</Type>
+                                <Order>3</Order>
+                                <Size>1024</Size>
+                            </CreatePartition> -->
+                            <CreatePartition wcm:action="add">
+<!--                                <Order>4</Order> -->
+                                <Order>3</Order>
+                                <Type>Primary</Type>
+                                <Extend>true</Extend>
+                            </CreatePartition>
+                        </CreatePartitions>
+
+                        <ModifyPartitions>
+                            <ModifyPartition wcm:action="add">
+                                <Format>FAT32</Format>
+                                <Order>1</Order>
+                                <PartitionID>1</PartitionID>
+                            </ModifyPartition>
+                            <ModifyPartition wcm:action="add">
+                                <Order>2</Order>
+                                <PartitionID>2</PartitionID>
+                            </ModifyPartition>
+<!--                            <ModifyPartition wcm:action="add">
+                                <Format>NTFS</Format>
+                                <Order>3</Order>
+                                <PartitionID>3</PartitionID>
+                                <Label>Recovery</Label>
+                                <TypeID>DE94BBA4-06D1-4D40-A16A-BFD50179D6AC</TypeID>
+                            </ModifyPartition> -->
+                            <ModifyPartition wcm:action="add">
+                                <Format>NTFS</Format>
+                                <Label>Windows</Label>
+<!--                                <Order>4</Order> -->
+                                <Order>3</Order>
+<!--                                <PartitionID>4</PartitionID> -->
+                                <PartitionID>3</PartitionID>
+                            </ModifyPartition>
+                        </ModifyPartitions>
+
+                        <DiskID>0</DiskID>
+                        <WillWipeDisk>true</WillWipeDisk>
+                    </Disk>
+                    <WillShowUI>OnError</WillShowUI>
+                </DiskConfiguration>
+                <ImageInstall>
+                    <OSImage>
+                        <InstallFrom>
+                            <MetaData wcm:action="add">
+                                <Key>/IMAGE/NAME</Key>
+                                <Value>Windows Server 2022 SERVERSTANDARD</Value>
+                            </MetaData>
+                        </InstallFrom>
+                        <InstallTo>
+                            <DiskID>0</DiskID>
+<!--                            <PartitionID>4</PartitionID> -->
+                            <PartitionID>3</PartitionID>
+                        </InstallTo>
+                        <InstallToAvailablePartition>false</InstallToAvailablePartition>
+                        <WillShowUI>OnError</WillShowUI>
+                    </OSImage>
+                </ImageInstall>
+                <UserData>
+                    <AcceptEula>true</AcceptEula>
+                </UserData>
+            </component>
+            <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <SetupUILanguage>
+                    <UILanguage>en-US</UILanguage>
+                </SetupUILanguage>
+                <InputLocale>en-US</InputLocale>
+                <SystemLocale>en-US</SystemLocale>
+                <UILanguage>en-US</UILanguage>
+                <UserLocale>en-US</UserLocale>
+            </component>
+        </settings>
+        <settings pass="oobeSystem">
+            <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <InputLocale>en-US</InputLocale>
+                <SystemLocale>en-US</SystemLocale>
+                <UILanguage>en-US</UILanguage>
+                <UserLocale>en-US</UserLocale>
+            </component>
+            <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <UserAccounts>
+                    <AdministratorPassword>
+                        <PlainText>true</PlainText>
+                        <Value>freebsd1!</Value>
+                    </AdministratorPassword>
+                    <LocalAccounts>
+                        <LocalAccount wcm:action="add">
+                            <Password>
+                                <PlainText>true</PlainText>
+                                <Value>freebsd1!</Value>
+                            </Password>
+                            <Group>Administrators</Group>
+                            <Name>root</Name>
+                        </LocalAccount>
+                    </LocalAccounts>
+                </UserAccounts>
+                <OOBE>
+                    <HideEULAPage>true</HideEULAPage>
+                    <HideLocalAccountScreen>true</HideLocalAccountScreen>
+                    <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+                    <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+                    <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+                    <ProtectYourPC>3</ProtectYourPC>
+                </OOBE>
+                <RegisteredOwner />
+            </component>
+        </settings>
+
+        <settings pass="specialize">
+            <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <ComputerName>BHYVE</ComputerName>
+                <TimeZone>Pacific Standard Time</TimeZone>
+                <RegisteredOwner />
+            </component>
+            <component name="Microsoft-Windows-TerminalServices-LocalSessionManager" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <fDenyTSConnections>false</fDenyTSConnections>
+            </component>
+            <component name="Microsoft-Windows-TerminalServices-RDP-WinStationExtensions" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <UserAuthentication>1</UserAuthentication>
+            </component>
+            <component name="Networking-MPSSVC-Svc" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <FirewallGroups>
+                    <FirewallGroup wcm:action="add" wcm:keyValue="RemoteDesktop">
+                        <Active>true</Active>
+                        <Group>@FirewallAPI.dll,-28752</Group>
+                        <Profile>all</Profile>
+                    </FirewallGroup>
+                </FirewallGroups>
+            </component>
+            <component name="Microsoft-Windows-ServerManager-SvrMgrNc" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <DoNotOpenServerManagerAtLogon>true</DoNotOpenServerManagerAtLogon>
+            </component>
+            <component name="Microsoft-Windows-Security-SPP-UX" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <SkipAutoActivation>true</SkipAutoActivation>
+            </component>
+        </settings>
+<!--        <cpi:offlineImage cpi:source="catalog:d:/catalogs/windows server 2019 evaluation/install_windows server 2019 serverstandard.clg" xmlns:cpi="urn:schemas-microsoft-com:cpi" /> -->
+    </unattend>
