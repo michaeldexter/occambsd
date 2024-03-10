@@ -19,8 +19,8 @@ profile-arm64-minimum.txt	A minimum configuration file for ARM64 (builds but not
 imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images, or dist sets or build objects to a boot environment
 debagine.sh		Images Debian "nocloud" bootable disk images to hardware and virtual machine images
 omniagine.sh		Images OmniOS "cloud" bootable disk images to hardware and virtual machine images
-winmagine.sh		Facilitates configurating Windows bootable disk images using autounattend.xml
-autounattend_xml	Windows autounattend.xml files for use with winmagine.sh
+winagine.sh		Facilitates configurating Windows bootable disk images using autounattend.xml
+autounattend_xml	Windows autounattend.xml files for use with winagine.sh
 make-rescue-iso.sh	A script to make a bootonly.iso rescue ISO with useful tools
 rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
 ```
@@ -147,10 +147,10 @@ sudo sh imagine.sh -r obj -g 10 -b -z
 A simplified, interactive  version of imagine.sh for Debian "nocloud" images
 
 ```
-sudo sh debmagine.sh
+sudo sh debagine.sh
 ```
 
-# omnimagine.sh
+# omniagine.sh
 
 A simplified, interactive  version of imagine.sh for OmniOS "cloud" images
 
@@ -163,7 +163,7 @@ sudo sh omniagine.sh
 A script to facilitate Windows autounattend.xml installations that follows the imagine file layout and terrible naming
 
 ```
-sudo sh winmagine.sh -i win2025.iso -x autounattend_xml/win2025.iso
+sudo sh winagine.sh -i win2025.iso -x autounattend_xml/win2025.iso
 ```
 
 # mirror-upstream.sh
