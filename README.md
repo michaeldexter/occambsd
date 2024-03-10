@@ -1,7 +1,7 @@
 ## OccamBSD: An application of Occam's razor to FreeBSD
 a.k.a. "super svelte stripped down FreeBSD"
 
-This project incorporates several inter-related scripts with the broad goal of producing purpose-built FreeBSD systems:
+This project incorporates several inter-related scripts with the broad goal of producing purpose-built FreeBSD systems and preparing disk images for OmniOS, Debian, and Windows:
 
 ```
 mirror-upstream.sh	Creates and maintains a local git.freebsd.org repository with releng, stable, and main branches
@@ -25,6 +25,19 @@ make-rescue-iso.sh	A script to make a bootonly.iso rescue ISO with useful tools
 rc.local.sh		An experimental stand-alone or /etc/rc.local script that configures FreeBSD system in an idempotent manner
 ```
 
+## Preface
+
+The relationships of the components in this repo can be confusing.
+
+TL:DR: They allow the author to (nearly) never use an installer again with FreeBSD, OmniOS, Debian, and Windows, with the added benefit of completely customizing FreeBSD using in-based tools.
+
+There have been countless "Cloud" and "Virtual Machine" boot images or appliances produced for various operating systems over the years. These are often symptoms of the use of "feature-rich" virtual machine boot images formats such as QCOW2, VDI, VHD(X), and others. In OpenZFS environments, any say... "copy on write!" or compression features of say... QCOW2 are categorically obsoleted by OpenZFS below the POSIX layer. 
+
+On OpenZFS, a raw boot image can benefit from snapshotting, compressions, thin-provisioning, and many other features without modification. A raw boot image can also be images to an OpenZFS volume (ZVOL) or shared over iSCSI.
+
+Above all, a raw boot image can be imaged to a *hardware* boot device and booted on compatible hardware platforms.
+
+In short, they are all, and always have been fundamentally *boot images*, and not "Cloud" or "Virtual Machine" images. For example, the FreeBSD "raw" "VM-IMAGE" files can be imaged to hardware devices and booted, which is exactly what imagine.sh helps with.
 
 ## Motivations
 
