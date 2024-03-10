@@ -62,7 +62,7 @@ In short, to help deliver on the FreeBSD promise to provide a flexible, permissi
 mirror-upstream.sh:		Internet access, ZFS, git
 bos-lite.sh			FreeBSD source and object directories
 bos-upload.sh			Depends on your upload strategy
-occambsd.sh:			FreeBSD 13.0 or later, and late 2022 FreeBSD 14-CURRENT for 'makefs -t zfs' support
+occambsd.sh:			FreeBSD 13.0 or later, and FreeBSD 14.0 for 'makefs -t zfs' support
 imagine.sh:			Internet access if using images from download.freebsd.org
 				QEMU and Xen packages as needed
 build-option-smoke-test.sh	FreeBSD source and object directories, optional git for metadata
@@ -97,7 +97,7 @@ occambsd.sh requires a profile and can build a root-on-ZFS image with -z:
 sudo sh occambsd.sh -v -z -p profile-amd64-zfs.txt
 ```
 
-Note that -z support is only available on FreeBSD 14-CURRENT
+Note that -z support is only available on FreeBSD 14.0 or later
 
 The full occambsd.sh usage is:
 
