@@ -51,7 +51,7 @@ if [ "$target" = "img" ] ; then
 
 	if [ "$mustgrow" = "no" ] ; then
 		echo ; echo Grow the root partition from the default 2G?
-		echo -n "(n<Size in G> i.e. 10G): " ; read grow
+		echo -n "(n<Size in G> i.e. 10 for 10G): " ; read grow
 		# Need a better variable than grow
 		if [ "$grow" -lt 5 ] ; then
 			{ echo Invalid input ; exit 1 ; }
