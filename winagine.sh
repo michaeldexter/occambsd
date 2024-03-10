@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v1.0
+# Version v1.0.1
 
 
 # EXAMPLES
@@ -157,21 +157,17 @@ fi
 
 echo ; echo Remastering ISO
 
-# Is -quiet broken on FreeBSD?
 mkisofs \
-	-quiet \
 	-b boot/etfsboot.com -no-emul-boot -c BOOT.CAT \
 	-iso-level 4 -J -l -D \
 	-N -joliet-long \
-	-relaxed-filenames -v \
+	-relaxed-filenames \
 	-V "Custom" -udf \
 	-boot-info-table -eltorito-alt-boot -eltorito-platform 0xEF \
 	-eltorito-boot efi/microsoft/boot/efisys_noprompt.bin \
 	-no-emul-boot \
 	-o $work_dir/windows/windows.iso $work_dir/windows/iso || \
 		{ echo mkisofs failed ; exit 1 ; }
-#	-quiet || \
-#mkisofs: No such file or directory. Invalid node - '-quiet'.
 
 echo ; echo The resulting ISO image is $work_dir/windows/install.iso
 
