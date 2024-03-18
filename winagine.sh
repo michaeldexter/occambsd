@@ -158,6 +158,7 @@ fi
 echo ; echo Remastering ISO
 
 mkisofs \
+	-quiet \
 	-b boot/etfsboot.com -no-emul-boot -c BOOT.CAT \
 	-iso-level 4 -J -l -D \
 	-N -joliet-long \
@@ -194,7 +195,7 @@ rm $work_dir/windows/iso/windows.raw
 echo ; echo truncating 15GB $work_dir/windows/windows.raw
 truncate -s 15g $work_dir/windows/windows.raw
 
-bhyve -c 2 -m 4G -H -A \\
+bhyve -c 2 -m 4G -H -A -D \\
 	-l com1,stdio \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\
@@ -222,7 +223,7 @@ cat << HERE > $work_dir/windows/boot-windows-raw.sh
 	{ echo \"BHYVE_UEFI.fd missing\" ; exit 1 ; }
 kldstat -q -m vmm || kldload vmm
 
-bhyve -c 2 -m 4G -H -A \\
+bhyve -c 2 -m 4G -H -A -D \\
 	-l com1,stdio \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\
