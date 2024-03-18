@@ -3,6 +3,25 @@
     <unattend xmlns="urn:schemas-microsoft-com:unattend">
         <settings pass="windowsPE">
             <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+                <RunSynchronous>
+                   <RunSynchronousCommand wcm:action="add">
+                       <Order>1</Order>
+                       <Description>BypassTPMCheck</Description>
+                       <Path>cmd /c reg add "HKLM\SYSTEM\Setup\LabConfig" /v "BypassTPMCheck" /t REG_DWORD /d 1</Path>
+                   </RunSynchronousCommand>
+                   <RunSynchronousCommand wcm:action="add">
+                       <Order>2</Order>
+                       <Description>BypassSecureBootCheck</Description>
+                       <Path>cmd /c reg add "HKLM\SYSTEM\Setup\LabConfig" /v "BypassSecureBootCheck" /t REG_DWORD /d 1</Path>
+                   </RunSynchronousCommand>
+                   <RunSynchronousCommand wcm:action="add">
+                       <Order>3</Order>
+                       <Description>BypassRAMCheck</Description>
+                       <Path>cmd /c reg add "HKLM\SYSTEM\Setup\LabConfig" /v "BypassRAMCheck" /t REG_DWORD /d 1</Path>
+                   </RunSynchronousCommand>
+                </RunSynchronous>
+
                 <DiskConfiguration>
                     <Disk wcm:action="add">
                         <CreatePartitions>
@@ -67,7 +86,7 @@
                         <InstallFrom>
                             <MetaData wcm:action="add">
                                 <Key>/IMAGE/NAME</Key>
-                                <Value>Windows 10 Pro</Value>
+                                <Value>Windows 11 Pro</Value>
                             </MetaData>
                         </InstallFrom>
                         <InstallTo>
