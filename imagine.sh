@@ -26,16 +26,13 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.3.2
+# Version v.0.3.3
 
 
 # CAVEATS
 
 # This intimately follows the FreeBSD Release Engineering mirror layout.
-# If the layout changes, this will break.
-
-# FreeBSD RE 'makefs -t zfs' VM-IMAGES use the pool name 'zroot', with is the
-# default suggestion in the installer - realistically import by id and rename.
+# If the layout changes, this will probably break.
 
 # FreeBSD 15.0-CURRENT VM-IMAGES are now 6GB in size.
 
@@ -47,9 +44,10 @@
 
 # 'fetch -i' only checks date stamps, allow for false matches on interrupted downlods.
 
-# Running imagine.sh in the work directory will cause existing release versions to be
-# misinterpreted as image paths to be copied
+# Running imagine.sh in the work directory will cause existing release versions to be misinterpreted as image paths to be copied
 
+# If you rename a pool, note that "zroot" is hard-coded into the VM-IMAGE rc.conf i.e. zpool_reguid="zroot" zpool_upgrade="zroot"
+# Reguiding and upgrading for consistency
 
 # EXAMPLES
 
@@ -102,6 +100,7 @@ f_usage() {
 	echo "-v (Generate VMDK image wrapper)"
 	echo "-b (Genereate boot scripts)"
 	echo "-z (Use a 14.0-RELEASE or newer root on ZFS image)"
+	echo "-Z <zpool name> (Default is imagine)"
 	echo
 	exit 0
 }
@@ -126,6 +125,9 @@ release_image_xz=""
 rootfs=""
 rootpart=""
 zfs_string=""
+zpool_name=""
+zpool_rename=""
+zpool_newname=""
 target_input="img"		# Default
 target_type=""
 target_path=""
@@ -140,12 +142,12 @@ vmdk=0
 boot_scripts=0
 vm_device=""
 vm_name="freebsd0"		# Default
-md_id=42			# Default
+md_id=42			# Default for easier cleanup if interrupted
 
 
 # USER INPUT AND VARIABLE OVERRIDES
 
-while getopts w:a:r:zt:ofg:smvb opts ; do
+while getopts w:a:r:zZ:t:ofg:smvb opts ; do
 	case $opts in
 	w)
 		work_dir="$OPTARG"
@@ -186,7 +188,6 @@ while getopts w:a:r:zt:ofg:smvb opts ; do
 		esac
 	;;
 	r) 
-		[ "$OPTARG" ] || f_usage
 		release_input="$OPTARG"
 	;;
 	o)
@@ -194,6 +195,13 @@ while getopts w:a:r:zt:ofg:smvb opts ; do
 	;;
 	z)
 		zfs_string="-zfs"
+	;;
+	Z)
+		zpool_newname="$OPTARG"
+		# Consider validation
+		# Implying this for use as shorthand
+		zfs_string="-zfs"
+		zpool_rename=1
 	;;
 	t)
 		[ "$OPTARG" ] || f_usage
@@ -230,6 +238,10 @@ while getopts w:a:r:zt:ofg:smvb opts ; do
 	esac
 done
 
+if [ $zpool_newname ] ; then
+	zpool get name $zpool_newname > /dev/null 2>&1 && \
+{ echo zpool $zpool_newname in use and will conflict - use -Z ; exit 1 ; }
+fi
 
 [ -n "$release_input" ] || { echo "-r Release required" ; f_usage ; exit 1 ; }
 
@@ -447,36 +459,45 @@ case "$target_type" in
 		gpart recover $target_device || \
 			{ echo gpart recover failed ; exit 1 ; }
 		gpart show $target_device
-		;;
+	;;
 esac
 
 
-if [ "$grow_required" = 1 ] ; then
+# Growth and ZFS renaming handling
 
-	[ "$( id -u )" = 0 ] || { echo "Must be root for image growth" ; exit 1 ; } 
+if [ "$grow_required" = 1 -o "$zpool_rename" = 1 ] ; then
+
+	[ "$( id -u )" = 0 ] || \
+		{ echo "Must be root for image growth" ; exit 1 ; } 
 
 	case "$target_type" in
 		img|path)
-			echo ; echo "Truncating $target_path"
-			truncate -s ${grow_size}G "$target_path" || \
-				{ echo truncate failed ; exit 1 ; }
+			if [ "$grow_required" = 1 ] ; then
+				echo ; echo "Truncating $target_path"
+				truncate -s ${grow_size}G "$target_path" || \
+					{ echo truncate failed ; exit 1 ; }
 
-			mdconfig -lv | grep -q "md$md_id" && \
-				{ echo "md$md_id in use" ; exit 1 ; }
+				mdconfig -lv | grep -q "md$md_id" && \
+					{ echo "md$md_id in use" ; exit 1 ; }
+			fi
 
 			echo ; echo "Attaching $target_path"
 			mdconfig -a -f "$target_path" -u $md_id || \
+
 				{ echo mdconfig failed ; exit 1 ; }
 			target_device="/dev/md$md_id"
 
 			mdconfig -lv
 
+			# Unnecessary if NOT growing but not harmful
 			gpart recover $target_device || \
 				{ echo gpart recover failed ; exit 1 ; }
-			;;
+		;;
 	esac
 
 # FreeBSD /dev/${target_device}pN is now dev/img agnostic at this point
+
+	echo ; echo Determining root file system with gpart
 
 	if [ "$( gpart show $target_device | grep freebsd-ufs )" ] ; then
 		rootfs="freebsd-ufs"
@@ -489,67 +510,97 @@ if [ "$grow_required" = 1 ] ; then
 		exit 1
 	fi
 
+	echo ; echo Root file system appears to be $rootfs
+
 	# Should be file system-agnostic
 rootpart="$( gpart show $target_device | grep $rootfs | awk '{print $3}' )"
 
-	# Should be file system-agnostic
-	echo ; echo "Resizing ${target_device}p${rootpart}"
-	# Should be file system-agnostic
-	gpart resize -i "$rootpart" "$target_device"
-	gpart show "$target_device"
+	if [ "$grow_required" = 1 ] ; then
 
-mount | grep "on /media" && { echo "/media mount point in use" ; exit 1 ; }
+		# Should be file system-agnostic
+		echo ; echo "Resizing ${target_device}p${rootpart}"
+		# Should be file system-agnostic
+		gpart resize -i "$rootpart" "$target_device"
+		gpart show "$target_device"
 
-	if [ "$rootfs" = "freebsd-ufs" ] ; then
-		echo ; echo Growing ${target_device}p${rootpart}
-		growfs -y "${target_device}p${rootpart}" || \
+		mount | grep "on /media" && \
+			{ echo "/media mount point in use" ; exit 1 ; }
+
+		if [ "$rootfs" = "freebsd-ufs" ] ; then
+			echo ; echo Growing ${target_device}p${rootpart}
+			growfs -y "${target_device}p${rootpart}" || \
 			{ echo "growfs failed" ; exit 1 ; }
 
-		if [ "$must_mount" = 1 ] ; then
-			mount | grep "on /media" && \
+			if [ "$must_mount" = 1 ] ; then
+				mount | grep "on /media" && \
 				{ echo "/media mount point in use" ; exit 1 ; }
-			mount ${target_device}p${rootpart} /media || \
-				{ echo mount failed ; exit 1 ; }
-			df -h | grep media
+				mount ${target_device}p${rootpart} /media || \
+					{ echo mount failed ; exit 1 ; }
+				df -h | grep media
+			fi
 		fi
-	elif [ "$rootfs" = "freebsd-zfs" ] ; then
-		zpool list
-		zpool get name zroot > /dev/null 2>&1 && \
-			{ echo zpool zroot in use and will conflict ; exit 1 ; }
-			# -f does not appear to be needed
-echo
-		zpool import
+	fi
 
-		# Rename the pool without heavy regex?
+	if [ "$rootfs" = "freebsd-zfs" ] ; then
 
-		echo ; echo Importing zpool for expansion
-		zpool import -o autoexpand=on -N zroot || \
-			{ echo "zroot failed to import" ; exit 1 ; }
+# NOT IDEAL TO HAVE TO HARD-CODE THE FOURTH PARTITION
+# But serious gpart output parsing would be required
 
-		echo ; echo Expanding the zpool root partition
+		echo ; echo Obtaining zpool guid
+zpool_name=$( zdb -l /dev/md${md_id}p4 | grep " name:" | awk '{print $2}' )
+		echo ; echo Obtaining zpool guid
+zpool_guid=$( zdb -l /dev/md${md_id}p4 | grep pool_guid | awk '{print $2}' )
 
-		if [ "$target_type" = "img" ] ; then
-			zpool online -e zroot ${target_device}p${rootpart}
-		elif [ "$target_type" = "dev" ] ; then
-			zpool online -e zroot /dev/gpt/rootfs
+		if [ "$zpool_rename" = 1 ] ; then
+		echo ; echo Importing zpool with guid $zpool_guid
+		zpool import -o autoexpand=on -N $zpool_guid $zpool_newname || \
+			{ echo "$zpool_newname failed to import" ; exit 1 ; }
+				zpool_name="$zpool_newname"
+		else
+		echo ; echo Importing zpool $zpool_name
+		zpool import -o autoexpand=on -N $zpool_name || \
+			{ echo "$zpool_name failed to import" ; exit 1 ; }
 		fi
 
-		zpool list
-echo
-		zpool status zroot
+		if [ "$grow_required" = 1 ] ; then
 
-		echo ; echo "Exporting the zpool for re-import"
+			echo ; echo Expanding the zpool root partition
 
-		zpool export zroot
+			if [ "$target_type" = "img" ] ; then
+			zpool online -e $zpool_name ${target_device}p${rootpart}
+			elif [ "$target_type" = "dev" ] ; then
+				zpool online -e $zpool_name /dev/gpt/rootfs
+			fi
+		fi
+
+			zpool list
+
+			echo ; echo Reguiding and upgrading $zpool_name
+
+			zpool reguid $zpool_name
+			zpool upgrade $zpool_name
+
+			zpool status $zpool_name
+
+			echo ; echo "Exporting the $zpool_name"
+
+			zpool export $zpool_name
+
+	if [ "$target_type" = "img" ] ; then
+		echo ; echo "Destroying $target_device"
+		mdconfig -du $md_id || \
+	{ echo "$target_device mdconfig -du failed" ; mdconfig -lv ; exit 1 ; }
+	fi
 
 		if [ "$must_mount" = 1 ] ; then
 			mount | grep "on /media" && \
 				{ echo "/media mount point in use" ; exit 1 ; }
 			sleep 3
-			echo ; echo Importing zpool
-			zpool import -R /media zroot || \
-				{ echo "zroot failed to import" ; exit 1 ; }
+			echo ; echo Importing zpool $zpool_name for mounting
+			zpool import -R /media $zpool_name || \
+			{ echo "$zpool_name failed to import" ; exit 1 ; }
 		fi
+
 	elif [ "$rootfs" = "linux-data" ] ; then
 		[ $( which resize2fs ) ] || \
 			{ echo "fusefs-ext2 no installed" ; exit 1 ; }
@@ -749,18 +800,19 @@ if [ "$keep_mounted" = 0 -a "$must_mount" = 1 ] ; then
 		echo ; echo "Unmounting /media"
 		umount /media || { echo "umount failed" ; exit 1 ; }
 	else
-		zpool export zroot || { echo "zpool export failed" ; exit 1 ; }
+		zpool export $zpool_name || \
+			{ echo "zpool export failed" ; exit 1 ; }
 	fi
 	if [ "$target_type" = "img" ] ; then
 		echo ; echo "Destroying $target_device"
 		mdconfig -du $md_id || \
-			{ echo "$target_device mdconfig -du failed" ; mdconfig -lv ; exit 1 ; }
+	{ echo "$target_device mdconfig -du failed" ; mdconfig -lv ; exit 1 ; }
 	fi
 elif [ "$keep_mounted" = 1 ] ; then
 	if [ "$rootfs" = "freebsd-ufs" ] ; then
 		echo ; echo "Run 'umount /media' when finished"
 	else
-		echo ; echo "Run 'zpool export zroot' when finished"
+		echo ; echo "Run 'zpool export $zpool_name' when finished"
 	fi
 
 	if [ "$target_type" = "img" ] ; then

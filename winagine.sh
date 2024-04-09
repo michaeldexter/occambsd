@@ -44,9 +44,9 @@
 
 work_dir="/root/imagine-work"
 
-which 7z || { echo 7-zip package missing ; exit 1 ; }
-which mkisofs || { echo cdrtools package missing ; exit 1 ; }
-which xmllint || { echo libxml2 package missing ; exit 1 ; }
+which 7z || pkg install -y 7-zip
+which mkisofs || pkg install -y cdrtools
+which xmllint || pkg install -y libxml2
 
 vm_name="windows0"
 target_input="img"		# Default
@@ -192,8 +192,8 @@ echo ; echo Removing previous $work_dir/windows/windows.raw if present
 [ -f $work_dir/windows/windows.raw ] && \\
 rm $work_dir/windows/iso/windows.raw
 
-echo ; echo truncating 15GB $work_dir/windows/windows.raw
-truncate -s 15g $work_dir/windows/windows.raw
+echo ; echo truncating 32GB $work_dir/windows/windows.raw
+truncate -s 32g $work_dir/windows/windows.raw
 
 bhyve -c 2 -m 4G -H -A -D \\
 	-l com1,stdio \\
