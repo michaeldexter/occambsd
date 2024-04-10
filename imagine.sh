@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.4.0
+# Version v.0.4.1
 
 
 # CAVEATS
@@ -87,7 +87,7 @@ f_usage() {
 	echo ; echo "USAGE:"
 	echo "-w <working directory> (Default: /root/imagine-work)"
 	echo "-a <architecture> [ amd64 | arm64 | i386 | riscv - default amd64 ]"
-	echo "-r [ obj | debian | /path/to/image | <version> ] (Release - Required)"
+	echo "-r [ obj | omnios | debian | /path/to/image | <version> ] (Release - Required)"
 	echo "obj = /usr/obj/usr/src/<target>.<target_arch>/release/vm.raw"
 	echo "/path/to/image.raw for an existing image"
 	echo "<version> i.e. 14.0-RELEASE | 15.0-CURRENT | 15.0-ALPHAn|BETAn|RCn"
@@ -275,6 +275,37 @@ fi
 	[ -r "$release_image_file" ] || \
 		{ echo "$release_image_file not found" ; exit 1 ; }
 
+elif [ "$release_input" = "omnios" ] ; then
+
+	release_type="file"
+	release_image_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151048.cloud.raw.zst"
+	release_name="omnios"
+	release_image_file="omnios-r151048.cloud.raw"
+
+# TEST AND FAIL EARLY
+	[ "$include_src" = 1 ] && \
+		{ echo "-s src not available with OmniOS images" ; exit 1 ; }
+
+# Redundant from FreeBSD/xz - refactor!
+# Create the work directory if missing
+	[ -d "${work_dir}/${release_name}" ] || \
+		mkdir -p "${work_dir}/${release_name}"
+	[ -d "${work_dir}/${release_name}" ] || \
+		{ echo "mkdir ${work_dir}/${release_name} failed" ; exit 1 ; }
+
+	# Needed for fetch to save the upstream file name
+	cd "${work_dir}/${release_name}"
+
+	# fetch is not idempotent - check if exists before fetch -i
+	if [ -r $release_image_file ] ; then
+		if [ "$offline_mode" = 0 ] ; then
+		fetch -a -i "$release_image_file" "$release_image_url" || \
+			{ echo "$release_image_url fetch failed" ; exit 1 ; }
+		fi
+	else
+	fetch -a "$release_image_url" || \
+		{ echo "$release_image_url fetch failed" ; exit 1 ; }
+	fi
 elif [ "$release_input" = "debian" ] ; then
 	release_type="file"
 	release_image_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-nocloud-amd64.raw"
@@ -389,6 +420,8 @@ if [ "$target_input" = "img" ] ; then
 
 	if [ "$release_name" = "debian" ] ; then
 		target_path="${work_dir}/debian.raw"
+	elif [ "$release_name" = "omnios" ] ; then
+		target_path="${work_dir}/omnios.raw"
 	else
 		target_path="${work_dir}/freebsd.raw"
 	fi
@@ -547,6 +580,8 @@ if [ "$advanced_preparation" = "1" ] ; then
 		root_fs="freebsd-ufs"
 	elif [ "$( gpart show $target_dev | grep freebsd-zfs )" ] ; then
 		root_fs="freebsd-zfs"
+	elif [ "$( gpart show $target_dev | grep apple-zfs )" ] ; then
+		root_fs="apple-zfs"
 	elif [ "$( gpart show $target_dev | grep linux-data )" ] ; then
 		root_fs="linux-data"
 	else
@@ -560,9 +595,9 @@ if [ "$advanced_preparation" = "1" ] ; then
 root_part="$( gpart show $target_dev | grep $root_fs | awk '{print $3}' )"
 root_dev="${target_dev}p${root_part}"
 
-	if [ "$root_fs" = "freebsd-zfs" ] ; then
+	if [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
 		echo ; echo Obtaining zpool guid from $root_dev
-	zpool_name=$( zdb -l $root_dev | grep " name:" | awk '{print $2}' )
+zpool_name=$( zdb -l $root_dev | grep " name:" | awk '{print $2}' | tr -d "'" )
 		echo ; echo Obtaining zpool guid from $root_dev
 	zpool_guid=$( zdb -l $root_dev | grep pool_guid | awk '{print $2}' )
 	fi
@@ -602,24 +637,19 @@ if [ "$grow_required" = 1 -o "$zpool_rename" = 1 ] ; then
 			{ echo "resize2fs failed" ; exit 1 ; }
 
 	# Could be 'else' having completed the recognition test above
-	elif [ "$root_fs" = "freebsd-zfs" ] ; then
+	elif [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
 
 		# Goal is grow, but must accomodate rename (guessing no harm)
-
-#		echo ; echo Obtaining zpool guid from $root_dev
-#	zpool_name=$( zdb -l $root_dev | grep " name:" | awk '{print $2}' )
-#	echo ; echo Obtaining zpool guid from $root_dev
-#	zpool_guid=$( zdb -l $root_dev | grep pool_guid | awk '{print $2}' )
 
 		# Must rename to import if conflicting
 		if [ "$zpool_rename" = 1 ] ; then
 		echo ; echo Importing and expanding zpool with guid $zpool_guid
-		zpool import -o autoexpand=on -N $zpool_guid $zpool_newname || \
+	zpool import -o autoexpand=on -N -f $zpool_guid $zpool_newname || \
 			{ echo "$zpool_newname failed to import" ; exit 1 ; }
 				zpool_name="$zpool_newname"
 		else
 			echo ; echo Importing and expanding zpool $zpool_name
-			zpool import -o autoexpand=on -N $zpool_name || \
+			zpool import -o autoexpand=on -N -f $zpool_name || \
 			{ echo "$zpool_name failed to import" ; exit 1 ; }
 		fi
 
@@ -631,10 +661,13 @@ if [ "$grow_required" = 1 -o "$zpool_rename" = 1 ] ; then
 
 		zpool list $zpool_name
 
-		echo ; echo Reguiding and upgrading $zpool_name
-
+		echo ; echo Reguiding $zpool_name
 		zpool reguid $zpool_name
-		zpool upgrade $zpool_name
+
+		if [ "$release_name" -ne "omnios" ] ; then
+			echo ; echo Upgrading $zpool_name
+			zpool upgrade $zpool_name
+		fi
 
 		zpool status $zpool_name
 
@@ -770,18 +803,18 @@ if [ "$boot_scripts" = 1 ] ; then
 	{ echo \"BHYVE_UEFI.fd missing\" ; exit 1 ; }
 kldstat -q -m vmm || kldload vmm
 sleep 1
-bhyve -c 1 -m 1024 -H -A \\
+bhyve -c 1 -m 4096 -H -A \\
 	-l com1,stdio \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 0,hostbridge \\
 	-s 2,virtio-blk,$vm_device \\
-	-s 30,xhci,tablet \\
 	-s 31,lpc \\
 	$vm_name
 
 # Devices to consider:
 
-# -s 30:0,fbuf,tcp=0.0.0.0:5900,w=1024,h=768,wait \\
+# -s 29,fbuf,tcp=0.0.0.0:5900,w=1024,h=768,wait \\
+# -s 30,xhci,tablet \\
 # -s 3,virtio-net,tap0 \\
 
 sleep 2
@@ -864,7 +897,7 @@ if [ "$keep_mounted" = 0 ] ; then
 		if [ "$root_fs" = "freebsd-ufs" ] ; then
 			echo ; echo "Unmounting /media"
 			umount /media || { echo "umount failed" ; exit 1 ; }
-		elif [ "$root_fs" = "freebsd-zfs" ] ; then
+	elif [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
 			zpool export $zpool_name || \
 				{ echo "zpool export failed" ; exit 1 ; }
 		fi
