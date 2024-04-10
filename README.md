@@ -17,7 +17,6 @@ profile-amd64-hardware.txt	A minimum configuration with ZFS and hardware machine
 profile-amd64-ipv4.txt	The hardware profile plus minimum IPv4 networking with ssh(1) and host(1)
 profile-arm64-minimum.txt	A minimum configuration file for ARM64 (builds but not tested on qemu|hardware)
 imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images, or dist sets or build objects to a boot environment
-debagine.sh		Images Debian "nocloud" bootable disk images to hardware and virtual machine images
 omniagine.sh		Images OmniOS "cloud" bootable disk images to hardware and virtual machine images
 winagine.sh		Facilitates configurating Windows bootable disk images using autounattend.xml
 autounattend_xml	Windows autounattend.xml files for use with winagine.sh
@@ -142,6 +141,8 @@ imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", 
 
 Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts. Note the syntax in the EXAMPLES section of the script.
 
+-r debian support has been restored.
+
 ```
 sudo sh imagine.sh -r 15.0-CURRENT
 ```
@@ -153,14 +154,6 @@ Example usage on a FreeBSD 14.0 system with 'makefs -t zfs' support to produce a
 ```
 sudo sh occambsd.sh -p profile-amd64-zfs.txt -v -z
 sudo sh imagine.sh -r obj -g 10 -b -z
-```
-
-# debagine.sh
-
-A simplified, interactive  version of imagine.sh for Debian "nocloud" images
-
-```
-sudo sh debagine.sh
 ```
 
 # omniagine.sh
