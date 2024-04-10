@@ -212,7 +212,6 @@ while getopts w:a:r:zZ:t:ofg:smvb opts ; do
 		target_input="$OPTARG"
 	;;
 #	T)
-# Problem... images are quite dynamic
 #		[ "$OPTARG" ] || f_usage
 #		mirror_path="$OPTARG"
 #	;;
@@ -348,8 +347,8 @@ elif [ -f "$release_input" ] ; then # path to an image
 
 	[ "$include_src" = 1 ] && \
 		{ echo "-s src not available with a custom image" ; exit 1 ; }
-
-else # release version i.e. 15.0-CURRENT
+else
+	# release version i.e. 15.0-CURRENT
 	release_type="xz"
 	echo "$release_input" | grep -q "-" || \
 		{ echo "Invalid release" ; exit 1 ; }
@@ -925,6 +924,17 @@ fi
 
 # MIRRORING SCAFOLDING
 
+if [ -n "$mirror_path" ] ; then
+	if [ "$keep_mounted" = 0 ] ; then
+		echo GUH
+	fi
+
+	if [ "$target_input" = "img" ] ; then
+
+		target_path="${work_dir}/freebsd.raw"
+		mirror_path="${work_dir}/freebsd2.raw"
+	fi
+
 # Framing in but may rip out
 
 # Challenge: Automatic image handling
@@ -935,3 +945,19 @@ fi
 
 # Would need a quiet mode for this to work
 #echo -n $target_path
+
+#echo Relabeling ${disk0md}p4 to disk0
+#gpart modify -l disk0 -i 4 $disk0md | \
+#        { echo ${disk0md}p4 partition relabel failed ; exit 1 ; }
+
+#[ -c /dev/gpt/disk0 ] || { echo ${disk0md}p4 failed to relabel ; exit 1 ; }
+
+#echo Relabeling ${disk1md}p4 to disk1
+#gpart modify -l disk1 -i 4 $disk1md | \
+#        { echo ${disk1md}p4 partition relabel failed ; exit 1 ; }
+
+#[ -c /dev/gpt/disk1 ] || { echo ${disk1md}p4 failed to relabel ; exit 1 ; }
+
+fi
+
+exit 0
