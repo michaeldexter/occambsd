@@ -2,7 +2,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright 2021, 2022, 2023 Michael Dexter
+# Copyright 2021, 2022, 2023, 2024 Michael Dexter
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.7.0
+# Version v0.7.5beta
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -38,11 +38,15 @@ f_usage() {
 	echo "-W (Reuse the previous world objects without cleaning)"
 	echo "-k (Reuse the previous kernel objects)"
 	echo "-K (Reuse the previous kernel objects without cleaning)"
+# Need reuse PkgBase?
+	echo "-a <additional build option to exclude>"
+	echo "-b (package base)"
 	echo "-G (Use the GENERIC/stock world)"
 	echo "-g (Use the GENERIC kernel)"
 	echo "-j (Build for Jail boot)"
-	echo "-v (Generate vm-image)"
-	echo "-z (Generate ZFS vm-image)"
+	echo "-9 (Build for 9pfs boot)"
+	echo "-v (Generate vm-image and boot scripts)"
+	echo "-z (Generate ZFS vm-image and boot scripts)"
 	echo "-Z <size> (vm-image siZe i.e. 500m - default is 5g)"
 	echo "-S <size> (vm-image Swap size i.e. 500m - default is 1g)"
 	echo "-i (Generate disc1 and bootonly.iso ISOs)"
@@ -70,18 +74,21 @@ src_conf="$work_dir/src.conf"
 buildjobs="$(sysctl -n hw.ncpu)"
 
 # Should any be left unset for use of environment variables?
-profile="0"
-reuse_world="0"
-reuse_world_dirty="0"
-reuse_kernel="0"
-reuse_kernel_dirty="0"
-generate_vm_image="0"
-zfs_vm_image="0"
+profile=0
+reuse_world=0
+reuse_world_dirty=0
+reuse_kernel=0
+reuse_kernel_dirty=0
+additional_option=0
+generate_jail=0
+generate_9pfs=0
+generate_vm_image=0
+zfs_vm_image=0
 vm_image_size="400m"
 vm_swap_size="100m"
-dry_run="0"
+dry_run=0
 
-while getopts p:s:o:O:wWkKGgzjvzZ:S:imn opts ; do
+while getopts p:s:o:O:wWkKa:bGgzj9vzZ:S:imn opts ; do
 	case $opts in
 	p)
 		# REQUIRED
@@ -112,30 +119,41 @@ while getopts p:s:o:O:wWkKGgzjvzZ:S:imn opts ; do
   		kernconf_dir="$OPTARG"
 		;;
 	w)
-		reuse_world="1"
+		reuse_world=1
 		;;
 	W)
-		reuse_world="1"
-		reuse_world_dirty="1"
+# Possibly ambiguous
+		reuse_world=1
+		reuse_world_dirty=1
 		;;
 	k)
-		reuse_kernel="1"
+		reuse_kernel=1
 		;;
 	K)
-		reuse_kernel="1"
-		reuse_kernel_dirty="1"
+# Possibly ambiguous
+		reuse_kernel=1
+		reuse_kernel_dirty=1
+		;;
+	a)
+		additional_option="$OPTARG"
+		;;
+	b)
+		package_base=1
 		;;
 	G)
-		generic_world="1"
+		generic_world=1
 		;;
 	g)
-		generic_kernel="1"
+		generic_kernel=1
 		;;
 	j)
-		generate_jail="1"
+		generate_jail=1
+		;;
+	9)
+		generate_9pfs=1
 		;;
 	v)
-		generate_vm_image="1"
+		generate_vm_image=1
 		;;
 	z)
 		vmfs="zfs"
@@ -148,13 +166,13 @@ while getopts p:s:o:O:wWkKGgzjvzZ:S:imn opts ; do
 		vm_swap_size="$OPTARG"
 		;;
 	i)
-		generate_isos="1"
+		generate_isos=1
 		;;
 	m)
-		generate_memstick="1"
+		generate_memstick=1
 		;;
 	n)
-		dry_run="1"
+		dry_run=1
 		;;
 	*)
 		f_usage
@@ -162,8 +180,7 @@ while getopts p:s:o:O:wWkKGgzjvzZ:S:imn opts ; do
 	esac
 done
 
-# A profile must be specified
-[ "$profile" = "0" ] && f_usage
+[ "$profile" = "0" ] && { echo "-p <profile> is required" ; f_usage ; }
 
 log_dir="$work_dir/logs"		# Lives under work_dir for mkdir -p
 
@@ -210,50 +227,12 @@ mount -t devfs | \
 	grep ${target}.$target_arch/release/vm-image/dev && \
 	umount $obj_dir/$src_dir/${target}.$target_arch/release/vm-image/dev
 
-[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw"
+	if [ -d $obj_dir/$src_dir/${target}.$target_arch/release ] ; then
+	chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/release
+		rm -rf $obj_dir/$src_dir/${target}.$target_arch/release/*
+	fi
 
-[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.img"
-
-[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.ufs.raw" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.ufs.raw"
-
-[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.raw" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.raw"
-
-[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.ufs.img" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.ufs.img"
-
-[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.img" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/vm.zfs.img"
-
-[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/raw.ufs.img" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.ufs.img"
-
-[ -f "$obj_dir/$src_dir/${target}.$target_arch/release/raw.zfs.img" ] && \
-	rm "$obj_dir/$src_dir/${target}.$target_arch/release/raw.zfs.img"
-
-[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image" ] && \
-	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"
-
-[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image" ] && \
-	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image"
-
-[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/disc1" ] && \
-	chflags -R 0  "$obj_dir/$src_dir/${target}.$target_arch/release/disc1"
-
-# Note asterisk to take image with it
-[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/disc1" ] && \
-	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/disc1*"
-
-[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly" ] && \
-	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly"
-
-[ -d "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly" ] && \
-	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly*"
-
-# Kernel first depending on how aggresively we clean the object directory
+# Kernel first depending on how aggressively we clean the object directory
 if [ "$reuse_kernel" = "0" ] ; then
 	echo ; echo Cleaning kernel object directory
 	# Only clean the requested kernel
@@ -267,7 +246,7 @@ if [ "$reuse_kernel" = "0" ] ; then
 else
 	echo ; echo Reuse kernel requested
 	[ -f "$obj_dir/$src_dir/${target}.$target_arch/sys/${kernconf}/kernel" ] || \
-		{ echo Kernel objects not found for resuse ; exit 1 ; }
+		{ echo Kernel objects not found for reuse ; exit 1 ; }
 fi
 
 if [ "$reuse_world" = "0" ] ; then
@@ -285,7 +264,16 @@ else
 	[ -d "$obj_dir/$src_dir/${target}.$target_arch/bin/sh" ] || \
 		{ echo World objects not found for reuse ; exit 1 ; }
 fi
-	
+
+if [ -d "$obj_dir$src_dir/repo" ] ; then
+	echo ; echo Cleaning package repo directory
+	chflags -R 0 $obj_dir$src_dir/repo
+	rm -rf $obj_dir$src_dir/repo/*
+fi
+
+
+# SRC.CONF
+
 echo ; echo Generating $work_dir/all-options.txt
 
 all_options=$( make -C $src_dir showconfig \
@@ -302,9 +290,6 @@ all_options=$( make -C $src_dir showconfig \
 
 echo "$all_options" > $work_dir/all_options.conf
 
-#echo ; echo DEBUG all_options.conf reads:
-#cat $work_dir/all_options.conf
-
 echo ; echo Generating $work_dir/src.conf
 
 # Prune WITH_ options leaving only WITHOUT_ options
@@ -313,6 +298,10 @@ without_options=$( echo $all_options | grep -v WITH_ )
 #echo ; echo without_options reads
 #echo $without_options
 
+# Save off all WITHOUT_s
+echo ; echo Generating $work_dir/all_withouts.txt
+echo $without_options > $work_dir/all_withouts.txt
+
 # Remove enabled_options to result in the desired src.conf
 IFS=" "
 for option in $build_options ; do
@@ -320,6 +309,16 @@ for option in $build_options ; do
 done
 
 echo $without_options > $work_dir/src.conf
+
+# Addition option, added for build_option_survey-like abilities
+if ! [ "$additional_option" = "0" ] ; then
+echo The additional_option is "$additional_option"
+echo running grep -v "$additional_option" $work_dir/src.conf
+	grep -v "$additional_option" $work_dir/src.conf > \
+		$work_dir/src.conf.additional
+echo DEBUG tail of $work_dir/src.conf.additional
+	mv $work_dir/src.conf.additional $work_dir/src.conf
+fi
 
 #echo ; echo The generated $work_dir/src.conf tails:
 #tail $work_dir/src.conf
@@ -406,6 +405,8 @@ fi
 
 # BUILD THE KERNEL
 
+# Exclude for a jail? Would need to see if excluding everything else
+
 if [ "$reuse_kernel" = "1" ] ; then
 	if [ "$reuse_kernel_dirty" = "0" ] ; then
 		echo ; echo "Using existing kernel build objects"
@@ -424,6 +425,18 @@ fi
 #echo ; echo -n "Size of the resulting kernel: "
 #	ls -s $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf/kernel \
 #		 | cut -d " " -f1
+
+if [ "$package_base" = "1" ] ; then
+	echo ; echo Packaging base - logging to $log_dir/build-packages.log
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir \
+		make -C $src_dir -j$buildjobs packages \
+		SRCCONF=$src_conf KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
+			> $log_dir/build-packages.log 2>&1 || \
+				{ echo make packages failed ; exit 1 ; }
+#echo DEBUG $log_dir/build-packages.log reads
+#cat $log_dir/build-packages.log
+fi
 
 
 # GENERATE JAIL
@@ -475,8 +488,45 @@ HERE
 
 [ -f "$work_dir/jail-halt.sh" ] || \
 	{ echo "$work_dir/jail-halt.sh failed to create" ; exit 1 ; }
-fi
+fi # End jail
 
+
+# GENERATE 9PFS
+
+if [ "$generate_9pfs" = "1" ] ; then
+	[ -d ${work_dir}/9pfs ] || mkdir ${work_dir}/9pfs
+
+	echo ; echo Installing 9pfs world - logging to $log_dir/install-9pfs-world.log
+
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
+	installworld SRCCONF=$src_conf $makeoptions \
+	DESTDIR=${work_dir}/9pfs/ \
+	NO_FSCHG=YES \
+		> $log_dir/install-9pfs-world.log 2>&1
+
+echo ; echo Installing 9pfs distribution - logging to $log_dir/9pfs-distribution.log
+
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
+	SRCCONF=$src_conf DESTDIR=${work_dir}/9pfs \
+		> $log_dir/9pfs-distribution.log 2>&1
+
+
+	echo ; echo Installing 9pfs kernel - logging to $log_dir/install-9pfs-kernel.log
+
+	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
+	installkernel SRCCONF=$src_conf $makeoptions \
+	KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+	DESTDIR=${work_dir}/9pfs/ \
+	NO_FSCHG=YES \
+		> $log_dir/install-9pfs-kernel.log 2>&1
+
+	echo "virtio_p9fs_load=\"YES\"" > ${work_dir}/9pfs/boot/loader.conf
+
+	echo "vfs.root.mountfrom=\"p9fs:sharename\"" \
+		>> ${work_dir}/9pfs/boot/loader.conf
+
+	echo "sharename / p9fs rw 0 0" > ${work_dir}/9pfs/etc/fstab
+fi # End 9pfs
 
 # GENERATE IMAGES
 
@@ -523,25 +573,28 @@ fi
 
 	echo ; echo Generating VM scripts
 
-	echo "kldload vmm" \
-		> $work_dir/bhyve-boot-vmimage.sh
-	echo "[ -e /dev/vmm/occambsd ] && bhyvectl --destroy --vm=occambsd" \
-		> $work_dir/bhyve-boot-vmimage.sh
-	echo "sleep 1" >> $work_dir/bhyve-boot-vmimage.sh
-	echo "bhyveload -d $work_dir/vm.raw -m 1024 occambsd" \
-		>> $work_dir/bhyve-boot-vmimage.sh
-	echo "bhyve -m 1024 -H -A -s 0,hostbridge -s 2,virtio-blk,$work_dir/vm.raw -s 31,lpc -l com1,stdio occambsd" \
-		>> $work_dir/bhyve-boot-vmimage.sh
-	echo $work_dir/bhyve-boot-vmimage.sh
+	cat << HERE > "$work_dir/bhyve-boot-vmimage.sh"
+#!/bin/sh
+[ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; } 
+[ -e /dev/vmm/occambsd ] && { bhyvectl --destroy --vm=occambsd ; sleep 1 ; }
 
-	echo "bhyvectl --destroy --vm=occambsd" \
-		> $work_dir/bhyve-cleanup-vmimage.sh
-	echo $work_dir/bhyve-cleanup-vmimage.sh
+kldstat -q -m vmm || kldload vmm
+sleep 1
+bhyveload -m 1024 -d $work_dir/vm.raw occambsd
+bhyve -m 1024 -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
+        -s 2,virtio-blk,$work_dir/vm.raw \\
+        occambsd
+
+sleep 2
+bhyvectl --destroy --vm=$vm_name
+HERE
+
+echo $work_dir/bhyve-boot-vmimage.sh
 
 	echo ; echo Generating xen.cfg
 cat << HERE > $work_dir/xen.cfg
 type = "hvm"
-memory = 2048
+memory = 1024
 vcpus = 2
 name = "OccamBSD"
 disk = [ '$work_dir/occambsd.raw,raw,hda,w' ]
@@ -568,7 +621,8 @@ HERE
 
 	if [ "$target" = "amd64" ] ; then
 cat << HERE > $work_dir/qemu-boot.sh
-[ \$( which qemu-system-x86_64 ) ] || { echo "qemu-system-x86-64 not installed" ; exit 1 ; }
+[ \$( which qemu-system-x86_64 ) ] || \\
+	{ echo "qemu-system-x86-64 not installed" ; exit 1 ; }
 qemu-system-x86_64 -m 1024M -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
 	echo $work_dir/qemu-boot.sh
@@ -585,6 +639,27 @@ HERE
 
 fi # End: generate_vm_image
 
+if [ "$generate_9pfs" = "1" ] ; then
+
+	cat << HERE > "$work_dir/bhyve-boot-9pfs.sh"
+#!/bin/sh
+[ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; }
+[ -e /dev/vmm/occambsd ] && { bhyvectl --destroy --vm=occambsd ; sleep 1 ; }
+
+kldstat -q -m vmm || kldload vmm
+sleep 1
+bhyveload -m 1024 -h $work_dir/9pfs occambsd   
+bhyve -m 1024 -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
+	-s 2,virtio-9p,sharename=$work_dir/9pfs \\
+	occambsd
+
+sleep 2
+bhyvectl --destroy --vm=occambsd
+HERE
+
+	echo $work_dir/bhyve-boot-9pfs.sh
+
+fi # End 9pfs
 
 # ISOs
 
