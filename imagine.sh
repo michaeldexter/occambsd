@@ -167,6 +167,7 @@ f_usage() {
 	echo "-b (Generate VM boot scripts)"
 	echo "-z (Use a 14.0-RELEASE or newer root on ZFS image)"
 	echo "-Z <new zpool name>"
+	echo "-A (Set the ZFS ARC to only cache metadata)"
 	echo "-x <autounattend.xml file for Windows> (Requires -i and -g)"
 	echo "-i <Installation ISO file for Windows> (Requires -x and -g)"
 	echo
@@ -206,8 +207,9 @@ root_dev=""
 scheme=""
 root_part=""
 zpool_name=""
-zpool_rename=""
+zpool_rename=0
 zpool_newname=""
+zfs_arc_metadata=0
 #target_input="raw"		# Default not helpful if -x
 target_input="img"		# Default not helpful if -x
 target_dev=""
@@ -243,7 +245,7 @@ md_id=42			# Default for easier cleanup if interrupted
 
 # USER INPUT AND VARIABLE OVERRIDES
 
-while getopts w:a:r:zZ:t:T:ofg:smvbx:i: opts ; do
+while getopts w:a:r:zZ:At:T:ofg:smvbx:i: opts ; do
 	case $opts in
 	w)
 		work_dir="$OPTARG"
@@ -316,6 +318,12 @@ while getopts w:a:r:zZ:t:T:ofg:smvbx:i: opts ; do
 		# Implying this for use as shorthand
 		fs_type="zfs"
 		zpool_rename=1
+		attachment_required=1
+	;;
+
+	A)
+		zfs_arc_metadata=1
+		fs_type="zfs"
 		attachment_required=1
 	;;
 
@@ -425,7 +433,8 @@ fi
 
 # TESTS - FAIL EARLY
 
-if [ $zpool_newname ] ; then
+if [ "$zpool_newname" ] || [ "$mirror_path" ] ; then
+	# A mirror path could give a false positive but better safe than sorry
 	zpool get name $zpool_newname > /dev/null 2>&1 && \
 { echo zpool $zpool_newname in use and will conflict - use -Z ; exit 1 ; }
 fi
@@ -1474,6 +1483,12 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		echo ; echo Upgrading $zpool_name
 		zpool upgrade $zpool_name || \
 			{ echo "zpool upgrade failed" ; exit 1 ; }
+	fi
+
+	if [ "$zfs_arc_metadata" = 1 ] ; then
+		echo ; echo Setting primarycache=metadata for $zpool_name
+		zfs set primarycache=metadata $zpool_name || \
+		{ echo "zfs set primarycache=metadata failed" ; exit 1 ; }
 	fi
 
 	if [ -n "$mirror_path" ] ; then

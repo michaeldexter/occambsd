@@ -164,6 +164,7 @@ obj i.e. /usr/obj/usr/src/<target>.<target_arch>/release/vm.ufs.raw
 -b (Generate VM boot scripts)
 -z (Use a 14.0-RELEASE or newer root on ZFS image)
 -Z <new zpool name>
+-A (Set the ZFS ARC to only cache metadata)
 -x <autounattend.xml file for Windows> (Requires -i and -g)
 -i <Installation ISO file for Windows> (Requires -x and -g)
 ```
