@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.7.5beta
+# Version v0.7.6beta
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -74,19 +74,23 @@ src_conf="$work_dir/src.conf"
 buildjobs="$(sysctl -n hw.ncpu)"
 
 # Should any be left unset for use of environment variables?
-profile=0
+profile=""
 reuse_world=0
 reuse_world_dirty=0
 reuse_kernel=0
 reuse_kernel_dirty=0
-additional_option=0
+additional_option=""
+package_base=0
+generic_world=0
+generic_kernel=0
 generate_jail=0
 generate_9pfs=0
 generate_vm_image=0
-zfs_vm_image=0
+generate_isos=0
+generate_memstick=0
+dry_run=0
 vm_image_size="400m"
 vm_swap_size="100m"
-dry_run=0
 
 while getopts p:s:o:O:wWkKa:bGgzj9vzZ:S:imn opts ; do
 	case $opts in
@@ -227,10 +231,10 @@ mount -t devfs | \
 	grep ${target}.$target_arch/release/vm-image/dev && \
 	umount $obj_dir/$src_dir/${target}.$target_arch/release/vm-image/dev
 
-	if [ -d $obj_dir/$src_dir/${target}.$target_arch/release ] ; then
+if [ -d $obj_dir/$src_dir/${target}.$target_arch/release ] ; then
 	chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/release
-		rm -rf $obj_dir/$src_dir/${target}.$target_arch/release/*
-	fi
+	rm -rf $obj_dir/$src_dir/${target}.$target_arch/release/*
+fi
 
 # Kernel first depending on how aggressively we clean the object directory
 if [ "$reuse_kernel" = "0" ] ; then

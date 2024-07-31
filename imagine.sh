@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.5.0beta
+# Version v.0.5.1beta
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -183,6 +183,7 @@ cpu_arch=$( uname -p )		# i.e. aarch64
 arch_string=""
 release_input=""
 offline_mode=0
+force=0
 release_type=""
 release_name=""
 release_image_url=""
