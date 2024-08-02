@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.7.6beta
+# Version v0.7.7beta
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -75,6 +75,8 @@ buildjobs="$(sysctl -n hw.ncpu)"
 
 # Should any be left unset for use of environment variables?
 profile=""
+target=""
+target_arch=""
 reuse_world=0
 reuse_world_dirty=0
 reuse_kernel=0
@@ -189,7 +191,7 @@ done
 log_dir="$work_dir/logs"		# Lives under work_dir for mkdir -p
 
 # target is populated by the required profile file
-[ -f $src_dir/sys/${target}/conf/GENERIC ] || \
+[ -d $src_dir/sys ] || \
 	{ echo "Sources do not appear to be installed or specified" ; exit 1 ; }
 
 # Do not perform in opt args in case there is a positional issue
