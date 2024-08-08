@@ -186,7 +186,7 @@ while getopts p:s:o:O:wWkKa:bGgzj9vzZ:S:imn opts ; do
 	esac
 done
 
-[ "$profile" = "0" ] && { echo "-p <profile> is required" ; f_usage ; }
+[ "$profile" ] || { echo "-p <profile> is required" ; f_usage ; }
 
 log_dir="$work_dir/logs"		# Lives under work_dir for mkdir -p
 
@@ -218,6 +218,8 @@ if ! [ -d $work_dir ] ; then
 	mkdir -p "$log_dir" || \
 		{ echo Failed to create $work_dir ; exit 1 ; }
 else # work_dir exists
+	# Consider a finer-grained cleanse to preserve kernel and world logs
+	# when re-using kernel and world artifacts
 	echo ; echo Cleansing $work_dir
 	rm -rf $work_dir/*
 	mkdir -p $log_dir
@@ -316,14 +318,22 @@ done
 
 echo $without_options > $work_dir/src.conf
 
+
+echo DEBUG tailing src.conf
+tail $work_dir/src.conf
+
+#echo LOOK RIGHT? ; read right
+
+
+
 # Addition option, added for build_option_survey-like abilities
 if ! [ "$additional_option" = "0" ] ; then
 echo The additional_option is "$additional_option"
 echo running grep -v "$additional_option" $work_dir/src.conf
 	grep -v "$additional_option" $work_dir/src.conf > \
 		$work_dir/src.conf.additional
-echo DEBUG tail of $work_dir/src.conf.additional
-	mv $work_dir/src.conf.additional $work_dir/src.conf
+#echo DEBUG tail of $work_dir/src.conf.additional
+#	mv $work_dir/src.conf.additional $work_dir/src.conf
 fi
 
 #echo ; echo The generated $work_dir/src.conf tails:
@@ -579,7 +589,10 @@ fi
 
 	echo ; echo Generating VM scripts
 
-	cat << HERE > "$work_dir/bhyve-boot-vmimage.sh"
+
+	if [ "$target" = "amd64" ] ; then
+
+		cat << HERE > "$work_dir/bhyve-boot-vmimage.sh"
 #!/bin/sh
 [ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; } 
 [ -e /dev/vmm/occambsd ] && { bhyvectl --destroy --vm=occambsd ; sleep 1 ; }
@@ -592,13 +605,12 @@ bhyve -m 1024 -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
         occambsd
 
 sleep 2
-bhyvectl --destroy --vm=$vm_name
+bhyvectl --destroy --vm=occambsd
 HERE
 
-echo $work_dir/bhyve-boot-vmimage.sh
+		echo $work_dir/bhyve-boot-vmimage.sh
 
-	echo ; echo Generating xen.cfg
-cat << HERE > $work_dir/xen.cfg
+		cat << HERE > $work_dir/xen.cfg
 type = "hvm"
 memory = 1024
 vcpus = 2
@@ -611,39 +623,60 @@ on_reboot = 'restart'
 on_crash = 'restart'
 #vif = [ 'bridge=bridge0' ]
 HERE
+		echo $work_dir/xen.cfg
 
-	echo "xl list | grep OccamBSD && xl destroy OccamBSD" \
-		> $work_dir/xen-boot-vmimage.sh
-	echo "xl create -c $work_dir/xen.cfg" \
-	>> $work_dir/xen-boot-vmimage.sh
-	echo $work_dir/xen-boot-vmimage.sh
+		echo "xl list | grep OccamBSD && xl destroy OccamBSD" \
+			> $work_dir/xen-boot-vmimage.sh
+		echo "xl create -c $work_dir/xen.cfg" \
+			>> $work_dir/xen-boot-vmimage.sh
+		echo $work_dir/xen-boot-vmimage.sh
 
-	echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > $work_dir/xen-cleanup.sh
-	echo $work_dir/xen-cleanup.sh
+		echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > $work_dir/xen-cleanup.sh
+		echo $work_dir/xen-cleanup.sh
 
 # Notes while debugging
 #xl console -t pv OccamBSD
 #xl console -t serial OccamBSD
 
-	if [ "$target" = "amd64" ] ; then
-cat << HERE > $work_dir/qemu-boot.sh
+
+		cat << HERE > $work_dir/qemu-boot.sh
 [ \$( which qemu-system-x86_64 ) ] || \\
 	{ echo "qemu-system-x86-64 not installed" ; exit 1 ; }
 qemu-system-x86_64 -m 1024M -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
-	echo $work_dir/qemu-boot.sh
+		echo $work_dir/qemu-boot.sh
 	fi
 
 	if [ "$target" = "arm64" ] ; then
-cat << HERE > $work_dir/qemu-boot.sh
+		cat << HERE > "$work_dir/bhyve-boot-vmimage.sh"
+#!/bin/sh
+[ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; } 
+[ -e /dev/vmm/occambsd ] && { bhyvectl --destroy --vm=occambsd ; sleep 1 ; }
+[ -f /usr/local/share/u-boot/u-boot-bhyve-arm64/u-boot.bin ] || \\
+	{ echo "u-boot-bhyve-arm64 not installed" ; exit 1 ; }
+
+kldstat -q -m vmm || kldload vmm
+sleep 1
+bhyve -m 1024 -o console=stdio \\
+	-o bootrom=/usr/local/share/u-boot/u-boot-bhyve-arm64/u-boot.bin \\
+        -s 2,virtio-blk,$work_dir/vm.raw \\
+        occambsd
+
+sleep 2
+bhyvectl --destroy --vm=occambsd
+HERE
+		echo $work_dir/bhyve-boot-vmimage.sh
+
+		cat << HERE > $work_dir/qemu-boot.sh
 [ \$( which qemu-system-aarch64 ) ] || { echo "qemu-system-aarch64 not installed" ; exit 1 ; }
 [ -f /usr/local/share/qemu/edk2-aarch64-code.fd ] || { echo "edk2-qemu-x64 not installed" ; exit 1 ; }
 qemu-system-aarch64 -m 1024M -cpu cortex-a57 -machine virt -bios edk2-aarch64-code.fd -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
-	echo $work_dir/qemu-boot.sh
+		echo $work_dir/qemu-boot.sh
 	fi
 
 fi # End: generate_vm_image
+
 
 if [ "$generate_9pfs" = "1" ] ; then
 

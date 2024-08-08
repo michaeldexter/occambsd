@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.5.1beta
+# Version v.0.5.2beta
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -205,6 +205,7 @@ attachment_required=0
 root_fs=""
 root_part=""
 root_dev=""
+part_scheme=""
 scheme=""
 root_part=""
 zpool_name=""
@@ -393,7 +394,7 @@ if [ "$target_prefix" = "/dev/" ] ; then
 	fi
 fi
 
-if [ "$mirror_path" ] && [ "$mirror_path" = "img" ] ; then
+if [ "$mirror_path" ] || [ "$mirror_path" = "img" ] ; then
 	[ -c "$mirror_path" ] || { echo "$mirror_path not found" ; exit 1 ; }
 	if [ "$force" = 0 ] ; then
 		echo "WARNING! Writing to $mirror_path !"
@@ -434,11 +435,12 @@ fi
 
 # TESTS - FAIL EARLY
 
-if [ "$zpool_newname" ] || [ "$mirror_path" ] ; then
-	# A mirror path could give a false positive but better safe than sorry
-	zpool get name $zpool_newname > /dev/null 2>&1 && \
-{ echo zpool $zpool_newname in use and will conflict - use -Z ; exit 1 ; }
-fi
+# This test gives a false positive with -t and -T
+#if [ "$zpool_newname" ] || [ "$mirror_path" ] ; then
+#	# A mirror path could give a false positive but better safe than sorry
+#	zpool get name $zpool_newname > /dev/null 2>&1 && \
+#{ echo zpool $zpool_newname in use and will conflict - use -Z ; exit 1 ; }
+#fi
 
 if [ "$target_prefix" = "/dev/" ] ; then
 	[ "$vmdk" = 0 ] || { echo "-v does not support devices" ; exit 1 ; }
@@ -1420,18 +1422,18 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		gpart show -l $target_dev
 
 		# Is there any reason this should be by label or is this safer?
-		# That could avoid {scheme}
+		# That could avoid ${scheme}
 		echo Mirroring the first partition
 #		dd if=${target_dev}p1 of=${target_dev2}p1 bs=512 \
-		dd if=${target_dev}${scheme}1 of=${target_dev2}{scheme}1 \
+		dd if=${target_dev}${scheme}1 of=${target_dev2}${scheme}1 \
 			status=progress conv=sync || \
-				{ echo "p{scheme} dd failed" ; exit 1 ; }
+				{ echo "p${scheme} dd failed" ; exit 1 ; }
 
 		echo Mirroring the second partition
 #		dd if=${target_dev}p2 of=${target_dev2}p2 bs=512 \
-		dd if=${target_dev}{scheme}2 of=${target_dev2}{scheme}2 \
+		dd if=${target_dev}${scheme}2 of=${target_dev2}${scheme}2 \
 			status=progress conv=sync || \
-				{ echo "p{scheme} dd failed" ; exit 1 ; }
+				{ echo "p${scheme} dd failed" ; exit 1 ; }
 
 	fi # End mirror_path partition mirroring and relabeling
 
