@@ -327,7 +327,7 @@ tail $work_dir/src.conf
 
 
 # Addition option, added for build_option_survey-like abilities
-if ! [ "$additional_option" = "0" ] ; then
+if ! [ "$additional_option" = "" ] ; then
 echo The additional_option is "$additional_option"
 echo Running grep -v "$additional_option" $work_dir/src.conf
 	grep -v "$additional_option" $work_dir/src.conf > \
