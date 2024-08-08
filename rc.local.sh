@@ -2,7 +2,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright 2023 Michael Dexter
+# Copyright 2023, 2024 Michael Dexter
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,22 +26,26 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.1
+# Version v0.2
 
-[ "$( id -u ) -ne 0 ] && \
+[ "$( id -u )" -ne 0 ] && \
         { echo "Must be excuted with root privileges" ; exit 1 ; }
 
-if [ "$0" = "rc.local" ] ; then
+# Work automaticaly in /etc/rc.local, with a provided path, or interactively
+if [ "$1" ] ; then
+	[ -d "${1}/etc" ] || { echo "$1 must be a root path" ; exit 1 ; }
+	DESTDIR="$1"
+elif [ "$0" = "rc.local" ] ; then
 	DESTDIR="/"
 	echo "Beginning rc.local idempotent system configuration"
 	logger "Beginning rc.local idempotent system configuration"
 else
-	echo ; echo "Enter directory path to configure: ( / for host system )"
+	echo ; echo "Enter directory path to configure: \( / for host system \)"
 	read DESTDIR
 	[ -d "$DESTDIR" ] || { echo "Directory $DESTDIR not found" ; exit 1 ; }
 	echo ; echo "ABOUT TO CONFIGURE $DESTDIR" ; echo
 	echo ; echo "ARE YOU SURE YOU WANT TO CONTINUE?"
-	echo -n "(y/n): " ; read continue
+	echo -n "\(y/n\): " ; read continue
 	[ "$continue" = "y" -o "$continue" = "n" ] || { echo Invalid input ; exit 1 ; }
 	[ "$continue" = "n" ] && { echo "Exiting" ; exit 0 ; }
 fi
@@ -56,9 +60,9 @@ fi
 
 
 # HOSTNAME
-# Validate the name first? You probably cannot have an apostrophe in it...
+# Validate the name first? You probably do not want an apostrophe in it...
 
-hostname="current"
+hostname="cft"
 if [ "$( sysrc -c -R $DESTDIR hostname=$hostname )" ] ; then
 	echo "Hostname $hostname is correct"
 	logger "Hostname $hostname is correct"
@@ -66,6 +70,7 @@ else
 	echo ; echo "Changing hostname to $hostname"
 	logger "Changing Hostname to $hostname"
 	sysrc -R $DESTDIR hostname="$hostname"
+	# Not helpful for an specified directory
 	service hostname restart
 fi
 
@@ -73,8 +78,8 @@ fi
 # MOUSE DAEMON
 
 if [ "$( sysrc -c -R $DESTDIR moused_enable=YES )" ] ; then
-	echo "Mouse daemon is already enabled"
-	logger "Mouse daemon is already enabled"
+	echo "Mouse daemon is enabled"
+	logger "Mouse daemon is enabled"
 else
 	echo ; echo "Enabling mouse daemon"
 	logger "Enabling mouse daemon"
@@ -86,8 +91,8 @@ fi
 # NETWORK TIME DAEMONS
 
 if [ "$( sysrc -c -R $DESTDIR ntpdate_enable=YES )" ] ; then
-	echo "NTP Date daemon is already enabled"
-	logger "NTP Date daemon is already enabled"
+	echo "NTP Date daemon is enabled"
+	logger "NTP Date daemon is enabled"
 else
 	echo ; echo "Enabling NTP Date daemon"
 	logger "Enabling NTP Date daemon"
@@ -96,8 +101,8 @@ else
 fi
 
 if [ "$( sysrc -c -R $DESTDIR ntpd_enable=YES )" ] ; then
-	echo "NTP daemon is already enabled"
-	logger "NTP daemon is already enabled"
+	echo "NTP daemon is enabled"
+	logger "NTP daemon is enabled"
 else
 	echo ; echo "Enabling NTP daemon"
 	logger "Enabling NTP daemon"
@@ -106,11 +111,25 @@ else
 fi
 
 
+# SECURE SHELL DAEMON
+
+if [ "$( sysrc -c -R $DESTDIR sshd_enable=YES )" ] ; then
+	echo ; echo "Verifying if secure shell daemon is enabled"
+	logger "Verifying if secure shell daemon is enabled"
+else
+	echo ; echo "Enabling secure shell daemon"
+	logger "Enabling secure shell daemon"
+	sysrc -R $DESTDIR sshd_enable=YES
+	# restart will NOT work on first use
+	service sshd stop ; service sshd start
+fi
+
+
 # CRASH DUMP DEVICE
 
 if [ "$( sysrc -c -R $DESTDIR dumpdev=AUTO )" ] ; then
-	echo "Dump device is already configured"
-	logger "Dump device is already configured"
+	echo "Dump device is configured"
+	logger "Dump device is configured"
 else
 	echo ; echo "Configuring dump device"
 	logger "Configuring dump device"
@@ -121,11 +140,10 @@ fi
 
 # Verbose my foot. Show what is really happening!
 
-# consider set -x for KRAKKEN MODE
+# Add 'set -x' to rc.conf for KRAKKEN MODE
 
 
-# loader.conf
-# loader.conf: Note that sysrc will not create loader.conf if asked to modify it
+# loader.conf: sysrc will not create loader.conf if asked to modify it
 
 [ -f "${DESTDIR}/boot/loader.conf" ] || touch ${DESTDIR}/boot/loader.conf
 
@@ -163,8 +181,8 @@ fi
 # VERBOSE BOOTING
 
 #if [ "$( sysrc -c -f ${DESTDIR}/boot/loader.conf boot_verbose=YES )" ] ; then
-#	echo ; echo "Verbose boot is already configured"
-#	logger "Verbose boot is already configured"
+#	echo ; echo "Verbose boot is configured"
+#	logger "Verbose boot is configured"
 #else
 #	echo ; echo "Enabling verbose boot"
 #	sysrc -f ${DESTDIR}/boot/loader.conf boot_verbose=YES
@@ -173,7 +191,7 @@ fi
 
 # END IDEMPOTENCE
 
-echo LEAVING THE IDEMPOTENCE ZONE
+echo LEAVING THE IDEMPOTENCE OPTIONS
 
 
 # ROOT PASSWORD
@@ -201,8 +219,9 @@ echo "$root_password" | pw -R $DESTDIR usermod -n root -h 0
 
 # PERMIT ROOT SSH LOGIN
 
-# Ideally distinguish bewteen the line being enabled, and the specific configuration
-# "yes" is not the only option IIRC
+# Ideally distinguish bewteen the line being enabled vs. custom configuration
+# "The argument must be yes, prohibit-password, forced-commands-only, or no."
+
 if [ "$( grep -q "PermitRootLogin yes" ${DESTDIR}/etc/ssh/sshd_config )" ] ; then
 	echo ; echo "Verifying PermitRootLogin"
 	logger "Verifying PermitRootLogin"
@@ -213,27 +232,13 @@ else
 fi
 
 
-# Secure Shell Daemon (Already idempotent)
-
-if [ "$( sysrc -c -R $DESTDIR sshd_enable=YES )" ] ; then
-	echo ; echo "Verifying if secure shell daemon is enabled"
-	logger "Verifying if secure shell daemon is enabled"
-else
-	echo ; echo "Enabling secure shell daemon"
-	logger "Enabling secure shell daemon"
-	sysrc -R $DESTDIR sshd_enable=YES
-	# restart will NOT work on first use
-	service sshd stop ; service sshd start
-fi
-
-
 # PACKAGES - NETWORKING REQUIRED
 
 # PERFORM A PACKAGE UPGRADE?
 # REMOVE UNDESIRED PACKAGES?
-# NOTE THAT PKG WILL SNIFF FOR A DIFFERENT OS VERSION
+# NOTE THAT PKG WILL SNIFF FOR A DIFFERENT OS VERSION AND ARCHITECTURE
 
-package_list="tmux rsync smartmontools fio git-lite iperf3"
+package_list="tmux rsync smartmontools git-lite fio iperf3"
 
 echo Installing Packages
 logger Installing Packages

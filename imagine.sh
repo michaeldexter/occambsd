@@ -467,7 +467,7 @@ f_fetch_image () # $1 release_image_file $2 release_image_url
 	# fetch is not idempotent - check if exists before with fetch -i
 	if [ -r "$1" ] ; then
 		if [ "$offline_mode" = 0 ] ; then
-			cp $1 ${1}.previous
+			[ -f "$1" ] && cp $1 ${1}.previous
 			fetch -a -i "$1" "$2" || \
 				{ echo "$2 fetch failed" ; exit 1 ; }
 		fi
@@ -1932,7 +1932,7 @@ else
 	fi
 
 	if [ "$target_type" = "img" -o "$target_type" = "path" ] ; then
-		echo Run 'mdconfig -du $md_id' when finished
+		echo "Run 'mdconfig -du $md_id' when finished"
 		if [ -n "$mirror_path" ] ; then
 			echo ; echo "Run 'mdconfig -du $md_id2' when finished"
 		fi
