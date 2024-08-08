@@ -313,7 +313,9 @@ echo $without_options > $work_dir/all_withouts.txt
 # Remove enabled_options to result in the desired src.conf
 IFS=" "
 for option in $build_options ; do
-	without_options=$( echo $without_options | grep -v $option )
+	# -w: search for whole words; e.g. don't strike
+	# WITHOUT_FOO_BAR if WITHOUT_FOO is written
+	without_options=$( echo $without_options | grep -v -w $option )
 done
 
 echo $without_options > $work_dir/src.conf
