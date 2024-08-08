@@ -91,7 +91,7 @@ generate_vm_image=0
 generate_isos=0
 generate_memstick=0
 dry_run=0
-vm_image_size="400m"
+vm_image_size="500m"
 vm_swap_size="100m"
 
 while getopts p:s:o:O:wWkKa:bGgzj9vzZ:S:imn opts ; do
@@ -329,7 +329,7 @@ tail $work_dir/src.conf
 # Addition option, added for build_option_survey-like abilities
 if ! [ "$additional_option" = "0" ] ; then
 echo The additional_option is "$additional_option"
-echo running grep -v "$additional_option" $work_dir/src.conf
+echo Running grep -v "$additional_option" $work_dir/src.conf
 	grep -v "$additional_option" $work_dir/src.conf > \
 		$work_dir/src.conf.additional
 #echo DEBUG tail of $work_dir/src.conf.additional
@@ -641,7 +641,7 @@ HERE
 
 		cat << HERE > $work_dir/qemu-boot.sh
 [ \$( which qemu-system-x86_64 ) ] || \\
-	{ echo "qemu-system-x86-64 not installed" ; exit 1 ; }
+	{ echo "qemu-system-x86-64/qemu not installed" ; exit 1 ; }
 qemu-system-x86_64 -m 1024M -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
 		echo $work_dir/qemu-boot.sh

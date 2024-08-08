@@ -1495,18 +1495,21 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 	fi
 
 	if [ -n "$mirror_path" ] ; then
-		echo Attaching the mirror device
-		zpool attach $zpool_name \
+		echo ; echo Attaching the mirror device
+		echo ; echo Performing a manual label clear to be safe
+
+		# Renaming the pool may find "zroot" despite trying labelclear
+		zpool attach -f $zpool_name \
 			/dev/gpt/rootfs100 /dev/gpt/rootfs200 || \
 			{ echo "zpool device attachment failed" ; exit 1 ; }
 		zpool status -v $zpool_name
 
-		echo Waiting 20 seconds for the attachment to complete
+		echo ; echo Waiting 20 seconds for the attachment to complete
 		sleep 10
 		zpool status -v $zpool_name
 		sleep 10
 		zpool status -v $zpool_name
-		echo Consider a zpool scrub
+		echo ; echo Consider a zpool scrub
 
 	fi # End mirror_path
 
