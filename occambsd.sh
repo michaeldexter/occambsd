@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.7.7beta
+# Version v0.7.8beta
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -317,16 +317,16 @@ echo $without_options > $work_dir/all_withouts.txt
 # Remove enabled_options to result in the desired src.conf
 IFS=" "
 for option in $build_options ; do
-	nwords_before=$( echo $without_options | wc -w )
+	num_words_before=$( echo $without_options | wc -w )
 
 	# -w: search for whole words; e.g. don't strike
 	# WITHOUT_FOO_BAR if WITHOUT_FOO is written
 	without_options=$( echo $without_options | grep -v -w $option )
 
-	nwords_after=$( echo $without_options | wc -w )
-	nwords_removed=$(( $nwords_before - $nwords_after ))
-	if [ $nwords_removed -ne 1 ]; then
-		echo word $option in build_options has stricken $nwords_removed WITHOUTs, not 1
+	num_words_after=$( echo $without_options | wc -w )
+	num_words_removed=$(( $num_words_before - $num_words_after ))
+	if [ $num_words_removed -ne 1 ]; then
+		echo word $option in build_options has stricken $num_words_removed WITHOUTs, not 1
 		exit 1
 	fi
 done
