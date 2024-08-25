@@ -26,7 +26,23 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.2
+# Version v0.3
+
+# USER VARIABLES
+
+hostname="nassense"
+root_password="freebsd"
+user_username="dexter"
+user_password="freebsd
+#timezone="UTC"
+timezone="America/Los_Angeles"
+# Would be nice to validate that input
+
+#package_list="gdb tmux rsync git-lite
+package_list="gdb tmux rsync cmdwatch smartmontools e2fsprogs fusefs-ntfs minio minio-client git-lite fio iozone iperf3 dmidecode samba419 samba-nsupdate ldb22 bind-tools"
+# rclone rclone-browser ddrescue clonehdd
+# TrueNAS: net-snmp netatalk3 pciutils sg3_utils sedutil openseachest smp_utils trafshow fusefs-ntfs fusefs-s3fs
+
 
 [ "$( id -u )" -ne 0 ] && \
         { echo "Must be excuted with root privileges" ; exit 1 ; }
@@ -62,7 +78,6 @@ fi
 # HOSTNAME
 # Validate the name first? You probably do not want an apostrophe in it...
 
-hostname="cft"
 if [ "$( sysrc -c -R $DESTDIR hostname=$hostname )" ] ; then
 	echo "Hostname $hostname is correct"
 	logger "Hostname $hostname is correct"
@@ -74,6 +89,14 @@ else
 	service hostname restart
 fi
 
+
+# TIME ZONE
+
+current_timezone=$( cat $DESTDIR/var/db/zoneinfo )
+
+if [ ! "$current_timezone" = "$timezone" ] ; then
+	tzsetup -C $DESTDIR $timezone
+fi
 
 # MOUSE DAEMON
 
@@ -200,15 +223,21 @@ echo LEAVING THE IDEMPOTENCE OPTIONS
 # STRATEGY TO IDEMPOTENTLY test a password before setting?
 # How would one backup all all related files?
 
-root_password="freebsd"
 echo "Setting root password with pw"
 logger "Setting root password with pw"
-echo "$root_password" | pw -R $DESTDIR usermod -n root -h 0
+echo "$root_password" | pw -R "$DESTDIR" usermod -n root -h 0
 
 # Some observations
 #echo "$root_password" | pw usermod -n root -h 0
 #root:$6$Llmi2FQ2wo.2IgPb$NeMYls203jVV9H5Q.qc7bBotET6AzpBlxGItDBKauHOkVySgXih.fGv6qtKOtSoMLh5/8zqIfJUbVNAr3mlJ91:0:0::0:0:Charlie &:/root:/bin/sh
 # https://forums.freebsd.org/threads/how-to-generate-the-hashes-in-etc-master-passwd.78940/
+
+
+# ADD USER
+
+# -n(ame) -s(hell) -m(ake home directory)
+pw useradd -R $DESTDIR -n $user_username -g wheel -s /bin/sh -m
+echo "$user_password" | pw -R "$DESTDIR" usermod -n "$user_usernane" -h 0
 
 
 # Consider firstboot
@@ -222,6 +251,7 @@ echo "$root_password" | pw -R $DESTDIR usermod -n root -h 0
 # Ideally distinguish bewteen the line being enabled vs. custom configuration
 # "The argument must be yes, prohibit-password, forced-commands-only, or no."
 
+# Test appears to failing idempotence
 if [ "$( grep -q "PermitRootLogin yes" ${DESTDIR}/etc/ssh/sshd_config )" ] ; then
 	echo ; echo "Verifying PermitRootLogin"
 	logger "Verifying PermitRootLogin"
@@ -232,13 +262,24 @@ else
 fi
 
 
+# SET PACKAGE REPO TO LATEST
+
+# Test appears to failing idempotence
+if [ "$( grep -q "latest" ${DESTDIR}/etc/pkg/FreeBSD.conf )" ] ; then
+	echo ; echo "Verifying Package Branch"
+	logger "Verifying Package Branch"
+else
+	echo ; echo "Setting Package Branch to latest"
+	sed -i '' -e "s/quarterly/latest/" \
+	${DESTDIR}/etc/pkg/FreeBSD.conf
+fi
+
+
 # PACKAGES - NETWORKING REQUIRED
 
 # PERFORM A PACKAGE UPGRADE?
 # REMOVE UNDESIRED PACKAGES?
 # NOTE THAT PKG WILL SNIFF FOR A DIFFERENT OS VERSION AND ARCHITECTURE
-
-package_list="tmux rsync smartmontools git-lite fio iperf3"
 
 echo Installing Packages
 logger Installing Packages

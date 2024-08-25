@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.0.1BETA
+# Version v.0.0.1ALPHA
 
 # propagate.sh - Packaged Base for OccamBSD and Imagine
 
