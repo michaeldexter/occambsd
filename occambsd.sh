@@ -208,7 +208,9 @@ if [ "$vmfs" = "zfs" ] ; then
 fi
 
 
-# PREPARATION
+###############
+# PREPARATION #
+###############
 
 [ -d ${work_dir}/jail/dev ] && umount ${work_dir}/jail/dev
 
@@ -280,7 +282,9 @@ if [ -d "$obj_dir$src_dir/repo" ] ; then
 fi
 
 
-# SRC.CONF
+############
+# SRC.CONF #
+############
 
 echo ; echo Generating $work_dir/all-options.txt
 
@@ -313,7 +317,18 @@ echo $without_options > $work_dir/all_withouts.txt
 # Remove enabled_options to result in the desired src.conf
 IFS=" "
 for option in $build_options ; do
-	without_options=$( echo $without_options | grep -v $option )
+	nwords_before=$( echo $without_options | wc -w )
+
+	# -w: search for whole words; e.g. don't strike
+	# WITHOUT_FOO_BAR if WITHOUT_FOO is written
+	without_options=$( echo $without_options | grep -v -w $option )
+
+	nwords_after=$( echo $without_options | wc -w )
+	nwords_removed=$(( $nwords_before - $nwords_after ))
+	if [ $nwords_removed -ne 1 ]; then
+		echo word $option in build_options has stricken $nwords_removed WITHOUTs, not 1
+		exit 1
+	fi
 done
 
 echo $without_options > $work_dir/src.conf
@@ -322,12 +337,8 @@ echo $without_options > $work_dir/src.conf
 echo DEBUG tailing src.conf
 tail $work_dir/src.conf
 
-#echo LOOK RIGHT? ; read right
-
-
-
 # Addition option, added for build_option_survey-like abilities
-if ! [ "$additional_option" = "0" ] ; then
+if ! [ "$additional_option" = "" ] ; then
 echo The additional_option is "$additional_option"
 echo Running grep -v "$additional_option" $work_dir/src.conf
 	grep -v "$additional_option" $work_dir/src.conf > \
@@ -401,7 +412,9 @@ if [ "$generic_world" = "1" ] ; then
 fi
 
 
-# BUILD THE WORLD/USERLAND
+#########################
+# WORLD/USERLAND BUILDS #
+#########################
 
 # World was either cleaned or preserved above with reuse_world=1
 
@@ -419,7 +432,9 @@ else
 fi
 
 
-# BUILD THE KERNEL
+################
+# KERNEL BUILD #
+################
 
 # Exclude for a jail? Would need to see if excluding everything else
 
@@ -455,7 +470,9 @@ if [ "$package_base" = "1" ] ; then
 fi
 
 
-# GENERATE JAIL
+#################
+# GENERATE JAIL #
+#################
 
 if [ "$generate_jail" = "1" ] ; then
 	[ -d ${work_dir}/jail ] || mkdir ${work_dir}/jail
@@ -507,7 +524,9 @@ HERE
 fi # End jail
 
 
-# GENERATE 9PFS
+######################
+# GENERATE 9PFS ROOT #
+######################
 
 if [ "$generate_9pfs" = "1" ] ; then
 	[ -d ${work_dir}/9pfs ] || mkdir ${work_dir}/9pfs
@@ -544,9 +563,10 @@ echo ; echo Installing 9pfs distribution - logging to $log_dir/9pfs-distribution
 	echo "sharename / p9fs rw 0 0" > ${work_dir}/9pfs/etc/fstab
 fi # End 9pfs
 
-# GENERATE IMAGES
 
-# VM-IMAGE
+#############
+# VM IMAGES #
+#############
 
 if [ "$generate_vm_image" = "1" ] ; then
 	cd $src_dir/release || { echo cd $src_dir/release failed ; exit 1 ; }
@@ -700,7 +720,10 @@ HERE
 
 fi # End 9pfs
 
-# ISOs
+
+#######
+# ISO #
+#######
 
 if [ "$generate_isos" = "1" ] ; then
 	echo ; echo Building CD-ROM ISO images - logging to $log_dir/isos.log
@@ -737,7 +760,9 @@ if [ "$generate_isos" = "1" ] ; then
 fi
 
 
-# MEMSTICK
+############
+# MEMSTICK #
+############
 
 if [ "$generate_memstick" = "1" ] ; then
 	echo ; echo Building mini-memstick image - logging to $log_dir/mini-memstick.log
