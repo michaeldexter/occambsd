@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.0.1ALPHA
+# Version v.0.0.2ALPHA
 
 # propagate.sh - Packaged Base for OccamBSD and Imagine
 
@@ -343,7 +343,13 @@ cat ${guest_root}/etc/pkg/FreeBSD.conf
 # SIDELOAD PERSONAL CONFIGURATIONS #
 ####################################
 
-echo Copying configuration files - missing ones will fail for now
+echo ; echo Sideload the current configuration to the boot environment?
+echo ; echo WARNING! Build objects in /usr/obj will probably harm the boot environment.
+
+echo -n "Continue? (y/n): " ; read confirmation
+[ "$confirmation" = "y" ] || exit 0
+
+echo ; echo Copying configuration files - missing ones will fail for now
 [ -f /boot/loader.conf ] && cp /boot/loader.conf ${guest_root}/boot/
 #[ -f /etc/fstab ] && cp /etc/fstab ${guest_root}/etc/
 touch ${guest_root}/etc/fstab
