@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.0.3ALPHA
+# Version v.0.0.4ALPHA
 
 # propagate.sh - Packaged Base for OccamBSD and Imagine
 
@@ -597,6 +597,17 @@ HERE
 
 # So we fake an object directory with three boot binaries, given that everything
 # is already a binary, by definition. 
+
+# In theory the needed varibles can be exported, rather than the files copied:
+# loader=/tmp/pkgjail/usr/obj/usr/src/amd64.amd64/stand/efi/loader_lua/loader_lua.efi
+# Not a full path: X86GPTBOOTFILE=i386/gptzfsboot/gptzfsboot
+# From: /usr/src/release/scripts/mk-vmimage.sh
+# BOOTPARTS="-b ${BOOTFILES}/i386/pmbr/pmbr
+# From: tools/boot/install-boot.sh
+# cp "${loader}" "${stagedir}/EFI/BOOT/${efibootname}.efi"
+# gpt0=${srcroot}/boot/pmbr
+# gpt2=${srcroot}/boot/gptboot
+# gptzfs2=${srcroot}/boot/gptzfsboot
 
 # We copy the resulting script into the source tree, but that would fail on a
 # read-only source tree, and will obviously fail if sources are not available.
