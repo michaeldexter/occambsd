@@ -50,7 +50,7 @@
 # 15.0 PkgBase installations with syntax such as:
 
 # 14.1-RELEASE to a directory with jail package set from the quarterly branch
-# sh propagate.sh -r 14.1 -t /tmp/pkgjail -j -q
+# sh propagate.sh -r 14.1 -t /tmp/pkgjail14.1 -j -q
 
 # 15.0-CURRENT to a dataset configured like a boot environment with
 # -o canmount=noauto -o mountpoint=/
@@ -60,6 +60,9 @@
 # sh propagate.sh -r 15.0 -t zroot/ROOT/pkgbase15.0 -v
 
 # Note that the directory/dataset distinction is made by the leading slash!
+
+# This syntax aims to be consistent with occambsd.sh and imagine.sh
+
 
 # Issue: The resulting 15.0 system is not propagating 14.1 or 15.0, giving:
 #pkg: Warning: Major OS version upgrade detected.  Running "pkg bootstrap -f" recommended
@@ -535,9 +538,10 @@ HERE
 [ -f ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf ] || \
 	{ echo FreeBSD-base.conf generation failed ; exit 1 ; }
 
-echo ; echo Moving the bootstrap FreeBSD.conf to the root directory
+# No, that is the persistent one
+#echo ; echo Moving the bootstrap FreeBSD.conf to the root directory
 # Else pkg will not work upon BE boot
-mv ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf ${mount_point}/root/
+#mv ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf ${mount_point}/root/
 
 echo ; echo Moving the bootstrap pkg.conf to the root directory
 # Else pkg will not work upon BE boot
