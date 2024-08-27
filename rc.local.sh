@@ -33,7 +33,7 @@
 hostname="nassense"
 root_password="freebsd"
 user_username="dexter"
-user_password="freebsd
+user_password="freebsd"
 #timezone="UTC"
 timezone="America/Los_Angeles"
 # Would be nice to validate that input
