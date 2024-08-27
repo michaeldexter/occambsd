@@ -26,11 +26,14 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.0.2ALPHA
+# Version v.0.0.3ALPHA
 
 # propagate.sh - Packaged Base for OccamBSD and Imagine
 
-# MOTIVATION
+
+##############
+# MOTIVATION #
+##############
 
 # The "p" and "g" in propagate are for "pkg", obviously.
 #
@@ -38,147 +41,345 @@
 # custom-built binaries to boot environments, and this incarnation does
 # the same with upstream or OccamBSD-built FreeBSD base packages.
 
-# DRAFT USAGE - not yet interactive - edit the hard-coded variables for now
 
-# -r revision or repo or directory of files or ???
-# -b boot environment name
-# -j jail path
-# -p profile
-# -m keep mounted
-# -v VM-IMAGE
+##############################
+# TESTING, NOTES, AND ISSUES #
+##############################
 
-# Q: How to choose a PkgBase kernel such as NODEBUG?
+# A bsdinstall "traditional" FreeBSD 14.1-RELEASE system can install 14.1 and
+# 15.0 PkgBase installations with syntax such as:
 
-# PERSONALIZE THESE VARIABLES
+# 14.1-RELEASE to a directory with jail package set from the quarterly branch
+# sh propagate.sh -r 14.1 -t /tmp/pkgjail -j -q
 
-# The name of the new boot environment
-boot_env="zroot/ROOT/pkgbase15"
-# The mount point of the new boot environment
-guest_root="/mnt"
+# 15.0-CURRENT to a dataset configured like a boot environment with
+# -o canmount=noauto -o mountpoint=/
+# sh propagate.sh -r 15.0 -t zroot/ROOT/pkgbase15.0
 
-# Pick a revision, 14.0 or newer
-abi_major="15"
-abi_minor="base_latest"
+# To do the same creating a VM-IMAGE /tmp/pkgbase15.0.vm.zfs.img
+# sh propagate.sh -r 15.0 -t zroot/ROOT/pkgbase15.0 -v
 
-# Note that "release_1" indicates "14.1"
-#abi_major="14"
-#abi_minor="base_release_1"
+# Note that the directory/dataset distinction is made by the leading slash!
 
-# Additional packages beyond base packages to install
-additional_packages="tmux"
+# Issue: The resulting 15.0 system is not propagating 14.1 or 15.0, giving:
+#pkg: Warning: Major OS version upgrade detected.  Running "pkg bootstrap -f" recommended
+#pkg(8) is already installed. Forcing re-installation through pkg(7).
+#Bootstrapping pkg from pkg+https://pkg.FreeBSD.org/FreeBSD:14:amd64/latest, please wait...
+#Verifying signature with trusted certificate pkg.freebsd.org.2013102301... done
+#Installing pkg-1.21.3...
+#package pkg is already installed, forced install
+#Extracting pkg-1.21.3: 100%
 
-########
-# MAIN #
-########
+# Bootstrapping pkg from pkg+http://pkg.FreeBSD.org/FreeBSD:15:amd64/latest, please wait...
+#pkg: Error fetching https://pkg.FreeBSD.org/FreeBSD:15:amd64/base_latest/Latest/pkg.txz: Not Found
+# base_latest/Latest/pkg.txz
+# This issue keeps showing up with and base_latest/Latest/pkg.txz is not a thing
+# In some cases, requesting 14.1 gives FreeBSD:15:amd64
 
-echo ; echo Cleansing ${guest_root} as needed
-# Not a great test - existing mount point does not mean mounted
-[ -d "${guest_root}/dev" ] && umount $guest_root/dev
+# Issue: PkgBase has strange dependencies to understand i.e. why some are
+# fetched but not used  For example, why does the "jail" set of
+# base packages pull in a few dependencies?
+#14.1 on 14.1 with a "jail" set gets kernel, zfs, ufs...
+#[52/88] Installing FreeBSD-zfs-14.1p1...
+#[66/88] Installing FreeBSD-kernel-generic-mmccam-14.1p3...
+# and fetches generic
+#[87/88] Installing FreeBSD-ufs-lib32-14.1...
 
-# This can fail if all of your boot environments contain the same name
-mount | grep -q $guest_root && umount $guest_root
-mount | grep -q  $guest_root && \
-	{ echo $guest_root failed to unmount ; exit 1 ; }
+# Caveat: This leaves cleanup of previous runs to the reader
 
-echo Creating boot environment if missing
-zfs get name $boot_env || \
-	zfs create -o canmount=noauto -o mountpoint=/ $boot_env
-zfs get name $boot_env || \
-	{ echo boot environment failed to create ; exit 1 ; }
+# Caveat: Currently this produces ZFS-friendly loader.conf and rc.conf files,
+# given that one can generate a VM image from a directory. A jail that attempts
+# to load zfs.ko will probably survive.
 
-echo Mounting the boot environment
-echo mounting boot environment
-bectl mount $boot_env ${guest_root} || \
-	{ echo boot environment failed ; exit 1 ; }
+# Caveat: The sideloading steps are moved elsewhere.
+
+# Question: How does base_weekly differ from base_latest ?
+# 15.0 only has base_latest base_weekly and latest
+# Add gdb to our favorite list of packages...
+# Question: How to choose a PkgBase kernel such as NODEBUG?
+
+# Idea: If installing sources and creating a VM image, change src_dir to
+# within the mount_point
+
+
+#########
+# USAGE #
+#########
+
+f_usage() {
+	echo ; echo "USAGE:"
+	echo "-r <release> (Dot-separated version i.e. 14.1 or 15.0 - Required)"
+	echo "-a <architecture> [ amd64 | arm64 ] (Default: Host)"
+	echo "-t <target> (Boot environment or Jail path i.e. zroot/ROOT/pkgbase15 or /jails/pkgbase15 - Required)"
+	echo "-q (quarterly package branch - default latest)"
+	echo "-m (Keep boot environment mounted for further configuration)"
+	echo "-M <Mount point> (Default: /media)"
+	echo "-j (Jail package set)"
+	echo "-d (Default FreeBSD installation package set with sources)"
+	echo "-3 (Install lib32 packages)"
+	echo "-p \"<additional packages>\" (Quoted space-separated list)"
+	echo "-v (Generate VM image in /tmp)"
+	echo
+	exit 0
+}
+
+
+# INTERNAL VARIABLES AND DEFAULTS
+
+release=""
+major_version=""
+minor_version=""
+hw_platform=$( uname -m )       # i.e. amd64|arm64
+cpu_arch=$( uname -p )          # i.e. amd64|aarch64
+branch="latest"
+target_input=""
+target_prefix=""
+target_type=""	# directory or dataset
+keep_mounted=0
+mount_point="/media"
+pkg_exclusions="clang|lld|lldb|src|src-sys|tests"
+special_pkg_exclusions="dbg|dev|lib32"			#Keep lib32 at the end
+lib32=0
+additional_packages=""
+vm_image=0
+#src_dir="/usr/src"
+#obj_dir=""
+
+
+# USER INPUT AND VARIABLE OVERRIDES
+
+while getopts r:a:t:qmM:jd3p:v opts ; do
+        case $opts in
+        r)
+		[ "$OPTARG" ] || f_usage
+		release="$OPTARG"
+		echo "$release" | grep -q "\." || f_usage
+		major_version=$( echo $release | cut -d "." -f 1 )
+		# cut -d "." -f 2 only works with a .N
+		minor_version=$( echo $release | cut -d "." -f 2 )
+
+		if [ "$major_version" -lt 14 ] ; then
+			echo "Release is under 14 or invalid"
+		fi
+
+		if [ ! "$minor_version" ] ; then
+			minor_version=0
+		elif [ "$minor_version" -ge 0 ] ; then
+			true
+		else
+			echo Invalid release input
+			f_usage
+		fi
+
+	;;
+	a)
+		case "$OPTARG" in
+			amd64)
+				hw_platform="amd64"
+		;;
+			arm64)
+				hw_platform="aarch64"
+		;;
+			*)
+				echo "Invalid architecture"
+				f_usage
+		;;
+		esac
+	;;
+	t)
+		target_input="$OPTARG"
+		target_prefix=$( printf %.1s "$target_input" )
+
+		if [ "$target_prefix" = "/" ] ; then
+			if [ "$target_input" = "/" ] ; then
+				echo "Target is / - Exiting"
+				exit 1
+			fi	
+
+			[ -d $target_input ] && \
+				{ echo Target exists - Exiting ; exit 1 ; }
+			echo Creating root directory
+			[ -d $target_input ] || mkdir -p $target_input
+			[ -d $target_input ] || \
+				{ echo mkdir $target_input failed ; exit 1 ; }
+			target_type="directory"
+			mount_point="$target_input"
+		else
+		zpool get name $( echo $target_input | cut -d "/" -f 1 ) \
+			> /dev/null 2>&1 || \
+			{ echo Target $target_input appears invalid ; exit 1 ; }
+
+			zfs get name $target_input > /dev/null 2>&1 && \
+				{ echo Target exists - Exiting ; exit 1 ; }
+
+			target_type="dataset"
+			echo Creating root dataset
+			zfs get name $target_input > /dev/null 2>&1 || \
+		        zfs create -o canmount=noauto -o mountpoint=/ \
+				$target_input
+			zfs get name $target_input > /dev/null 2>&1 || \
+        		{ echo root dataset failed to create ; exit 1 ; }
+			echo Mounting root dataset
+			# NOT using bectl - dataset may be a jail
+			# bectl mount $target_input ${mount_point} || \
+			mount -t zfs $target_input $mount_point || \
+			{ echo root dataset mount failed ; exit 1 ; }
+		fi
+	;;
+	q)
+		branch="quarterly"
+	;;
+	m)
+		keep_mounted=1
+	;;
+	M)
+		[ "$OPTARG" ] || f_usage
+                mount_point="$OPTARG"
+                [ -d "$mount_point" ] || \
+			{ echo "Mount point $mount_point missing" ; exit 1 ; }
+
+	;;
+	j)
+special_pkg_exclusions="dbg|dev|kernel|man|lib32"
+
+pkg_exclusions="acpi|apm|autofs|bhyve|bluetooth|bootloader|bsdinstall|bsnmp|ccdconfig|clang|cxgbe-tools|dtrace|efi-tools|elftoolchain|examples|fwget|games|geom|ggate|hast|hostapd|hyperv-tools|iscsi|kernel|lld|lldb|lp|mlx-tools|nvme-tools|ppp|rescue|rdma|smbutils|src|src-sys|tests|ufs|wpa|zfs"
+
+	;;
+	d)
+		special_pkg_exclusions=""
+
+		pkg_exclusions=""
+	;;
+	3)
+		lib32=1
+	;;
+	p)
+		[ "$OPTARG" ] || f_usage
+		additional_packages="$OPTARG"
+	;;
+	v)
+		vm_image=1
+	;;
+	esac
+done
+
+[ "$release" ] || f_usage
+[ "$target_input" ] || f_usage
+
+case "$hw_platform" in
+        amd64)
+                cpu_arch="amd64"
+        ;;
+        arm64)
+                cpu_arch="aarch64"
+        ;;
+	*)
+		echo Invalid architecture
+		exit 1
+	;;
+esac
+
+if [ "$lib32" = 1 ] ; then
+	# Keep lib32 at the end for clean stripping
+special_pkg_exclusions="$( echo $special_pkg_exclusions | sed 's/|lib32//' )"
+fi
+
+if [ "$branch" = "latest" ] ; then
+	abi_major="$major_version"
+	abi_minor="base_latest"
+else
+	abi_major="$major_version"
+	abi_minor="base_release_$minor_version"
+
+fi
+
 
 #########################
 # BOOT ENVIRONMENT ROOT #
 #########################
 
-echo Creating ${guest_root}/dev
-[ -d ${guest_root}/dev ] || mkdir -p $guest_root/dev 
-[ -d ${guest_root}/dev ] || { echo root/dev failed to create ; exit 1 ; }
+# root directory and dataset should be agnostic
 
-echo Creating ${guest_root}/etc/pkg
-[ -d ${guest_root}/etc/pkg ] || mkdir -p $guest_root/etc/pkg
-[ -d ${guest_root}/etc/pkg ] || { echo root/etc failed to create ; exit 1 ; }
-
-echo Copying in /etc/resolv.conf
-cp /etc/resolv.conf ${guest_root}/etc/ || \
-	{ echo resolv.conf failed to copy ; exit 1 ; }
+echo Creating ${mount_point}/dev
+[ -d ${mount_point}/dev ] || mkdir -p $mount_point/dev 
+[ -d ${mount_point}/dev ] || { echo root/dev failed to create ; exit 1 ; }
 
 #pkg-static: Cannot open dev/null
 echo Mounting devfs for pkg-static
-mount -t devfs -o ruleset=4 devfs ${guest_root}/dev || \
+mount -t devfs -o ruleset=4 devfs ${mount_point}/dev || \
 	{ echo mount devfs failed; exit 1 ; }
+
+echo Creating ${mount_point}/etc/pkg
+[ -d ${mount_point}/etc/pkg ] || mkdir -p $mount_point/etc/pkg
+[ -d ${mount_point}/etc/pkg ] || { echo root/etc failed to create ; exit 1 ; }
+
+echo Copying in /etc/resolv.conf
+cp /etc/resolv.conf ${mount_point}/etc/ || \
+	{ echo resolv.conf failed to copy ; exit 1 ; }
 
 # /var/cache/pkg
 echo ; echo Creating /tmp/pkg directories
-[ -d "${guest_root}/var/cache/pkg" ] || mkdir -p $guest_root/var/cache/pkg
-[ -d "${guest_root}/var/cache/pkg" ] || { echo mkdir tmp/pkg failed ; exit 1 ; }
+[ -d "${mount_point}/var/cache/pkg" ] || mkdir -p $mount_point/var/cache/pkg
+[ -d "${mount_point}/var/cache/pkg" ] || { echo mkdir tmp/pkg failed ; exit 1 ; }
 
-# ${guest_root}/var/db/pkg
-[ -d "${guest_root}/var/db/pkg" ] || mkdir -p $guest_root/var/db/pkg
-[ -d "${guest_root}/var/db/pkg" ] || { echo mkdir var/db/pkg failed ; exit 1 ; }
+# ${mount_point}/var/db/pkg
+[ -d "${mount_point}/var/db/pkg" ] || mkdir -p $mount_point/var/db/pkg
+[ -d "${mount_point}/var/db/pkg" ] || { echo mkdir var/db/pkg failed ; exit 1 ; }
 
-[ -d ${guest_root}/usr/share/keys/pkg ] || \
-	mkdir -vp ${guest_root}/usr/share/keys/pkg
+[ -d ${mount_point}/usr/share/keys/pkg ] || \
+	mkdir -vp ${mount_point}/usr/share/keys/pkg
 cp -av /usr/share/keys/pkg \
-	${guest_root}/usr/share/keys || \
+	${mount_point}/usr/share/keys || \
 	{ echo pkg keys copy failed ; exit 1 ; }
 
-#echo keys source and desination
-#ls /usr/share/keys/pkg
-#ls ${guest_root}/usr/share/keys/pkg
-
-[ -d ${guest_root}/usr/share/keys/pkg/trusted ] || \
-	{ echo cp ${guest_root}/usr/share/keys/pkg/trusted failed ; exit 1 ; }
+[ -d ${mount_point}/usr/share/keys/pkg/trusted ] || \
+	{ echo cp ${mount_point}/usr/share/keys/pkg/trusted failed ; exit 1 ; }
 
 # Used by temporary pkg.conf and persistent pkg/repos
-[ -d ${guest_root}/usr/local/etc/pkg/repos ] || \
-	mkdir -p $guest_root/usr/local/etc/pkg/repos
-[ -d ${guest_root}/usr/local/etc/pkg/repos ] || \
+[ -d ${mount_point}/usr/local/etc/pkg/repos ] || \
+	mkdir -p $mount_point/usr/local/etc/pkg/repos
+[ -d ${mount_point}/usr/local/etc/pkg/repos ] || \
 	{ echo mkdir usr/local/etc/pkg/repos failed ; exit 1 ; }
 
 # /mnt and /media are not created by PkgBase!
-[ -d ${guest_root}/mnt ] || mkdir -p $guest_root/mnt
-[ -d ${guest_root}/mnt ] || { echo mkdir mnt failed ; exit 1 ; }
+[ -d ${mount_point}/mnt ] || mkdir -p $mount_point/mnt
+[ -d ${mount_point}/mnt ] || { echo mkdir mnt failed ; exit 1 ; }
 
-[ -d ${guest_root}/media ] || mkdir -p $guest_root/media
-[ -d ${guest_root}/media ] || { echo mkdir media failed ; exit 1 ; }
+[ -d ${mount_point}/media ] || mkdir -p $mount_point/media
+[ -d ${mount_point}/media ] || { echo mkdir media failed ; exit 1 ; }
 
-[ -d ${guest_root}/root ] || mkdir -p $guest_root/root
-[ -d ${guest_root}/root ] || { echo mkdir root failed ; exit 1 ; }
+[ -d ${mount_point}/root ] || mkdir -p $mount_point/root
+[ -d ${mount_point}/root ] || { echo mkdir root failed ; exit 1 ; }
 
-#du -h ${guest_root}
+#du -h ${mount_point}
 
 ########################################
 # FreeBSD.conf REPO CONFIGURATION FILE #
 ########################################
 
 # NOTE THAT THIS WILL BE OVERRIDDEN BY THE RETRIEVED PACKAGES
-echo ; echo Generating ${guest_root}/etc/pkg/FreeBSD.conf REPO file
-cat << HERE > ${guest_root}/etc/pkg/FreeBSD.conf
+echo ; echo Generating ${mount_point}/etc/pkg/FreeBSD.conf REPO file
+cat << HERE > ${mount_point}/etc/pkg/FreeBSD.conf
 FreeBSD: { 
   enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/FreeBSD:${abi_major}:amd64/latest", 
+  url: "pkg+https://pkg.FreeBSD.org/FreeBSD:${abi_major}:${cpu_arch}/$branch", 
   mirror_type: "srv",
   signature_type: "fingerprints",
-  fingerprints: "${guest_root}/usr/share/keys/pkg"
+  fingerprints: "${mount_point}/usr/share/keys/pkg"
 }
 
 FreeBSD-base: {
   enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/FreeBSD:${abi_major}:amd64/${abi_minor}", 
+  url: "pkg+https://pkg.FreeBSD.org/FreeBSD:${abi_major}:${cpu_arch}/${abi_minor}", 
   mirror_type: "srv",
   signature_type: "fingerprints",
-  fingerprints: "${guest_root}/usr/share/keys/pkg"
+  fingerprints: "${mount_point}/usr/share/keys/pkg"
 }
 HERE
 
-echo ; echo Copying ${guest_root}/etc/pkg/FreeBSD.conf to /root
-# It will be overidden during the package installation
-cp ${guest_root}/etc/pkg/FreeBSD.conf /${guest_root}/root/ || \
+echo ; echo Copying ${mount_point}/etc/pkg/FreeBSD.conf to /root
+# It will be overridden during the package installation
+cp ${mount_point}/etc/pkg/FreeBSD.conf /${mount_point}/root/ || \
 	{ echo cp FreeBSD.conf failed ; exit 1 ; }
 
 # DO NOT PUT yes in quotation marks or it will fail!
@@ -188,39 +389,61 @@ cp ${guest_root}/etc/pkg/FreeBSD.conf /${guest_root}/root/ || \
 # system will not be able to retrieve packages
 # Moving it to the root directory at the end
 
-echo ; echo Generating ${guest_root}/usr/local/etc/pkg.conf PKG config file
-cat << HERE > ${guest_root}/usr/local/etc/pkg.conf
+echo ; echo Generating ${mount_point}/usr/local/etc/pkg.conf PKG config file
+cat << HERE > ${mount_point}/usr/local/etc/pkg.conf
   IGNORE_OSVERSION: yes
-  ABI: "FreeBSD:${abi_major}:amd64"
-  pkg_dbdir: "${guest_root}/var/db/pkg",
-  pkg_cachedir: "${guest_root}/var/cache/pkg",
+  INDEXFILE: INDEX-$major_version
+  ABI: "FreeBSD:${abi_major}:${cpu_arch}"
+  pkg_dbdir: "${mount_point}/var/db/pkg",
+  pkg_cachedir: "${mount_point}/var/cache/pkg",
   handle_rc_scripts: no
   assume_always_yes: yes
   repos_dir: [
-    "${guest_root}/etc/pkg"
+    "${mount_point}/etc/pkg"
   ]
   syslog: no
   developer_mode: no
 HERE
 
-[ -f ${guest_root}/usr/local/etc/pkg.conf ] || \
+[ -f ${mount_point}/usr/local/etc/pkg.conf ] || \
 	{ echo pkg.conf generation failed ; exit 1 ; }
+
+#echo ; cat ${mount_point}/etc/pkg/FreeBSD.conf
+#echo ; cat ${mount_point}/usr/local/etc/pkg.conf
+
+# Q: Can this get in the way? /usr/local/etc/pkg/repos/FreeBSD-base.conf
+
+echo ; echo pkg -vv SMOKE TEST
+pkg -vv -C ${mount_point}/usr/local/etc/pkg.conf
+
 
 #############
 # BOOTSTRAP #
 #############
 
 echo ; echo Running pkg bootstrap
-echo ; cat ${guest_root}/etc/pkg/FreeBSD.conf
 echo
 
-# Adding -o IGNORE_OSVERSION="yes" to remove the scary warning
-
 pkg \
-	-C ${guest_root}/usr/local/etc/pkg.conf \
-	-o IGNORE_OSVERSION="yes" \
+	-C ${mount_point}/usr/local/etc/pkg.conf \
 	bootstrap -f -y || \
 		{ echo pkg bootstrap failed ; exit 1 ; }
+
+
+# WHY IS IT NOT READING THE REQUESTED pkg and repo configs?
+# To begin with... FreeBSD.conf was named pkg.conf
+# BUT pkg -vv does not show repos at the bottom
+# Does NOT show them if you specify
+# -R ${mount_point}/etc/pkg/FreeBSD.conf
+
+# SOUNDS WRONG
+# INDEXFILE = "INDEX-15"; # NOW OVERRIDING with the major number
+#ABI = "FreeBSD:14:${cpu_arch}";
+#ALTABI = "freebsd:15:x86:64";
+
+# INDEXFILE: string
+# The filename of the ports index, searched for in INDEXDIR or PORTSDIR.  Default: INDEX-N where N is the OS major version number
+
 
 ##########
 # UPDATE #
@@ -229,90 +452,77 @@ pkg \
 echo ; echo Running pkg update 
 
 echo ; echo pkg -vv SMOKE TEST
-pkg -C ${guest_root}/usr/local/etc/pkg.conf -vv
+pkg -C ${mount_point}/usr/local/etc/pkg.conf -vv
 
 pkg \
-	-C ${guest_root}/usr/local/etc/pkg.conf \
-	-o IGNORE_OSVERSION="yes" \
+	-C ${mount_point}/usr/local/etc/pkg.conf \
 	update -f || \
 		{ echo pkg update failed ; exit 1 ; }
 
-du -h ${guest_root}
+du -h ${mount_point}
 
 echo ; echo pkg -vv SMOKE TEST
-pkg -C ${guest_root}/usr/local/etc/pkg.conf -vv
+pkg -C ${mount_point}/usr/local/etc/pkg.conf -vv
+
+
+#####################
+# INSTALL PREFLIGHT #
+#####################
+
+echo ; echo Running pkg rquery
+
+echo ; echo SMOKE TEST: Counting available packages
+pkg \
+	-C ${mount_point}/usr/local/etc/pkg.conf \
+	rquery --repository="FreeBSD-base" '%n' \
+		| wc -l
+
+echo ; echo SMOKE TEST: Counting requested packages
+pkg \
+	-C ${mount_point}/usr/local/etc/pkg.conf \
+	rquery --repository="FreeBSD-base" '%n' \
+		| egrep -v \
+		"FreeBSD-.*(.*-($special_pkg_exclusions)|($pkg_exclusions))$" \
+		| wc -l
+
+#cat ${mount_point}/etc/pkg/FreeBSD.conf
+
 
 ###########
 # INSTALL #
 ###########
 
-echo ; echo Running pkg rquery and xargs 
+echo ; echo Installing base packages
 
-echo ; echo SMOKE TEST: Query for one package
+# Strong quoting required for egrep and variables
 pkg \
-	-C ${guest_root}/usr/local/etc/pkg.conf \
-	-o IGNORE_OSVERSION="yes" \
+	-C ${mount_point}/usr/local/etc/pkg.conf \
 	rquery --repository="FreeBSD-base" '%n' \
-		| grep FreeBSD-rc
-
-echo ; echo SMOKE TEST: Count available packages
-pkg \
-	-C ${guest_root}/usr/local/etc/pkg.conf \
-	-o IGNORE_OSVERSION="yes" \
-	rquery --repository="FreeBSD-base" '%n' \
-		| wc -l
-
-echo ; echo SMOKE TEST: Count filtered packages
-pkg \
-	-C ${guest_root}/usr/local/etc/pkg.conf \
-	-o IGNORE_OSVERSION="yes" \
-	rquery --repository="FreeBSD-base" '%n' \
-		| grep -vE 'FreeBSD-.*(.*-(dbg|lib32|dev)|(bsnmp|clang|cxgbe-tools|dtrace|lld|lldb|mlx-tools|rescue|tests))$' \
-		| wc -l
-
-echo ; cat ${guest_root}/etc/pkg/FreeBSD.conf
-echo
-
-#echo ; echo SMOKE TEST: Install one package
-# WORKS
-#pkg \
-#	-C ${guest_root}/usr/local/etc/pkg.conf \
-#	-o IGNORE_OSVERSION="yes" \
-#	--rootdir ${guest_root} install --repository=FreeBSD-base \
-#	FreeBSD-rc || \
-#		{ echo pkg install failed ; exit 1 ; }
-
-echo ; echo Installing a jail-oriented subset of base packages
-
-pkg \
-	-C ${guest_root}/usr/local/etc/pkg.conf \
-	-o IGNORE_OSVERSION="yes" \
-	rquery --repository="FreeBSD-base" '%n' \
-		| grep -vE 'FreeBSD-.*(.*-(dbg|lib32|dev)|(bsnmp|clang|cxgbe-tools|dtrace|lld|lldb|mlx-tools|rescue|tests))$' \
+		| egrep -v \
+		"FreeBSD-.*(.*-($special_pkg_exclusions)|($pkg_exclusions))$" \
 		| xargs -o pkg \
-			-C ${guest_root}/usr/local/etc/pkg.conf \
-			-o IGNORE_OSVERSION="yes" \
-			--rootdir ${guest_root} \
+			-C ${mount_point}/usr/local/etc/pkg.conf \
+			--rootdir ${mount_point} \
 			install \
 			--
+
+#			-o IGNORE_OSVERSION="yes" \
 
 #######################
 # ADDITIONAL PACKAGES #
 #######################
 
-Installing additional packages if requested
-# To see if it will work!
-if [ "$additional_packages " ] ; then
-pkg \
-	-C ${guest_root}/usr/local/etc/pkg.conf \
-		-o IGNORE_OSVERSION="yes" \
-		--rootdir ${guest_root} \
-		install $additional_packages || \
-			{ echo Additional packages failed ; exit 1 ; }
+if [ "$additional_packages" ] ; then
+	echo Installing additional packages
+	pkg \
+		-C ${mount_point}/usr/local/etc/pkg.conf \
+			--rootdir ${mount_point} \
+			install "$additional_packages" || \
+				{ echo Additional packages failed ; exit 1 ; }
 fi
 
-echo ; echo Generating persistent ${guest_root}/usr/local/etc/pkg/repos/FreeBSD-base.conf REPO file
-cat << HERE > ${guest_root}/usr/local/etc/pkg/repos/FreeBSD-base.conf
+echo ; echo Generating persistent ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf REPO file
+cat << HERE > ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf
 FreeBSD-base: {
   enabled: yes
   url: "pkg+https://pkg.FreeBSD.org/\${ABI}/${abi_minor}", 
@@ -322,150 +532,208 @@ FreeBSD-base: {
 }
 HERE
 
-[ -f ${guest_root}/usr/local/etc/pkg/repos/FreeBSD-base.conf ] || \
+[ -f ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf ] || \
 	{ echo FreeBSD-base.conf generation failed ; exit 1 ; }
 
-echo Moving the bootstrap FreeBSD.conf to the root directory
+echo ; echo Moving the bootstrap FreeBSD.conf to the root directory
 # Else pkg will not work upon BE boot
-mv ${guest_root}/usr/local/etc/pkg/repos/FreeBSD-base.conf ${guest_root}/root/
+mv ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf ${mount_point}/root/
 
-echo Moving the bootstrap pkg.conf to the root directory
+echo ; echo Moving the bootstrap pkg.conf to the root directory
 # Else pkg will not work upon BE boot
-mv ${guest_root}/usr/local/etc/pkg.conf ${guest_root}/root/
+mv ${mount_point}/usr/local/etc/pkg.conf ${mount_point}/root/
 
-echo Setting the default repo to "latest" for consistency
-sed -i '' -e "s/quarterly/latest/" ${guest_root}/etc/pkg/FreeBSD.conf
+if [ "$branch" = "latest" ] ; then
+	echo Setting the default repo to "latest"
+	sed -i '' -e "s/quarterly/latest/" ${mount_point}/etc/pkg/FreeBSD.conf
+fi
 
-echo Do you see "latest"?
-cat ${guest_root}/etc/pkg/FreeBSD.conf
+###################################
+# Minimum loader.conf and rc.conf #
+###################################
 
-####################################
-# SIDELOAD PERSONAL CONFIGURATIONS #
-####################################
+# Challenge: You can create a ZFS VM image from a directory
+# Removing the conditional for now
 
-echo ; echo Sideload the current configuration to the boot environment?
-echo ; echo WARNING! Build objects in /usr/obj will probably harm the boot environment.
+#if [ "$target_type" = "dataset" ] ; then
+	cat << HERE > ${mount_point}/boot/loader.conf
+kern.geom.label.disk_ident.enable="0"
+kern.geom.label.gptid.enable="0"
+cryptodev_load="YES"
+zfs_load="YES"
+HERE
 
-echo -n "Continue? (y/n): " ; read confirmation
-[ "$confirmation" = "y" ] || exit 0
+	echo ; echo The loader.conf reads:
+	cat ${mount_point}/boot/loader.conf
+	echo
 
-echo ; echo Copying configuration files - missing ones will fail for now
-[ -f /boot/loader.conf ] && cp /boot/loader.conf ${guest_root}/boot/
-#[ -f /etc/fstab ] && cp /etc/fstab ${guest_root}/etc/
-touch ${guest_root}/etc/fstab
-[ -f /etc/rc.conf ] && cp /etc/rc.conf ${guest_root}/etc/
-[ -f /etc/sysctl.conf ] && cp /etc/sysctl.conf ${guest_root}/etc/
-[ -f /etc/group ] && cp /etc/group ${guest_root}/etc/
-[ -f /etc/pwd.db ] && cp /etc/pwd.db ${guest_root}/etc/
-[ -f /etc/spwd.db ] && cp /etc/spwd.db ${guest_root}/etc/
-[ -f /etc/master.passwd ] && cp /etc/master.passwd ${guest_root}/etc/
-[ -f /etc/passwd ] && cp /etc/passwd ${guest_root}/etc/
-[ -f /etc/wpa_supplicant.conf ] && \
-	cp /etc/wpa_supplicant.conf ${guest_root}/etc/
-# Was failing on host keys                                
-cp -rp /etc/ssh/* ${guest_root}/etc/ssh/
-cp -rp /root/.ssh ${guest_root}/root/
+	cat << HERE > ${mount_point}/etc/rc.conf
+
+hostname="propagate"
+zfs_enable="YES"
+HERE
+
+	echo ; echo The rc.conf reads:
+	cat ${mount_point}/etc/rc.conf
+	echo
+#fi
+
 
 ############
 # VM-IMAGE #
 ############
 
-echo ; echo Generating experimental /tmp/pkgbase-generate-vm-image.sh
-cat << HERE > /tmp/pkgbase-generate-vm-image.sh
-env TARGET=amd64 TARGET_ARCH=amd64 SWAPSIZE=1g \
-	/usr/src/release/scripts/mk-vmimage.sh \
-	-C /usr/src/release/tools/vmimage.subr \
-	-d $guest_root \
-	-F zfs \
-	-i /tmp/pkgbase.raw.zfs.img \
-	-s 8g -f raw \
-	-S /usr/src/release/.. \
-	-o /tmp/pkgbase.vm.zfs.img
+# This with generate a script to generate a script to create a VM image
+# A two-step process has the benefit of allowing configuration of the
+# propagated system prior to creating the VM image.
+
+# But acrobatics are required.
+
+# /usr/src/release/scripts/mk-vmimage.sh exists to automate VM image creation.
+# Unfortunately, it assumes installworld|installkernel|make distribution etc.
+
+# /usr/src/release/tools/vmimage.subr is a library for VM image creation.
+# Unfortunately, it has a hard requirement of being used by a script in /usr/src
+
+# So we fake an object directory with three boot binaries, given that everything
+# is already a binary, by definition. 
+
+# We copy the resulting script into the source tree, but that would fail on a
+# read-only source tree, and will obviously fail if sources are not available.
+
+# Even a symlink will not work
+#+ . ./release/tools/vmimage.subr
+#+ realpath /usr/src/release/scripts/propagate-mkvm-image.sh
+#+ dirname /tmp/pkgbase--mkvm-image.sh
+#+ scriptdir=/tmp
+
+
+if [ "$vm_image" = 1 ] ; then
+
+if [ -d "${mount_point}/usr/src/release" ] ; then
+	src_dir="${mount_point}/usr/src"
+elif [ -d /usr/src/release ] ; then
+	src_dir="/usr/src"
+else
+	echo VM build requires /usr/src/release
+	exit 1
+fi
+
+cat << HERE > "/tmp/pkgbase-${release}-mkvm-image.sh"
+#!/bin/sh
+set -xe
+
+cd ${src_dir}
+pwd
+
+mount | grep -q $mount_point/dev && umount $mount_point/dev
+
+# The order in which they failed
+mkdir -p $mount_point/usr/obj/usr/src/amd64.amd64/stand/efi/loader_lua || \\
+	{ echo failed to make loader_lua directory ; exit 1 ; }
+
+cp $work_dir/boot/loader_lua.efi \\
+        $mount_point/usr/obj/usr/src/amd64.amd64/stand/efi/loader_lua/ || \\
+		{ echo loader_lua.efi failed to copy ; exit 1 ; }
+
+mkdir -p $mount_point/usr/obj/usr/src/amd64.amd64/stand/i386/pmbr || \\
+	{ echo failed to make pmbr directory ; exit 1 ; }
+
+cp $work_dir/boot/pmbr \\
+	$mount_point/usr/obj/usr/src/amd64.amd64/stand/i386/pmbr/ || \\
+		{ echo pmbr failed to copy ; exit 1 ; }
+
+mkdir -p $mount_point/usr/obj/usr/src/amd64.amd64/stand/i386/gptzfsboot || \\
+	{ echo failed to make gptzfsboot directory ; exit 1 ; }
+
+cp $work_dir/boot/gptzfsboot \\
+        $mount_point/usr/obj/usr/src/amd64.amd64/stand/i386/gptzfsboot/ || \\
+		{ echo gptzfsboot failed to copy ; exit 1 ; }
+
+export MAKEOBJDIRPREFIX=$mount_point/usr/obj
+VMBASE=/tmp/pkgbase${release}.raw.zfs.img
+WORLDDIR=/usr/src
+DESTDIR=$mount_point
+VMSIZE=8g
+SWAPSIZE=1g
+VMIMAGE=/tmp/pkgbase${release}.vm.zfs.img
+VMFS=zfs
+TARGET=${hw_platform}
+TARGET_ARCH=${cpu_arch}
+VMFORMAT=raw
+
+# The heavy lifting
+echo ; echo Building VM image
+
+. ./release/tools/vmimage.subr
+vm_create_disk
+
+# Repeating this
+echo ; echo The resulting VM images is:
+echo /tmp/pkgbase${release}.vm.zfs.img
+echo
+echo ; echo To boot the VM image, run:
+echo ; echo sh "/tmp/pkgbase-${release}-boot-image.sh"
+echo
 HERE
 
-# It uses the traditional toolchain...
-#--------------------------------------------------------------
-#>>> Installing everything started on Sat Aug 24 20:32:10 UTC 2024
-#--------------------------------------------------------------
-#cd /usr/src; make -f Makefile.inc1 install
-# ...
+echo ; echo Copying /tmp/pkgbase-${release}-mkvm-image.sh to \
+	${src_dir}/release/scripts/propagate-mkvm-image.sh
 
-# BUT, it fails to install and continues!
+cp /tmp/pkgbase-${release}-mkvm-image.sh \
+	${src_dir}/release/scripts/propagate-mkvm-image.sh || \
+		{ echo Script copy failed ; exit ; }
 
-# ...
-#Cannot install the base system to /mnt.
-#ELF ldconfig path: /lib /usr/lib /usr/lib/compat /usr/local/lib
-#32-bit compatibility ldconfig path:
-#Creating image...  Please wait.
+echo ; echo To build the VM image, run:
+echo ; echo sh ${src_dir}/release/scripts/propagate-mkvm-image.sh
+echo
 
-#Creating `/tmp/efiboot.A84GOG'
-#/tmp/efiboot.A84GOG: 65528 sectors in 65528 FAT32 clusters (512 bytes/cluster)
-#BytesPerSec=512 SecPerClust=1 ResSectors=32 FATs=2 Media=0xf0 SecPerTrack=63 Heads=255 HiddenSecs=0 HugeSectors=66584 FATsecs=512 RootCluster=2 FSInfo=1 Backup=2
-#Populating `/tmp/efiboot.A84GOG'
-#Image `/tmp/efiboot.A84GOG' complete
-#Building filesystem...  Please wait.
-#ZFS support is currently considered experimental. Do not use it for anything critical.
-#Building final disk image...  Please wait.
-#Disk image /tmp/pkgbase.vm.zfs.img created.
+echo ; echo Generating a simple bhyve boot script
 
-# It boots under bhyve!
+cat << HERE > "/tmp/pkgbase-${release}-boot-image.sh"
+#!/bin/sh
+[ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; }
+[ -e /dev/vmm/propagate ] && { bhyvectl --destroy --vm=propagate ; sleep 1 ; }
+[ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
+        { echo \"BHYVE_UEFI.fd missing\" ; exit 1 ; }
 
-echo ; echo To unmount the boot environment, run:
-echo umount ${guest_root}/dev
-echo umount ${guest_root}
+kldstat -q -m vmm || kldload vmm
+sleep 1
 
-# Note that bectl will not unmount <mountpoint>/dev if devfs is mounted
-# bectl umount $guest_root
-#cannot unmount '${guest_root}': pool or dataset is busy
-#unknown error
-#Failed to unmount bootenv pkgbase
+$loader_string
+bhyve -m 2G -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
+        -l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
+        -s 2,virtio-blk,/tmp/pkgbase${release}.vm.zfs.img \\
+        propagate
+
+sleep 2
+bhyvectl --destroy --vm=propagate
+HERE
+
+echo ; echo To boot the VM image, run:
+echo ; echo "/tmp/pkgbase-${release}-boot-image.sh"
+echo
+
+fi
+
+##################
+# MOUNT HANDLING #
+##################
+
+if [ "$keep_mounted" = 0 ] ; then
+	if [ "$target_type" = "dataset" ] ; then
+		echo ; echo Unmounting $mount_point
+		umount $mount_point/dev ||
+			{ echo $mount_point/dev failed to unmount ; exit 1 ; }
+		umount $mount_point ||
+			{ echo $mount_point failed to unmount ; exit 1 ; }
+	else
+		echo ; echo To unmount the boot environment, run:
+		echo umount ${mount_point}/dev
+		echo umount ${mount_point}
+		echo
+echo "Remember that $target_input is set to -o canmount=noauto -o mountpoint=/"
+	fi
+fi
 
 exit 0
-
-# PKG NOTES
-
-Here are a few things I really wish I were more clear before diving into this.
-
-This is good porting, packaging, and Poudriere documentation but a few things could be more clear to users.
-
-Case in point: I still cannot find 'pkg prime-list' in a manual page. It just may be the single most useful pkg feature. It lists the packages you installed, not dependencies.
-
-That said...
-
-pkg(8) is a package for frequent updating.
-
-/etc/pkg/FreeBSD.conf is not a pkg(8) configuration file. It is a repository file, meaning, the OS tells pkg what repository it should use. You can get fresher packages by changing "quarterly" to "latest" in the file. Note the sed(1) syntax for this above. 
-
-Being a package itself, the pkg(8) configuration file is under /usr/local/etc:
-
-/usr/local/etc/pkg.conf
-
-As for the confusion of /etc/pkg/ sounding like a place for pkg(8) configuration, this is more clear in /usr/local:
-
-/usr/local/etc/pkg/repos/FreeBSD-base.conf
-
-Your *repos* can go in there and note the comment about disabling the default one in pkg(8).
-
-While /etc/pkg/FreeBSD.conf has:
-
-FreeBSD: {
-  url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest",
-
-/usr/local/etc/pkg/repos/FreeBSD-base.conf has things like:
-
-FreeBSD-base: {
-  enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/${ABI}/base_release_1}",
-
-${ABI} can expand to 'FreeBSD:14:arm64' and the base_release_1 indicates the .1 in 14.1-RELEASE
-
-CURRENT is slightly different and hopefully there is a way to manage patch levesl such as forcing use of 14.1p2 should you need to downgrade or keep systems identical for ${reasons}.
-
-Related, putting quotation marks around "yes" will break it, also for $reasons
-
-If you are really wanting to exercise PkgBase, consider a Varnish cache for packages to not punish the public servers.
-
-Peace
-
-
-
