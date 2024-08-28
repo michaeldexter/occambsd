@@ -78,23 +78,23 @@ The full occambsd.sh usage is:
 
 ```
 -p <profile file> (required)
--s <source directory override>
--o <object directory override>
--O <output directory override>
+-s <source directory> (Default: /usr/src)
+-o <object directory> (Default: /usr/obj)
+-O <output directory> (Default: /tmp/occambsd)
 -w (Reuse the previous world objects)
 -W (Reuse the previous world objects without cleaning)
 -k (Reuse the previous kernel objects)
 -K (Reuse the previous kernel objects without cleaning)
 -a <additional build option to exclude>
--b (package base)
+-b (Package base)
 -G (Use the GENERIC/stock world)
 -g (Use the GENERIC kernel)
 -j (Build for Jail boot)
 -9 (Build for 9pfs boot)
--v (Generate vm-image)
--z (Generate ZFS vm-image)
--Z <size> (vm-image siZe i.e. 500m - default is 5g)
--S <size> (vm-image Swap size i.e. 500m - default is 1g)
+-v (Generate VM image)
+-z (Generate ZFS VM image)
+-Z <size> (VM image siZe i.e. 500m - default is 5g)
+-S <size> (VM image Swap size i.e. 500m - default is 1g)
 -i (Generate disc1 and bootonly.iso ISOs)
 -m (Generate mini-memstick image)
 -n (No-op dry-run only generating configuration files)
@@ -135,7 +135,7 @@ Note that this requires use of the /media mount point, administrative privileges
 To download a FreeBSD 15.0-CURRENT "Latest" VM-IMAGE and generate boot scripts:
 
 ```
-sudo sh imagine.sh -r 15.0-CURRENT -b
+sudo sh imagine.sh -r 15.0-CURRENT -v
 ```
 
 To download an OmniOS image (version embedded in the script for want of "Latest" aliases on the mirrors) and image it to a hardware device /dev/da0 :
@@ -147,7 +147,7 @@ sudo sh imagine -r omnios -t /dev/da0
 The full occambsd.sh usage is:
 
 ```
--w <working directory> (Default: /root/imagine-work)
+-O <output directory> (Default: /root/imagine-work)
 -a <architecture> [ amd64 | arm64 | i386 | riscv ] (Default: Host)
 -r [ obj | /path/to/image | <version> | omnios | debian ]
 obj i.e. /usr/obj/usr/src/<target>.<target_arch>/release/vm.ufs.raw
@@ -160,8 +160,8 @@ obj i.e. /usr/obj/usr/src/<target>.<target_arch>/release/vm.ufs.raw
 -g <gigabytes> (grow image to gigabytes i.e. 10)
 -s (Include src.txz or /usr/src as appropriate)
 -m (Mount image and keep mounted for further configuration)
--v (Generate VMDK image wrapper)
--b (Generate VM boot scripts)
+-V (Generate VMDK image wrapper)
+-v (Generate VM boot scripts)
 -z (Use a 14.0-RELEASE or newer root on ZFS image)
 -Z <new zpool name>
 -A (Set the ZFS ARC to only cache metadata)
@@ -175,7 +175,7 @@ Example usage on a FreeBSD 14.0 system with 'makefs -t zfs' support to produce a
 
 ```
 sudo sh occambsd.sh -p profile-amd64-zfs.txt -v -z
-sudo sh imagine.sh -r obj -g 10 -b -z
+sudo sh imagine.sh -r obj -g 10 -v -z
 ```
 
 # Example Window Usage

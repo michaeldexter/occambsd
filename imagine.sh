@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.5.2beta
+# Version v.0.5.4beta
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -139,14 +139,16 @@
 #
 # sh imagine.sh -a riscv -r 14.0-RELEASE -z -g 10 -b
 #
-# Add '-v' to generate a VMDK that is VMware compatible, because you can
+# Add '-V' to generate a VMDK that is VMware compatible, because you can
 
 
-# USAGE
+#########
+# USAGE #
+#########
 
 f_usage() {
 	echo ; echo "USAGE:"
-	echo "-w <working directory> (Default: /root/imagine-work)"
+	echo "-O <output directory> (Default: /root/imagine-work)"
 	echo "-a <architecture> [ amd64 | arm64 | i386 | riscv ] (Default: Host)"
 	echo "-r [ obj | /path/to/image | <version> | omnios | debian ]"
 
@@ -163,8 +165,8 @@ f_usage() {
 	echo "-g <gigabytes> (grow image to gigabytes i.e. 10)"
 	echo "-s (Include src.txz or /usr/src as appropriate)"
 	echo "-m (Mount image and keep mounted for further configuration)"
-	echo "-v (Generate VMDK image wrapper)"
-	echo "-b (Generate VM boot scripts)"
+	echo "-V (Generate VMDK image wrapper)"
+	echo "-v (Generate VM boot scripts)"
 	echo "-z (Use a 14.0-RELEASE or newer root on ZFS image)"
 	echo "-Z <new zpool name>"
 	echo "-A (Set the ZFS ARC to only cache metadata)"
@@ -175,7 +177,9 @@ f_usage() {
 }
 
 
-# INTERNAL VARIABLES AND DEFAULTS
+###################################
+# INTERNAL VARIABLES AND DEFAULTS #
+###################################
 
 work_dir=~/imagine-work		# Default - fails if quoted
 hw_platform=$( uname -m )	# i.e. arm64
@@ -200,6 +204,8 @@ debian_arm64_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-1
 
 routeros_amd64_url="https://download.mikrotik.com/routeros/7.15.3/chr-7.15.3.img.zip"
 routeros_arm64_url="https://download.mikrotik.com/routeros/7.15.3/chr-7.15.3-arm64.img.zip"
+
+memtest86_url="https://www.memtest86.com/downloads/memtest86-usb.zip"
 
 attachment_required=0
 root_fs=""
@@ -245,11 +251,13 @@ xen_destroy=""
 md_id=42			# Default for easier cleanup if interrupted
 
 
-# USER INPUT AND VARIABLE OVERRIDES
+#####################################
+# USER INPUT AND VARIABLE OVERRIDES #
+#####################################
 
-while getopts w:a:r:zZ:At:T:ofg:smvbx:i: opts ; do
+while getopts O:a:r:zZ:At:T:ofg:smVvx:i: opts ; do
 	case $opts in
-	w)
+	O)
 		work_dir="$OPTARG"
 		[ -d "$work_dir" ] || mkdir -p "$work_dir"
 	[ -d "$work_dir" ] || { echo "mkdir -p $work_dir failed" ; exit 1 ; }
@@ -294,12 +302,12 @@ while getopts w:a:r:zZ:At:T:ofg:smvbx:i: opts ; do
 		force=1
 	;;
 
-	v)
+	V)
 		# Could simply add a wrapper to an existing image
 		vmdk=1
 	;;
 
-	b)
+	v)
 		# root required to execute bhyve and Xen boot scripts
 		boot_scripts=1
 	;;
@@ -433,7 +441,10 @@ if [ "$fs_type" = "ufs" ] && [ -n "$mirror_path" ] ; then
 	echo Device mirroring only works with ZFS
 fi
 
-# TESTS - FAIL EARLY
+
+######################
+# TESTS - FAIL EARLY #
+######################
 
 # This test gives a false positive with -t and -T
 #if [ "$zpool_newname" ] || [ "$mirror_path" ] ; then
@@ -521,6 +532,7 @@ f_cleanse_device () # $1 device
 		| awk '{print int($3 / (1024*1024)) - 4;}'`
 }
 
+
 #################################
 # HEAVY LIFTING FLAG -r RELEASE #
 #################################
@@ -548,6 +560,7 @@ release_image_file="/usr/obj/usr/src/${hw_platform}.${cpu_arch}/release/vm.raw"
 
 elif [ "$release_name" = "windows" ] ; then
 	echo "Preparing Windows ISO and boot script"
+
 
 ##########
 # OMNIOS #
@@ -579,6 +592,7 @@ elif [ "$release_input" = "omnios" ] ; then
 	cd "${work_dir}/${release_name}"
 
 	f_fetch_image "$release_image_file" "$release_image_url"
+
 
 ##########
 # DEBIAN #
@@ -618,6 +632,7 @@ elif [ "$release_input" = "debian" ] ; then
 	cd "${work_dir}/${release_name}"
 
 	f_fetch_image "$release_image_file" "$release_image_url"
+
 
 ############
 # ROUTEROS #
@@ -660,6 +675,7 @@ elif [ "$release_input" = "routeros" ] ; then
 
 	f_fetch_image "$release_image_file" "$release_image_url"
 
+
 ################
 # CUSTOM IMAGE #
 ################
@@ -677,6 +693,7 @@ elif [ -f "$release_input" ] ; then # if a path to an image
 	release_name="custom"
 	release_type="raw"
 	# Note that the vmrun.sh "file" test for boot blocks
+
 
 #####################
 # FREEBSD XZ IMAGES #
@@ -914,9 +931,11 @@ if [ "$xml_file" ] && [ "$iso_file" ] ; then
 # Consider a warning that it will be writing to a device
 # boot-windows-iso.sh to boot once to the ISO for auto-installation
 
+
 #########
 # BHYVE #
 #########
+
 	# Used here and below
 	fbuf_string="-s 29,fbuf,tcp=0.0.0.0:5900,w=1024,h=768 -s 30,xhci,tablet"
 	cat << HERE > $work_dir/bhyve-windows-iso.sh
@@ -963,9 +982,11 @@ HERE
 
 	echo Note: bhyve-windows-iso.sh
 
+
 ########
 # QEMU #
 ########
+
 	cat << HERE > $work_dir/qemu-windows-iso.sh
 #!/bin/sh
 [ -f /usr/local/bin/qemu-system-x86_64 ] || \\
@@ -1691,6 +1712,7 @@ if [ "$boot_scripts" = 1 ] ; then
 #########
 # BHYVE #
 #########
+
 	case "$hw_platform" in
 		amd64|i386)
 
@@ -1745,6 +1767,7 @@ bhyvectl --destroy --vm=$vm_name
 HERE
 			echo Note: $work_dir/$bhyve_script
 
+
 ########
 # QEMU #
 ########
@@ -1773,6 +1796,7 @@ $storage_string \\
 HERE
 
 			echo Note: $work_dir/$qemu_script
+
 
 #######
 # XEN #
@@ -1887,6 +1911,7 @@ HERE
 		;;
 	esac
 fi # End boot scripts
+
 
 ##################################
 # UNMOUNT OR REMIND OF THE MOUNT #

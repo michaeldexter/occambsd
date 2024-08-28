@@ -26,29 +26,29 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.7.8beta
+# Version v0.7.9beta
 
 f_usage() {
         echo ; echo "USAGE:"
 	echo "-p <profile file> (required)"
-	echo "-s <source directory override>"
-	echo "-o <object directory override>"
-	echo "-O <output directory override>"
+	echo "-s <source directory> (Default: /usr/src)"
+	echo "-o <object directory> (Default: /usr/obj)"
+	echo "-O <output directory> (Default: /tmp/occambsd)"
 	echo "-w (Reuse the previous world objects)"
 	echo "-W (Reuse the previous world objects without cleaning)"
 	echo "-k (Reuse the previous kernel objects)"
 	echo "-K (Reuse the previous kernel objects without cleaning)"
 # Need reuse PkgBase?
 	echo "-a <additional build option to exclude>"
-	echo "-b (package base)"
+	echo "-b (Package base)"
 	echo "-G (Use the GENERIC/stock world)"
 	echo "-g (Use the GENERIC kernel)"
 	echo "-j (Build for Jail boot)"
 	echo "-9 (Build for 9pfs boot)"
-	echo "-v (Generate vm-image and boot scripts)"
-	echo "-z (Generate ZFS vm-image and boot scripts)"
-	echo "-Z <size> (vm-image siZe i.e. 500m - default is 5g)"
-	echo "-S <size> (vm-image Swap size i.e. 500m - default is 1g)"
+	echo "-v (Generate VM image and boot scripts)"
+	echo "-z (Generate ZFS VM image and boot scripts)"
+	echo "-Z <size> (VM image siZe i.e. 500m - default is 5g)"
+	echo "-S <size> (VM image Swap size i.e. 500m - default is 1g)"
 	echo "-i (Generate disc1 and bootonly.iso ISOs)"
 	echo "-m (Generate mini-memstick image)"
 	echo "-n (No-op dry-run only generating configuration files)"
@@ -61,7 +61,10 @@ f_usage() {
 
 # This script creates a customized FreeBSD "VM-IMAGE" based on a profile that includes build option and kernel configuration parameters
 
-# DEFAULT VARIABLES
+
+#####################
+# DEFAULT VARIABLES #
+#####################
 
 working_directory=$( pwd )		# Used after cd for cleanup
 kernconf="OCCAMBSD"			# Can be overridden with GENERIC
@@ -576,7 +579,7 @@ if [ "$generate_vm_image" = "1" ] ; then
 	[ -n "$vm_image_size" ] && vm_size_string="VMSIZE=$vm_image_size"
 	[ -n "$vm_swap_size" ] && vm_swap_string="SWAPSIZE=$vm_swap_size"
 
-	echo ; echo Building vm-image - logging to $log_dir/vm-image.log
+	echo ; echo Building VM image - logging to $log_dir/vm-image.log
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
 		SRCCONF=$src_conf \
 		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
@@ -584,12 +587,12 @@ if [ "$generate_vm_image" = "1" ] ; then
 			VMFS=$vmfs $vm_size_string $vm_swap_string \
 			TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
 			> $log_dir/vm-image.log 2>&1 || \
-				{ echo vm-image failed ; exit 1 ; }
+				{ echo VM image failed ; exit 1 ; }
 
 if [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] ; then
 	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw to $work_dir
 	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw \
-		$work_dir/ || { echo vm-image copy failed ; exit 1 ; }
+		$work_dir/ || { echo VM image copy failed ; exit 1 ; }
 else
 	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir
 
@@ -599,13 +602,13 @@ output_imgage_size=$( stat -f %z $obj_dir/$src_dir/${target}.$target_arch/releas
 	{ echo "Resulting image is 0 bytes - verify profile" ; exit 1 ; }
 
 	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw \
-		$work_dir/vm.raw || { echo vm-image copy failed ; exit 1 ; }
+		$work_dir/vm.raw || { echo VM image copy failed ; exit 1 ; }
 
 fi
 
 # DEBUG: ZFS syntax changed? mkimg: partition 1: No such file or directory
 
-# Verify if vm-image would be re-using ${target}.$target_arch/release/dist/
+# Verify if VM image would be re-using ${target}.$target_arch/release/dist/
 
 	echo ; echo Generating VM scripts
 

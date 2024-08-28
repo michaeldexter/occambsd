@@ -127,7 +127,9 @@ f_usage() {
 }
 
 
-# INTERNAL VARIABLES AND DEFAULTS
+###################################
+# INTERNAL VARIABLES AND DEFAULTS #
+###################################
 
 release=""
 major_version=""
@@ -149,7 +151,9 @@ vm_image=0
 #obj_dir=""
 
 
-# USER INPUT AND VARIABLE OVERRIDES
+#####################################
+# USER INPUT AND VARIABLE OVERRIDES #
+#####################################
 
 while getopts r:a:t:qmM:jd3p:v opts ; do
         case $opts in
