@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.5.4beta
+# Version v.0.5.5beta
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -98,14 +98,16 @@
 # If the layout changes, this will probably break.
 # FreeBSD 15.0-CURRENT VM-IMAGES are now 6GB in size.
 # The generated bhyve boot scripts require the bhyve-firmware UEFI package.
-# The canonical /media temporary mount point is hard-coded for now.
 # The canonical /usr/src directory is hard-coded when using -r obj or a path.
 # 'fetch -i' only checks date stamps, allow for false matches on interrupted downloads.
 # Xen boot scripts do not support mirrored devices yet
 # Running imagine.sh in the working directory will cause existing release versions to be misinterpreted as image paths to be copied.
 # This will clean up previous images but not boot scripts.
 # /etc/fstab is moved to fstab.original and replaced with an empty file on any
-# runs that include advanced zpool handling
+# runs that include advanced zpool handling.
+# imagine.sh -z is consistent in how it relabels partitions, making for a
+# conflict if you try to run imagine.sh from an imagine.sh destination.
+# Workaround: Us a UFS image to install to a ZFS one.
 
 
 # EXAMPLES
@@ -150,7 +152,7 @@ f_usage() {
 	echo ; echo "USAGE:"
 	echo "-O <output directory> (Default: /root/imagine-work)"
 	echo "-a <architecture> [ amd64 | arm64 | i386 | riscv ] (Default: Host)"
-	echo "-r [ obj | /path/to/image | <version> | omnios | debian ]"
+	echo "-r [ obj | /path/to/image | <version> | omnios | debian ] (Required)"
 
 # HOW ARE obj and path any different? ONE TRIGGERS SRC - obj calculates the
 # object directory path, for better or for worse
@@ -159,12 +161,13 @@ f_usage() {
 	echo "/path/to/image.raw for an existing image"
 	echo "<version> i.e. 14.0-RELEASE | 15.0-CURRENT | 15.0-ALPHAn|BETAn|RCn"
 	echo "-o (Offline mode to re-use fetched releases and src.txz)"
-	echo "-t <target> [ img | /dev/device | /path/myimg ] (Default: img)"
-	echo "-T <mirror target> [ img | /dev/device ]"
+	echo "-t <target> [ img | /dev/<device> | /path/myimg ] (Default: img)"
+	echo "-T <mirror target> [ img | /dev/<device> ]"
 	echo "-f (FORCE imaging to a device without asking)"
 	echo "-g <gigabytes> (grow image to gigabytes i.e. 10)"
 	echo "-s (Include src.txz or /usr/src as appropriate)"
 	echo "-m (Mount image and keep mounted for further configuration)"
+	echo "-M <Mount point> (Default: /media)"
 	echo "-V (Generate VMDK image wrapper)"
 	echo "-v (Generate VM boot scripts)"
 	echo "-z (Use a 14.0-RELEASE or newer root on ZFS image)"
@@ -218,6 +221,8 @@ zpool_name=""
 zpool_rename=0
 zpool_newname=""
 zfs_arc_metadata=0
+label_id1=100			# We could let the user override these with -l
+label_id2=200			# and -L to avoid conficts
 #target_input="raw"		# Default not helpful if -x
 target_input="img"		# Default not helpful if -x
 target_dev=""
@@ -234,6 +239,7 @@ grow_size=""
 include_src=0
 mount_required=0
 keep_mounted=0
+mount_point="/media"
 xml_file=""
 iso_file=""
 vmdk=0
@@ -255,7 +261,7 @@ md_id=42			# Default for easier cleanup if interrupted
 # USER INPUT AND VARIABLE OVERRIDES #
 #####################################
 
-while getopts O:a:r:zZ:At:T:ofg:smVvx:i: opts ; do
+while getopts O:a:r:zZ:At:T:ofg:smMVvx:i: opts ; do
 	case $opts in
 	O)
 		work_dir="$OPTARG"
@@ -363,6 +369,13 @@ while getopts O:a:r:zZ:At:T:ofg:smVvx:i: opts ; do
 		attachment_required=1
 	;;
 
+	M)
+		[ "$OPTARG" ] || f_usage
+		mount_point="$OPTARG"
+		[ -d "$mount_point" ] || \
+			{ echo "Mount point $mount_point missing" ; exit 1 ; }
+	;;
+
 	x)
 		# root required for initial boot though it could be QEMU
 		xml_file="$OPTARG"
@@ -389,6 +402,8 @@ while getopts O:a:r:zZ:At:T:ofg:smVvx:i: opts ; do
 	;;
 	esac
 done
+
+[ -n "$release_input" ] || f_usage
 
 # Get the hardware device write warnings out of the way early
 
@@ -518,18 +533,19 @@ f_cleanse_device () # $1 device
 			zpool labelclear "$_label" >/dev/null 2>&1
 		done
 	echo Clearing zpool labels from $1
+	# Okay to fail
 	zpool labelclear "$1" >/dev/null 2>&1
 
 	echo Clearing partitions from $1
 	gpart recover "$1"
-	gpart destroy -F "$1"
-	gpart create -s gpt "$1"
-	gpart destroy -F "$1"
+	gpart destroy -F "$1" # || { echo "gpart destroy failed" ; exit 1 ; }
+	gpart create -s gpt "$1" || { echo "gpart create failed" ; exit 1 ; }
+	gpart destroy -F "$1" || { echo "gpart destroy failed" ; exit 1 ; }
 
 #	Required to avoid corrupt zpool metadata (!)
-	dd if=/dev/zero of=$1 bs=1m count=1 # 1048576 bytes
-	dd if=/dev/zero of=$1 bs=1m oseek=`diskinfo $1 \
-		| awk '{print int($3 / (1024*1024)) - 4;}'`
+	dd if=/dev/zero of="$1" bs=1m count=1 # 1048576 bytes
+	dd if=/dev/zero of="$1" bs=1m \
+		oseek=`diskinfo $1 | awk '{print int($3 / (1024*1024)) - 4;}'`
 }
 
 
@@ -942,7 +958,7 @@ if [ "$xml_file" ] && [ "$iso_file" ] ; then
 #!/bin/sh
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
 [ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
-        { echo \"BHYVE_UEFI.fd missing\" ; exit 1 ; }
+        { echo "BHYVE_UEFI.fd missing" ; exit 1 ; }
 
 kldstat -q -m vmm || kldload vmm
 HERE
@@ -1391,18 +1407,22 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 	echo Relabeling $target_dev
 	# Remove digits from default labels and add a new ID
 	# The host could have root-on-RaidZ with many devices
-	# Using 100 and 200
+	# Using 100 and 200 set in $label_id1 and $label_id2
 	# Glob to avoid the sub-shell?
 
 # SHOULD THIS BE relabel_required? Possibly a function?
 
 # Challenge: Free space handling - fortunately, it is probably at the end
+# Caveat to consider: Running imagine.sh from an imagine.sh installation will
+# conflist on disk labels. Could add a conflict test and increment in the loop
 	gpart show -l $target_dev | tail -n+2 | grep . \
 		| awk '{print $1,$2,$3,$4}' | \
 		while read _start _stop _id _label ; do
 			_label=$( echo $_label | tr -d "[:digit:]" )
 			[ "$_label" = "null" -o "$_label" = "free" ] && break
-			gpart modify -i $_id -l ${_label}100 $target_dev || \
+# DEBUG: Test for existing ${_label}$label_id1 here, and presumably test again
+# But, you may need to update the fstab - or accept this and use UFS
+		gpart modify -i $_id -l ${_label}$label_id1 $target_dev || \
 			{ echo $target_dev part $_id relabel failed ; exit 1 ; }
 		done
 		gpart show -l $target_dev
@@ -1437,7 +1457,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		while read _start _stop _id _label ; do
 			_label=$( echo $_label | tr -d "[:digit:]" )
 			[ "$_label" = "null" -o "$_label" = "free" ] && break
-			gpart modify -i $_id -l ${_label}200 $target_dev2 || \
+		gpart modify -i $_id -l ${_label}$label_id2 $target_dev2 || \
 			{ echo $target_dev2 $_id relabel failed ; exit 1 ; }
 		done
 		gpart show -l $target_dev
@@ -1461,11 +1481,11 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 	if [ "$zpool_rename" = 1 ] && [ "$grow_required" = 1 ] ; then
 		echo ; echo Importing and expanding zpool with guid $zpool_guid
 		zpool import -o autoexpand=on -N -f \
-			-d /dev/gpt/rootfs100 $zpool_guid $zpool_newname || \
+		-d /dev/gpt/rootfs$label_id1 $zpool_guid $zpool_newname || \
 			{ echo "$zpool_newname failed to import" ; exit 1 ; }
 		zpool status -v $zpool_name
 
-		zpool online -e $zpool_newname /dev/gpt/rootfs100 || \
+		zpool online -e $zpool_newname /dev/gpt/rootfs$label_id1 || \
 			{ echo "$zpool_newname failed to online -e" ; exit 1 ; }
 		zpool_name="$zpool_newname"
 		zpool status -v $zpool_name
@@ -1473,7 +1493,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 	elif [ "$zpool_rename" = 1 ] ; then
 		echo ; echo Importing zpool with new name $zpool_newname
 		zpool import -N -f \
-			-d /dev/gpt/rootfs100 $zpool_guid $zpool_newname || \
+			-d /dev/gpt/rootfs$label_id1 $zpool_guid $zpool_newname || \
 			{ echo "$zpool_newname failed to import" ; exit 1 ; }
 		zpool status -v $zpool_name
 
@@ -1482,16 +1502,16 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 	elif [ "$grow_required" = 1 ] ; then
 		echo ; echo Importing and expanding zpool $zpool_name
 		zpool import -o autoexpand=on -N -f \
-			-d /dev/gpt/rootfs100 $zpool_name || \
+			-d /dev/gpt/rootfs$label_id1 $zpool_name || \
 			{ echo "$zpool_name failed to import" ; exit 1 ; }
 		zpool status -v $zpool_name
 
-		zpool online -e $zpool_name /dev/gpt/rootfs100 || \
+		zpool online -e $zpool_name /dev/gpt/rootfs$label_id1 || \
 			{ echo "$zpool_name failed to online -e" ; exit 1 ; }
 
 	else
 		# Import without expansion or rename
-		zpool import -N -f -d /dev/gpt/rootfs100 $zpool_name || \
+		zpool import -N -f -d /dev/gpt/rootfs$label_id1 $zpool_name || \
 			{ echo "$zpool_name failed to import" ; exit 1 ; }
 		zpool status -v $zpool_name
 
@@ -1521,7 +1541,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 
 		# Renaming the pool may find "zroot" despite trying labelclear
 		zpool attach -f $zpool_name \
-			/dev/gpt/rootfs100 /dev/gpt/rootfs200 || \
+			/dev/gpt/rootfs$label_id1 /dev/gpt/rootfs$label_id1 || \
 			{ echo "zpool device attachment failed" ; exit 1 ; }
 		zpool status -v $zpool_name
 
@@ -1568,18 +1588,18 @@ fi
 echo ; echo Status: Checking mount_required
 if [ "$mount_required" = 1 ] ; then
 
-	mount | grep "on /media" && \
-		{ echo "/media mount point in use" ; exit 1 ; }
+	mount | grep "on ${mount_point:?}" && \
+		{ echo "${mount_point:?} mount point in use" ; exit 1 ; }
 
 	if [ "$root_fs" = "freebsd-ufs" ] ; then
-		mount $root_dev /media || \
+		mount $root_dev ${mount_point:?} || \
 			{ echo mount failed ; exit 1 ; }
 
 	elif [ "$root_fs" = "linux-data" ] ; then
 		kldstat -q -m fusefs || kldload fusefs
 		kldstat -q -m fusefs || \
 			{ echo fusefs.ko failed to load ; exit 1 ; }
-		fuse-ext2 $root_dev /media -o rw+ || \
+		fuse-ext2 $root_dev ${mount_point:?} -o rw+ || \
 			{ echo $root_dev fuse-ext2 mount failed ; exit 1 ; }
 
 #	elif [ "$root_fs" = "freebsd-zfs" ] ; then
@@ -1587,20 +1607,22 @@ if [ "$mount_required" = 1 ] ; then
 
 		echo ; echo Importing zpool $zpool_name for mounting
 		# Device path not required
-		zpool import -R /media $zpool_name || \
+		zpool import -R ${mount_point:?} $zpool_name || \
 			{ echo "$zpool_name failed to import" ; exit 1 ; }
 		zpool status -v $zpool_name
 
 		echo ; echo Modifying the fstab 
 		# This is a sin and why TrueNAS uses UUIDs
-		mv /media/etc/fstab /media/etc/fstab.original
-		touch /media/etc/fstab
+		mv ${mount_point:?}/etc/fstab \
+			${mount_point:?}/etc/fstab.original
+		touch ${mount_point:?}/etc/fstab
 		# YEP, we want an auto-swapper and maybe
 		# a utility to mount the EFI parition for updating
 
 		if [ $zpool_newname ] ; then
 			# Must be double quotes for variable expansion
-			sed -i -e "s/zroot/$zpool_newname/g" /media/etc/rc.conf
+			sed -i -e "s/zroot/$zpool_newname/g" 
+				${mount_point:?}/etc/rc.conf
 		fi
 	else
 		echo "Unrecognized root file system"
@@ -1621,19 +1643,19 @@ if [ "$mount_required" = 1 ] ; then
 		# Add dpv(1) progress?
 		echo "Extracting ${work_dir}/${release_name}/src.txz"
 		cat "${work_dir}/${release_name}/src.txz" | \
-			tar -xpf - -C /media/ || \
+			tar -xpf - -C ${mount_point:?}/ || \
 				{ echo "src.txz extraction failed" ; exit 1 ; }
 		else
 			echo ; echo "Copying /usr/src"
-			tar cf - /usr/src | tar xpf - -C /media || \
+			tar cf - /usr/src | tar xpf - -C ${mount_point:?}/ || \
 				{ echo "/usr/src failed to copy" ; exit 1 ; }
 		fi
-		[ -f "/media/usr/src/Makefile" ] || \
+		[ -f "${mount_point:?}/usr/src/Makefile" ] || \
 			{ echo "/usr/src failed to copy" ; exit 1 ; }
 	fi # End include_src
 
 	df -h | grep media
-	ls /media
+	ls ${mount_point:?}
 fi # End mount_required
 
 
@@ -1750,7 +1772,6 @@ fi
 kldstat -q -m vmm || kldload vmm
 sleep 1
 
-$loader_string
 bhyve -c $vm_cores -m $vm_ram -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	$storage_string \\
@@ -1856,7 +1877,6 @@ HERE
 kldstat -q -m vmm || kldload vmm
 sleep 1
 # GENERATE THIS ABOVE
-$loader_string
 bhyve -c $vm_cores -m $vm_ram -o console=stdio \\
         -o bootrom=/usr/local/share/u-boot/u-boot-bhyve-arm64/u-boot.bin \\
         -s 2,virtio-blk,$vm_device \\
@@ -1923,8 +1943,9 @@ if [ "$keep_mounted" = 0 ] ; then
 	if [ "$mount_required" = 1 ] ; then
 
 		if [ "$root_fs" = "freebsd-ufs" ] ; then
-			echo ; echo "Unmounting /media"
-			umount /media || { echo "umount failed" ; exit 1 ; }
+			echo ; echo "Unmounting ${mount_point:?}"
+			umount ${mount_point:?} || \
+				{ echo "umount failed" ; exit 1 ; }
 #	elif [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
 	elif [ "$fs_type" = "zfs" ] ; then
 
@@ -1951,7 +1972,7 @@ else
 	# Prompt the user with how to unmount
 	if [ "$root_fs" = "freebsd-ufs" ] ; then
 		# Consider printf
-		echo ; echo Run 'umount /media' when finished
+		echo ; echo Run 'umount ${mount_point:?}' when finished
 	fi
 
 #	if [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then

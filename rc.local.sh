@@ -26,14 +26,21 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.3
+# Version v0.4
 
 # USER VARIABLES
 
+# This requires a password hash. You can generate one with:
+# echo "mynewpassword" | openssl passwd -6 -stdin
+# If saving the hash as a variable, use single quotes
+# echo -n with double or not quotes
+#echo -n "<big hash>" | pw usermod myuser -H0
+
+# Hash of "freebsd" using single quotes
+root_password_hash='$6$dpcU1W938lZLvX3p$22.1OwRNKNJmqY5DWW11uJXXwPx0ewOqec7qLRBrFr7BHln9qbRdloZsado.Voo28qw3jbB5x6y5CAXMHWJcE1'
+user_username="admin"
+user_password_hash='$6$dpcU1W938lZLvX3p$22.1OwRNKNJmqY5DWW11uJXXwPx0ewOqec7qLRBrFr7BHln9qbRdloZsado.Voo28qw3jbB5x6y5CAXMHWJcE1'
 hostname="nassense"
-root_password="freebsd"
-user_username="dexter"
-user_password="freebsd"
 #timezone="UTC"
 timezone="America/Los_Angeles"
 # Would be nice to validate that input
@@ -133,6 +140,16 @@ else
 	service ntpd restart
 fi
 
+if [ "$( sysrc -c -R $DESTDIR ntpd_enable=YES )" ] ; then
+	echo "NTP daemon is set to sync on start"
+	logger "NTP daemon is set to sync on start"
+else
+	echo ; echo "Setting NTP daemon to sync on start"
+	logger "Setting NTP daemon to sync on start"
+	sysrc -R $DESTDIR ntpd_sync_on_start=YES
+	service ntpd restart
+fi
+
 
 # SECURE SHELL DAEMON
 
@@ -225,19 +242,16 @@ echo LEAVING THE IDEMPOTENCE OPTIONS
 
 echo "Setting root password with pw"
 logger "Setting root password with pw"
-echo "$root_password" | pw -R "$DESTDIR" usermod -n root -h 0
-
-# Some observations
-#echo "$root_password" | pw usermod -n root -h 0
-#root:$6$Llmi2FQ2wo.2IgPb$NeMYls203jVV9H5Q.qc7bBotET6AzpBlxGItDBKauHOkVySgXih.fGv6qtKOtSoMLh5/8zqIfJUbVNAr3mlJ91:0:0::0:0:Charlie &:/root:/bin/sh
-# https://forums.freebsd.org/threads/how-to-generate-the-hashes-in-etc-master-passwd.78940/
+#echo -n "$root_password" | pw -R "$DESTDIR" usermod -n root -h0
+echo -n "$root_password_hash" | pw -R "$DESTDIR" usermod -n root -H0
 
 
 # ADD USER
 
 # -n(ame) -s(hell) -m(ake home directory)
 pw useradd -R $DESTDIR -n $user_username -g wheel -s /bin/sh -m
-echo "$user_password" | pw -R "$DESTDIR" usermod -n "$user_usernane" -h 0
+#echo "$user_password" | pw -R "$DESTDIR" usermod -n "$user_usernane" -h0
+echo -n "$user_password_hash" | pw -R "$DESTDIR" usermod -n "$user_username" -H0
 
 
 # Consider firstboot

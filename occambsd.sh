@@ -30,7 +30,7 @@
 
 f_usage() {
         echo ; echo "USAGE:"
-	echo "-p <profile file> (required)"
+	echo "-p <profile file> (Required)"
 	echo "-s <source directory> (Default: /usr/src)"
 	echo "-o <object directory> (Default: /usr/obj)"
 	echo "-O <output directory> (Default: /tmp/occambsd)"
@@ -215,7 +215,7 @@ fi
 # PREPARATION #
 ###############
 
-[ -d ${work_dir}/jail/dev ] && umount ${work_dir}/jail/dev
+[ -d ${work_dir}/root/dev ] && umount ${work_dir}/root/dev
 
 if ! [ -d $work_dir ] ; then
 	echo Creating $work_dir
@@ -225,9 +225,12 @@ if ! [ -d $work_dir ] ; then
 else # work_dir exists
 	# Consider a finer-grained cleanse to preserve kernel and world logs
 	# when re-using kernel and world artifacts
-	echo ; echo Cleansing $work_dir
-	rm -rf $work_dir/*
-	mkdir -p $log_dir
+
+	echo $work_dir exists and must be moved or deleted by the user
+	exit 1
+#	echo ; echo Cleansing $work_dir
+#	rm -rf $work_dir/*
+#	mkdir -p $log_dir
 fi
 
 if ! [ -d $obj_dir ] ; then
@@ -241,8 +244,10 @@ mount -t devfs | \
 	umount $obj_dir/$src_dir/${target}.$target_arch/release/vm-image/dev
 
 if [ -d $obj_dir/$src_dir/${target}.$target_arch/release ] ; then
-	chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/release
-	rm -rf $obj_dir/$src_dir/${target}.$target_arch/release/*
+	echo $obj_dir/$src_dir/${target}.$target_arch/release exists and must be moved or deleted by the user
+	exit 1
+#	chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/release
+#	rm -rf $obj_dir/$src_dir/${target}.$target_arch/release/*
 fi
 
 # Kernel first depending on how aggressively we clean the object directory
@@ -250,8 +255,10 @@ if [ "$reuse_kernel" = "0" ] ; then
 	echo ; echo Cleaning kernel object directory
 	# Only clean the requested kernel
 	if [ -d $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf ] ; then
-		chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
-		rm -rf  $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
+		echo $obj_dir/$src_dir/${target}.$target_arch/sys exists and must be moved or deleted by the user
+		exit 1
+#		chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
+#		rm -rf  $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
 	fi
 	# This would collide with a mix of kernels
 	# cd $src_dir/sys
@@ -280,8 +287,10 @@ fi
 
 if [ -d "$obj_dir$src_dir/repo" ] ; then
 	echo ; echo Cleaning package repo directory
-	chflags -R 0 $obj_dir$src_dir/repo
-	rm -rf $obj_dir$src_dir/repo/*
+	echo $obj_dir$src_dir/repo exists and must be moved or deleted by the user
+	exit 1
+#	chflags -R 0 $obj_dir$src_dir/repo
+#	rm -rf $obj_dir$src_dir/repo/*
 fi
 
 
@@ -478,7 +487,7 @@ fi
 #################
 
 if [ "$generate_jail" = "1" ] ; then
-	[ -d ${work_dir}/jail ] || mkdir ${work_dir}/jail
+	[ -d ${work_dir}/root ] || mkdir ${work_dir}/root
 
 	jls | grep -q occambsd && jail -r occambsd
 
@@ -486,14 +495,14 @@ if [ "$generate_jail" = "1" ] ; then
 
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
 	installworld SRCCONF=$src_conf $makeoptions \
-	DESTDIR=${work_dir}/jail/ \
+	DESTDIR=${work_dir}/root/ \
 	NO_FSCHG=YES \
 		> $log_dir/install-jail-world.log 2>&1
 
 echo ; echo Installing Jail distribution - logging to $log_dir/jail-distribution.log
 
 	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
-	SRCCONF=$src_conf DESTDIR=${work_dir}/jail \
+	SRCCONF=$src_conf DESTDIR=${work_dir}/root \
 		> $log_dir/jail-distribution.log 2>&1
 
         echo ; echo Generating jail.conf
@@ -501,7 +510,7 @@ echo ; echo Installing Jail distribution - logging to $log_dir/jail-distribution
 cat << HERE > $work_dir/jail.conf
 occambsd {
 	host.hostname = occambsd;
-	path = "$work_dir/jail";
+	path = "$work_dir/root";
 	mount.devfs;
 	exec.start = "/bin/sh /etc/rc";
 	exec.stop = "/bin/sh /etc/rc.shutdown jail";
@@ -594,6 +603,12 @@ if [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] ; then
 	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw \
 		$work_dir/ || { echo VM image copy failed ; exit 1 ; }
 else
+#	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir
+
+
+# DEBUG TRY THE VARIOUS VM IMAGE NAMES - WILL BE HARD FOR VM BOOT
+
+# I sure hope this has not changed: 14.2/15-CURRENT = raw.zfs.img
 	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir
 
 output_imgage_size=$( stat -f %z $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw )

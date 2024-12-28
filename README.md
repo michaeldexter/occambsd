@@ -1,6 +1,8 @@
 ## OccamBSD: An application of Occam's razor to FreeBSD
 a.k.a. "super svelte stripped down FreeBSD"
 
+Note that the December, 2024 update is sweeping and due for much testing.
+
 ## Imagine: Virtual and Hardware Machine Boot Image Imaging 
 a.k.a. "An unnecessarily-complex solution to what should be a simple problem"
 
@@ -11,6 +13,7 @@ occambsd.sh		Builds a "svelte", purpose-build FreeBSD bootable disk image using 
 profile-amd64-minimum*.txt	A minimum system configuration for use on a virtual machine for FreeBSD
 profile-amd64-zfs*.txt		The minimum configuration with ZFS support
 profile-amd64-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
+propagate.sh		Builds PkgBase jails, boot environments, and VM-IMAGEs
 imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images, or dist sets or build objects to a boot environment
 autounattend_xml	A directory of Windows autounattend.xml files
 ```
@@ -117,6 +120,11 @@ sudo sh occambsd.sh -O /tmp/arm64-minimum -p profile-arm64-minimum.txt
 
 ```
 
+# propagate.sh
+
+See the USAGE section of the file for usage, notes, and caveats
+
+
 # imagine.sh
 
 imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", or a custom-build 'make release' or OccamBSD vm.raw image. It can also retrieve and copy or image OmniOS, Debian, and RouterOS images, plus prepare Windows boot devices using autounattend.xml files. The resulting images can be booted in bhyve, QEMU, or Xen.
@@ -181,7 +189,7 @@ sudo sh imagine.sh -r obj -g 10 -v -z
 # Example Window Usage
 
 ```
-sudo sh winagine.sh -i win2025.iso -x autounattend_xml/win2025.iso -g 30
+sudo sh imagine.sh -x autounattend_xml/win2025.iso -i win2025.iso -g 30
 ```
 
 ## OccamBSD build results from an EPYC 7402p

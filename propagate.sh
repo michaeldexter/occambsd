@@ -26,9 +26,9 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.0.4ALPHA
+# Version v.0.0.5ALPHA
 
-# propagate.sh - Packaged Base for OccamBSD and Imagine
+# propagate.sh - Packaged Base installer to boot environments and VM-IMAGES 
 
 
 ##############
@@ -41,69 +41,67 @@
 # custom-built binaries to boot environments, and this incarnation does
 # the same with upstream or OccamBSD-built FreeBSD base packages.
 
+#########
+# USAGE #
+#########
 
-##############################
-# TESTING, NOTES, AND ISSUES #
-##############################
+# propagate.sh must be run with root privieges and has three modes of operation
+# to install a given release to:
+#
+# * A pre-existing directory or mounted dataset for use with jail(8)
+# * A new boot environment that it will create based on the name provided
+# * A new PkgBase-based VM-IMAGE
+#
+# The package selection is currently determined by the base_pkg_exclusions
+# variable below. Example sets are provided and the community needs to
+# come up with a syntax/strategy for base package selection. Some options are:
+#
+# * Meta Packages
+# * Long lists
+# * egrep -v exclusions
+# * pkg query/rquery -e evaluation
+#
+# Challenges: You probably want to exclude packages in case a new one
+# appears or the base set is re-arranged. Dependencies may surprise you.
+#
+#
+# To install 14.2-RELEASE to the default location of /tmp/propagate/root,
+# copying in packages from the host (must also be 14.2-RELEASE), and clean the
+# pkg cache on the destination:
+#
+# sh propagate.sh -r 14.2-RELEASE -c -C
+#
+# Cleaning up in advance is left to the user and remember to unmount the /dev
+# directory of the destination if you want to delete the target root:
+#
+# umount /tmp/propagate/root/dev
+#
+#
+# To install 14.2-RELEASE to a new boot environment "test" on the zpool "zroot":
+#
+# sh propagate.sh -r 14.2-RELEASE -c -C -m -t zroot/ROOT/test
+#
+# -m will keep it mounted for further configuration
+# -d will install ALL base packages (you probably do not want that)
+#
+#
+# To create a 14.2-RELEASE PkgBase VM-IMAGE:
+#
+# sh propagate.sh -r 14.2-RELEASE -d -c -C -v
 
-# A bsdinstall "traditional" FreeBSD 14.1-RELEASE system can install 14.1 and
-# 15.0 PkgBase installations with syntax such as:
 
-# 14.1-RELEASE to a directory with jail package set from the quarterly branch
-# sh propagate.sh -r 14.1 -t /tmp/pkgjail14.1 -j -q
-
-# 15.0-CURRENT to a dataset configured like a boot environment with
-# -o canmount=noauto -o mountpoint=/
-# sh propagate.sh -r 15.0 -t zroot/ROOT/pkgbase15.0
-
-# To do the same creating a VM-IMAGE /tmp/pkgbase15.0.vm.zfs.img
-# sh propagate.sh -r 15.0 -t zroot/ROOT/pkgbase15.0 -v
-
-# Note that the directory/dataset distinction is made by the leading slash!
+#####################
+# NOTES AND CAVEATS #
+#####################
 
 # This syntax aims to be consistent with occambsd.sh and imagine.sh
-
-
-# Issue: The resulting 15.0 system is not propagating 14.1 or 15.0, giving:
-#pkg: Warning: Major OS version upgrade detected.  Running "pkg bootstrap -f" recommended
-#pkg(8) is already installed. Forcing re-installation through pkg(7).
-#Bootstrapping pkg from pkg+https://pkg.FreeBSD.org/FreeBSD:14:amd64/latest, please wait...
-#Verifying signature with trusted certificate pkg.freebsd.org.2013102301... done
-#Installing pkg-1.21.3...
-#package pkg is already installed, forced install
-#Extracting pkg-1.21.3: 100%
-
-# Bootstrapping pkg from pkg+http://pkg.FreeBSD.org/FreeBSD:15:amd64/latest, please wait...
-#pkg: Error fetching https://pkg.FreeBSD.org/FreeBSD:15:amd64/base_latest/Latest/pkg.txz: Not Found
-# base_latest/Latest/pkg.txz
-# This issue keeps showing up with and base_latest/Latest/pkg.txz is not a thing
-# In some cases, requesting 14.1 gives FreeBSD:15:amd64
-
-# Issue: PkgBase has strange dependencies to understand i.e. why some are
-# fetched but not used  For example, why does the "jail" set of
-# base packages pull in a few dependencies?
-#14.1 on 14.1 with a "jail" set gets kernel, zfs, ufs...
-#[52/88] Installing FreeBSD-zfs-14.1p1...
-#[66/88] Installing FreeBSD-kernel-generic-mmccam-14.1p3...
-# and fetches generic
-#[87/88] Installing FreeBSD-ufs-lib32-14.1...
-
-# Caveat: This leaves cleanup of previous runs to the reader
-
-# Caveat: Currently this produces ZFS-friendly loader.conf and rc.conf files,
-# given that one can generate a VM image from a directory. A jail that attempts
-# to load zfs.ko will probably survive.
-
-# Caveat: The sideloading steps are moved elsewhere.
-
-# Question: How does base_weekly differ from base_latest ?
-# 15.0 only has base_latest base_weekly and latest
-# Add gdb to our favorite list of packages...
-# Question: How to choose a PkgBase kernel such as NODEBUG?
-
-# Idea: If installing sources and creating a VM image, change src_dir to
-# within the mount_point
-
+#
+# That the directory/dataset distinction is made by the leading slash
+#
+# Cleanup is left to the reader
+#
+# Q: How to choose a PkgBase kernel such as nodebug?
+# A: A loader variable
 
 #########
 # USAGE #
@@ -111,73 +109,128 @@
 
 f_usage() {
 	echo ; echo "USAGE:"
-	echo "-r <release> (Dot-separated version i.e. 14.1 or 15.0 - Required)"
+	echo "-r <release> (i.e. 14.2-RELEASE | 15.0-CURRENT - Required)"
 	echo "-a <architecture> [ amd64 | arm64 ] (Default: Host)"
-	echo "-t <target> (Boot environment or Jail path i.e. zroot/ROOT/pkgbase15 or /jails/pkgbase15 - Required)"
-	echo "-q (quarterly package branch - default latest)"
+	echo "-t <target root directory> (Boot environment or Jail path"
+	echo "   i.e. zroot/ROOT/pkgbase15, zroot/jails/pkgbase15 datasets or"
+	echo "   /jails/myjail directory"
+	echo "   Default: /tmp/propagate/root unless VM image is selected)"
 	echo "-m (Keep boot environment mounted for further configuration)"
-	echo "-M <Mount point> (Default: /media)"
-	echo "-j (Jail package set)"
 	echo "-d (Default FreeBSD installation package set with sources)"
-	echo "-3 (Install lib32 packages)"
 	echo "-p \"<additional packages>\" (Quoted space-separated list)"
-	echo "-v (Generate VM image in /tmp)"
+	echo "-s (Perform best-effort sideload of the current configuration)"
+	echo "-c (Copy cached FreeBSD- packages from the host - must match!)"
+	echo "-C (Clean package cache after installation)"
+	echo "-v (Generate VM image and boot scripts)"
+	echo "-O <output directory/work> (Default: /tmp/propagate)"
 	echo
 	exit 0
 }
 
+# Attic
+#	echo "-j (Use Jail package set)"
+#	echo "-q (quarterly package branch - default latest)"
+#	echo "-3 (Install lib32 packages)"
+#	echo "-z (Prepare target for ZFS boot)"
 
 ###################################
 # INTERNAL VARIABLES AND DEFAULTS #
 ###################################
 
-release=""
-major_version=""
-minor_version=""
-hw_platform=$( uname -m )       # i.e. amd64|arm64
-cpu_arch=$( uname -p )          # i.e. amd64|aarch64
-branch="latest"
+release_input=""
+abi_major=""
+abi_minor=""
+base_minor=""
+hw_platform=$( uname -m )	# i.e. amd64|arm64
+cpu_arch=$( uname -p )		# i.e. amd64|aarch64
 target_input=""
 target_prefix=""
-target_type=""	# directory or dataset
+target_type=""			# directory or dataset
 keep_mounted=0
-mount_point="/media"
-pkg_exclusions="clang|lld|lldb|src|src-sys|tests"
-special_pkg_exclusions="dbg|dev|lib32"			#Keep lib32 at the end
-lib32=0
-additional_packages=""
-vm_image=0
-#src_dir="/usr/src"
-#obj_dir=""
 
+#############################
+# USER-OVERRIDABLE DEFAULTS #
+#############################
+
+mount_point="/tmp/propagate/root"
+work_dir="/tmp/propagate"
+default_packages=0
+
+special_pkg_exclusions=""
+
+# A full-featured system, including src
+#base_pkg_exclusions="dbg|dev|lib32|tests"
+
+# A full-featured system, without src
+base_pkg_exclusions="dbg|dev|lib32|tests|src|src-sys"
+
+# Why does freebsd-ftpd slip in? ftp|ftpd dependency?
+#	FreeBSD-zoneinfo: 14.2 [FreeBSD-base]
+#	freebsd-ftpd: 20240719 [FreeBSD-latest]
+
+# A lightweight jail system
+
+# Why does this set install zfs no matter how much it is excluded? Dependency?
+
+#base_pkg_exclusions="zfs|ufs-lib32|nfs|ipf|ipfw|telnet|sendmail|rcmds|dhclient|pf|kernel|kernel-generic|kernel-generic-mmccam|kernel-minimal|dbg|dev|lib32|man|tests|src|src-sys|acpi|apm|autofs|bhyve|bluetooth|bootloader|bsdinstall|bsnmp|ccdconfig|clang|cxgbe-tools|dtrace|efi-tools|elftoolchain|examples|fwget|games|geom|ggate|hast|hostapd|hyperv-tools|iscsi|lld|lldb|lp|mlx-tools|nvme-tools|ppp|rescue|rdma|smbutils|src|src-sys|tests|ufs|wpa|ftp|ftpd"
+
+additional_packages=""
+sideload=0
+copy_cache=0
+clean_cache=0
+mkvm_image=0
+
+# Drawing from /usr/src/release/tools/vmimage.subr
+skel_dirs="boot/efi/EFI/BOOT
+dev
+etc/pkg
+var/cache/pkg
+var/db/pkg
+usr/local/etc/pkg/repos
+usr/share/keys/pkg/trusted
+usr/share/keys/pkg/revoked
+mnt
+media
+root
+home
+tmp
+usr/ports
+usr/src
+usr/obj
+var/audit
+var/crash
+var/log
+var/mail
+var/tmp"
+
+# NOT SURE: net proc
 
 #####################################
 # USER INPUT AND VARIABLE OVERRIDES #
 #####################################
 
-while getopts r:a:t:qmM:jd3p:v opts ; do
-        case $opts in
-        r)
+while getopts r:a:t:mdp:scCvzO opts ; do
+	case $opts in
+	r)
 		[ "$OPTARG" ] || f_usage
-		release="$OPTARG"
-		echo "$release" | grep -q "\." || f_usage
-		major_version=$( echo $release | cut -d "." -f 1 )
+		release_input="$OPTARG"
+		echo "$release_input" | grep -q "\." || f_usage
+		echo "$release_input" | grep -q "-" || f_usage
+
+		release_version=$( echo "$release_input" | cut -d "-" -f 1 )
+		release_build=$( echo "$release_input" | cut -d "-" -f 2 )
+
+		abi_major=$( echo $release_version | cut -d "." -f 1 )
 		# cut -d "." -f 2 only works with a .N
-		minor_version=$( echo $release | cut -d "." -f 2 )
+		abi_minor=$( echo $release_version | cut -d "." -f 2 )
 
-		if [ "$major_version" -lt 14 ] ; then
-			echo "Release is under 14 or invalid"
-		fi
-
-		if [ ! "$minor_version" ] ; then
-			minor_version=0
-		elif [ "$minor_version" -ge 0 ] ; then
-			true
+		if [ "$release_build" = "CURRENT" ] ; then
+			base_minor="base_latest"
 		else
-			echo Invalid release input
-			f_usage
+			base_minor="base_release_${abi_minor}"
 		fi
 
+		# Perform more validation
 	;;
 	a)
 		case "$OPTARG" in
@@ -203,8 +256,6 @@ while getopts r:a:t:qmM:jd3p:v opts ; do
 				exit 1
 			fi	
 
-			[ -d $target_input ] && \
-				{ echo Target exists - Exiting ; exit 1 ; }
 			echo Creating root directory
 			[ -d $target_input ] || mkdir -p $target_input
 			[ -d $target_input ] || \
@@ -212,6 +263,8 @@ while getopts r:a:t:qmM:jd3p:v opts ; do
 			target_type="directory"
 			mount_point="$target_input"
 		else
+
+# DEBUG SHELLCHECK SUGGESTS QUOTING AFTER THE DOLLAR SIGN
 		zpool get name $( echo $target_input | cut -d "/" -f 1 ) \
 			> /dev/null 2>&1 || \
 			{ echo Target $target_input appears invalid ; exit 1 ; }
@@ -222,349 +275,427 @@ while getopts r:a:t:qmM:jd3p:v opts ; do
 			target_type="dataset"
 			echo Creating root dataset
 			zfs get name $target_input > /dev/null 2>&1 || \
-		        zfs create -o canmount=noauto -o mountpoint=/ \
+			zfs create -o canmount=noauto -o mountpoint=/ \
 				$target_input
 			zfs get name $target_input > /dev/null 2>&1 || \
-        		{ echo root dataset failed to create ; exit 1 ; }
+			{ echo root dataset failed to create ; exit 1 ; }
+
+# PICK YOUR DATASET PROPERTY PARSING METHOD OF CHOICE FROM BSDINSTALL OR VMIAGE
+			# From /usr/libexec/bsdinstall/zfsboot
+#			echo Sourcing bsdconfig/bsdintall functions/variables
+#			# Obtain default ZFSBOOT_DATASETS
+#			. /usr/libexec/bsdinstall/zfsboot || \
+#				{ echo zfsboot failed to source ; exit 1 ; }
+#			. /usr/share/bsdconfig/common.subr || \
+#				{ echo common.subr failed to source ; exit 1 ; }
+# FOLLOWING /lab/github/occambsd/vmimage.subr
+#			zfs create -o canmount=noauto -o mountpoint=/ \
+#				$target_input
+
+#                        -o fs=zroot/home\;mountpoint=/home \
+			zfs create -o canmount=noauto \
+				-o mountpoint=/home \
+				$target_input/home || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/tmp\;mountpoint=/tmp\;exec=on\;setuid=off \
+			zfs create -o canmount=noauto \
+				-o mountpoint=/tmp -o exec=on -o setuid=off \
+				$target_input/tmp || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/usr\;mountpoint=/usr\;canmount=off \
+# OVERRIDING canmount=off with noauto for nesting
+			zfs create \
+				-o mountpoint=/usr -o canmount=noauto \
+				$target_input/usr || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/usr/ports\;setuid=off \
+			zfs create -o canmount=noauto \
+				-o setuid=off \
+				$target_input/usr/ports || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/usr/src \
+			zfs create -o canmount=noauto \
+				$target_input/usr/src || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/usr/obj \
+			zfs create -o canmount=noauto \
+				$target_input/usr/obj || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/var\;mountpoint=/var\;canmount=off \
+# OVERRIDING canmount=off with noauto for nesting
+			zfs create \
+				-o mountpoint=/var -o canmount=noauto \
+				$target_input/var || \
+#                        -o fs=zroot/var/audit\;setuid=off\;exec=off \
+			zfs create -o canmount=noauto \
+				-o setuid=off -o exec=off \
+				$target_input/var/audit || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/var/crash\;setuid=off\;exec=off \
+			zfs create -o canmount=noauto \
+				-o setuid=off -o exec=off \
+				$target_input/var/crash || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/var/log\;setuid=off\;exec=off \
+			zfs create -o canmount=noauto \
+				-o setuid=off -o exec=off \
+				$target_input/var/log || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/var/mail\;atime=on \
+			zfs create -o canmount=noauto \
+				-o atime=on \
+				$target_input/var/mail || \
+				{ echo dataset failed to create ; exit 1 ; }
+#                        -o fs=zroot/var/tmp\;setuid=off
+			zfs create -o canmount=noauto \
+				-o setuid=off \
+				$target_input/var/tmp || \
+				{ echo dataset failed to create ; exit 1 ; }
+
+			# BECTL HANDLES OUR NESTING!
 			echo Mounting root dataset
-			# NOT using bectl - dataset may be a jail
-			# bectl mount $target_input ${mount_point} || \
-			mount -t zfs $target_input $mount_point || \
-			{ echo root dataset mount failed ; exit 1 ; }
-		fi
-	;;
-	q)
-		branch="quarterly"
+			bectl mount `basename $target_input` \
+				${mount_point:?} || \
+				{ echo target BE mount failed ; exit 1 ; }
+
+echo DEBUG zfs list grep $taget_input
+zfs list |grep $target_input
+zfs get mounted | grep $target_input
+ls $mount_point
+
+		fi # End dataset handling
 	;;
 	m)
 		keep_mounted=1
 	;;
-	M)
-		[ "$OPTARG" ] || f_usage
-                mount_point="$OPTARG"
-                [ -d "$mount_point" ] || \
-			{ echo "Mount point $mount_point missing" ; exit 1 ; }
-
-	;;
-	j)
-special_pkg_exclusions="dbg|dev|kernel|man|lib32"
-
-pkg_exclusions="acpi|apm|autofs|bhyve|bluetooth|bootloader|bsdinstall|bsnmp|ccdconfig|clang|cxgbe-tools|dtrace|efi-tools|elftoolchain|examples|fwget|games|geom|ggate|hast|hostapd|hyperv-tools|iscsi|kernel|lld|lldb|lp|mlx-tools|nvme-tools|ppp|rescue|rdma|smbutils|src|src-sys|tests|ufs|wpa|zfs"
-
-	;;
 	d)
-		special_pkg_exclusions=""
-
-		pkg_exclusions=""
-	;;
-	3)
-		lib32=1
+		default_packages=1
+		# Not using this approach yet as it may trip up the regex
+#		base_pkg_exclusions=""
 	;;
 	p)
 		[ "$OPTARG" ] || f_usage
 		additional_packages="$OPTARG"
 	;;
+	s)
+		sideload=1
+	;;
+	c)
+		copy_cache=1
+	;;
+	C)
+		clean_cache=1
+	;;
 	v)
-		vm_image=1
+		mkvm_image=1
+	;;
+	O)
+		[ "$OPTARG" ] || f_usage
+		"${work_dir:?}"="$OPTARG"
+# Verify that it auto-creates
+#		[ -d "${work_dir:?}" ] || \
+#			{ echo "${work_dir:?} not found" ; exit 1 ; }
+	;;
+	*)
+		f_usage
 	;;
 	esac
 done
 
-[ "$release" ] || f_usage
-[ "$target_input" ] || f_usage
+[ "$release_input" ] || f_usage
 
 case "$hw_platform" in
-        amd64)
-                cpu_arch="amd64"
-        ;;
-        arm64)
-                cpu_arch="aarch64"
-        ;;
+	amd64)
+		cpu_arch="amd64"
+	;;
+	arm64)
+		cpu_arch="aarch64"
+	;;
 	*)
 		echo Invalid architecture
 		exit 1
 	;;
 esac
 
-if [ "$lib32" = 1 ] ; then
-	# Keep lib32 at the end for clean stripping
-special_pkg_exclusions="$( echo $special_pkg_exclusions | sed 's/|lib32//' )"
-fi
+ABI="FreeBSD:${abi_major}:${cpu_arch}"
 
-if [ "$branch" = "latest" ] ; then
-	abi_major="$major_version"
-	abi_minor="base_latest"
-else
-	abi_major="$major_version"
-	abi_minor="base_release_$minor_version"
+###############
+# DIRECTORIES #
+###############
 
-fi
+# Consider root_mount_point or even target_root_mount_point for clarity
+# Likely a boot environment or jail, but could be a nested one for VM creation
+mount_point="/tmp/propagate/root"
 
-
-#########################
-# BOOT ENVIRONMENT ROOT #
-#########################
+# At a minimum the parent of the default mount point
+# Location of boot scripts, top root of deeply-nested VM tree 
+work_dir="/tmp/propagate"
 
 # root directory and dataset should be agnostic
 
-echo Creating ${mount_point}/dev
-[ -d ${mount_point}/dev ] || mkdir -p $mount_point/dev 
-[ -d ${mount_point}/dev ] || { echo root/dev failed to create ; exit 1 ; }
+# A dataset is assumed to be a boot environemnt BUT could be a jail
+# A VM image is NOT a dataset...
+
+#########
+# TESTS #
+#########
+
+if [ "$target_input" = "dataset" ] && [ "$mkvm_image" = "1" ] ; then
+	echo A VM image assumes a work directory but not target directory
+	echo This might be a bad idea
+	exit 1
+fi
+
+if [ "$target_type" = "dataset" ] && [ "$mkvm_image" = "1" ] ; then
+	echo A VM image assumes a transient directory
+	echo This might be a bad idea
+	exit 1
+fi
+
+if [ "$mkvm_image" = "1" ] ; then
+	# Need a work directory and prefixed parent directories
+	# Either use the default or overridden work directory
+	# work_dir="/tmp/propagate"
+
+	# Only used by VM-IMAGES so set here
+	fake_obj_dir="$work_dir"
+	fake_src_dir="$work_dir/src"
+
+	mount_point="$fake_obj_dir$fake_src_dir/amd64.amd64/release/vm"
+
+	echo Making directories
+	mkdir -p $fake_src_dir/release/scripts || { echo failed ; exit 1 ; }
+	mkdir -p $fake_src_dir/release/tools || { echo failed ; exit 1 ; }
+	mkdir -p ${mount_point:?}/dev
+
+	echo Fetching release script and tool
+
+	fetch https://cgit.freebsd.org/src/plain/release/scripts/mk-vmimage.sh \
+		-o $fake_src_dir/release/scripts/mk-vmimage.sh || \
+			{ echo mk-vmimage.sh fetch failed ; exit 1 ; }
+
+	fetch https://cgit.freebsd.org/src/plain/release/tools/vmimage.subr \
+		-o $fake_src_dir/release/tools/vmimage.subr || \
+			{ echo vmimage.subr fetch failed ; exit 1 ; }
+
+fi # End extra VM scaffolding
+
+echo Creating skeleton directories
+
+for directory in $skel_dirs ; do
+	mkdir -vp "${mount_point:?}/${directory:?}" || \
+		{ echo mkdir $directory failed ; exit 1 ; }
+done
 
 #pkg-static: Cannot open dev/null
 echo Mounting devfs for pkg-static
-mount -t devfs -o ruleset=4 devfs ${mount_point}/dev || \
+mount -t devfs -o ruleset=4 devfs ${mount_point:?}/dev || \
 	{ echo mount devfs failed; exit 1 ; }
 
-echo Creating ${mount_point}/etc/pkg
-[ -d ${mount_point}/etc/pkg ] || mkdir -p $mount_point/etc/pkg
-[ -d ${mount_point}/etc/pkg ] || { echo root/etc failed to create ; exit 1 ; }
+	mkdir -p "${mount_point:?}/usr/share/keys/pkg/trusted"
+echo Generating pkg.freebsd.org.2013102301 key
+cat <<- HERE > "${mount_point:?}/usr/share/keys/pkg/trusted/pkg.freebsd.org.2013102301"
 
-echo Copying in /etc/resolv.conf
-cp /etc/resolv.conf ${mount_point}/etc/ || \
-	{ echo resolv.conf failed to copy ; exit 1 ; }
+function: "sha256"
+fingerprint: "b0170035af3acc5f3f3ae1859dc717101b4e6c1d0a794ad554928ca0cbb2f438"
+HERE
 
-# /var/cache/pkg
-echo ; echo Creating /tmp/pkg directories
-[ -d "${mount_point}/var/cache/pkg" ] || mkdir -p $mount_point/var/cache/pkg
-[ -d "${mount_point}/var/cache/pkg" ] || { echo mkdir tmp/pkg failed ; exit 1 ; }
+[ -f "${mount_point:?}/usr/share/keys/pkg/trusted/pkg.freebsd.org.2013102301" ] || { echo "pkg.freebsd.org.2013102301 failed" ; exit 1 ; }
 
-# ${mount_point}/var/db/pkg
-[ -d "${mount_point}/var/db/pkg" ] || mkdir -p $mount_point/var/db/pkg
-[ -d "${mount_point}/var/db/pkg" ] || { echo mkdir var/db/pkg failed ; exit 1 ; }
-
-[ -d ${mount_point}/usr/share/keys/pkg ] || \
-	mkdir -vp ${mount_point}/usr/share/keys/pkg
-cp -av /usr/share/keys/pkg \
-	${mount_point}/usr/share/keys || \
-	{ echo pkg keys copy failed ; exit 1 ; }
-
-[ -d ${mount_point}/usr/share/keys/pkg/trusted ] || \
-	{ echo cp ${mount_point}/usr/share/keys/pkg/trusted failed ; exit 1 ; }
-
-# Used by temporary pkg.conf and persistent pkg/repos
-[ -d ${mount_point}/usr/local/etc/pkg/repos ] || \
-	mkdir -p $mount_point/usr/local/etc/pkg/repos
-[ -d ${mount_point}/usr/local/etc/pkg/repos ] || \
-	{ echo mkdir usr/local/etc/pkg/repos failed ; exit 1 ; }
-
-# /mnt and /media are not created by PkgBase!
-[ -d ${mount_point}/mnt ] || mkdir -p $mount_point/mnt
-[ -d ${mount_point}/mnt ] || { echo mkdir mnt failed ; exit 1 ; }
-
-[ -d ${mount_point}/media ] || mkdir -p $mount_point/media
-[ -d ${mount_point}/media ] || { echo mkdir media failed ; exit 1 ; }
-
-[ -d ${mount_point}/root ] || mkdir -p $mount_point/root
-[ -d ${mount_point}/root ] || { echo mkdir root failed ; exit 1 ; }
-
-#du -h ${mount_point}
+#du -h ${mount_point:?}
 
 ########################################
 # FreeBSD.conf REPO CONFIGURATION FILE #
 ########################################
 
-# NOTE THAT THIS WILL BE OVERRIDDEN BY THE RETRIEVED PACKAGES
-echo ; echo Generating ${mount_point}/etc/pkg/FreeBSD.conf REPO file
-cat << HERE > ${mount_point}/etc/pkg/FreeBSD.conf
-FreeBSD: { 
-  enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/FreeBSD:${abi_major}:${cpu_arch}/$branch", 
-  mirror_type: "srv",
-  signature_type: "fingerprints",
-  fingerprints: "${mount_point}/usr/share/keys/pkg"
-}
+echo ; echo Generating "${mount_point:?}/etc/pkg/FreeBSD-base.conf"
 
+mkdir -p "${mount_point:?}/etc/pkg" || \
+	{ echo mkdir ${mount_point:?}/etc/pkg failed ; exit ; }
+
+# WILL WE NEED TO OVERWRITE $ABI when cross installing?
+
+# UCL!
+# <<- will strip tab indenting
+# 'HERE' to not expand, allowing $ABI
+
+cat <<- HERE > "${mount_point:?}/etc/pkg/FreeBSD-base.conf"
 FreeBSD-base: {
+  priority: 10
   enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/FreeBSD:${abi_major}:${cpu_arch}/${abi_minor}", 
-  mirror_type: "srv",
-  signature_type: "fingerprints",
-  fingerprints: "${mount_point}/usr/share/keys/pkg"
+  url: "pkg+https://pkg.FreeBSD.org/\${ABI}/${base_minor}"
+  mirror_type: "srv"
+  signature_type: "fingerprints"
+  fingerprints: "/usr/share/keys/pkg"
 }
 HERE
 
-echo ; echo Copying ${mount_point}/etc/pkg/FreeBSD.conf to /root
-# It will be overridden during the package installation
-cp ${mount_point}/etc/pkg/FreeBSD.conf /${mount_point}/root/ || \
-	{ echo cp FreeBSD.conf failed ; exit 1 ; }
+[ -f "${mount_point:?}/etc/pkg/FreeBSD-base.conf" ] || \
+	{ echo FreeBSD-base.conf failed ; exit 1 ; }
 
-# DO NOT PUT yes in quotation marks or it will fail!
+echo ; echo Generating "${mount_point:?}/etc/pkg/FreeBSD-latest.conf"
 
-# THIS WILL BE OVERRIDDEN UPON PACKAGE RETRIEVAL
-# WORSE, it will be incorrectly prefixed if we do not modify it and the new
-# system will not be able to retrieve packages
-# Moving it to the root directory at the end
-
-echo ; echo Generating ${mount_point}/usr/local/etc/pkg.conf PKG config file
-cat << HERE > ${mount_point}/usr/local/etc/pkg.conf
-  IGNORE_OSVERSION: yes
-  INDEXFILE: INDEX-$major_version
-  ABI: "FreeBSD:${abi_major}:${cpu_arch}"
-  pkg_dbdir: "${mount_point}/var/db/pkg",
-  pkg_cachedir: "${mount_point}/var/cache/pkg",
-  handle_rc_scripts: no
-  assume_always_yes: yes
-  repos_dir: [
-    "${mount_point}/etc/pkg"
-  ]
-  syslog: no
-  developer_mode: no
+# Priority overrides the default of quarterly
+# 'HERE' = NO SHELL VARIABLE EXPANSION
+#cat <<- 'HERE' > "${mount_point:?}/etc/pkg/FreeBSD-latest.conf"
+cat <<- HERE > "${mount_point:?}/etc/pkg/FreeBSD-latest.conf"
+FreeBSD-latest: {
+  priority: 10
+  enabled: yes
+  url: "pkg+https://pkg.FreeBSD.org/\${ABI}/latest",
+  mirror_type: "srv",
+  signature_type: "fingerprints",
+  fingerprints: "/usr/share/keys/pkg",
+  enabled: yes
+}
 HERE
 
-[ -f ${mount_point}/usr/local/etc/pkg.conf ] || \
-	{ echo pkg.conf generation failed ; exit 1 ; }
+[ -f "${mount_point:?}/etc/pkg/FreeBSD-latest.conf" ] || \
+	{ echo FreeBSD-latest.conf failed ; exit 1 ; }
 
-#echo ; cat ${mount_point}/etc/pkg/FreeBSD.conf
-#echo ; cat ${mount_point}/usr/local/etc/pkg.conf
+mkdir -p "${mount_point:?}/usr/local/etc/pkg/repos" || \
+	{ echo "mkdir ${mount_point:?}/usr/local/etc/pkg/repos failed" ; exit 1 ; }
 
-# Q: Can this get in the way? /usr/local/etc/pkg/repos/FreeBSD-base.conf
+echo ; echo Generating "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-quarterly.conf"
+cat <<- HERE > "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-quarterly.conf"
+FreeBSD: { enabled: no }
+HERE
 
-echo ; echo pkg -vv SMOKE TEST
-pkg -vv -C ${mount_point}/usr/local/etc/pkg.conf
+[ -f "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-quarterly.conf" ] || \
+	{ echo FreeBSD-quarterly.conf failed ; exit 1 ; }
 
-
-#############
-# BOOTSTRAP #
-#############
-
-echo ; echo Running pkg bootstrap
-echo
+echo Installing pkg
 
 pkg \
-	-C ${mount_point}/usr/local/etc/pkg.conf \
-	bootstrap -f -y || \
-		{ echo pkg bootstrap failed ; exit 1 ; }
-
-
-# WHY IS IT NOT READING THE REQUESTED pkg and repo configs?
-# To begin with... FreeBSD.conf was named pkg.conf
-# BUT pkg -vv does not show repos at the bottom
-# Does NOT show them if you specify
-# -R ${mount_point}/etc/pkg/FreeBSD.conf
-
-# SOUNDS WRONG
-# INDEXFILE = "INDEX-15"; # NOW OVERRIDING with the major number
-#ABI = "FreeBSD:14:${cpu_arch}";
-#ALTABI = "freebsd:15:x86:64";
-
-# INDEXFILE: string
-# The filename of the ports index, searched for in INDEXDIR or PORTSDIR.  Default: INDEX-N where N is the OS major version number
-
-
-##########
-# UPDATE #
-##########
-
-echo ; echo Running pkg update 
-
-echo ; echo pkg -vv SMOKE TEST
-pkg -C ${mount_point}/usr/local/etc/pkg.conf -vv
-
-pkg \
-	-C ${mount_point}/usr/local/etc/pkg.conf \
-	update -f || \
-		{ echo pkg update failed ; exit 1 ; }
-
-du -h ${mount_point}
-
-echo ; echo pkg -vv SMOKE TEST
-pkg -C ${mount_point}/usr/local/etc/pkg.conf -vv
-
+	--option ABI="${ABI:?}" \
+	--option IGNORE_OSVERSION="yes" \
+	--rootdir "${mount_point:?}" \
+	--repo-conf-dir "${mount_point:?}/etc/pkg" \
+	install -y -- pkg || \
+		{ echo pkg install failed ; exit 1 ; }
 
 #####################
 # INSTALL PREFLIGHT #
 #####################
 
-echo ; echo Running pkg rquery
+################
+# BASE INSTALL #
+################
 
-echo ; echo SMOKE TEST: Counting available packages
-pkg \
-	-C ${mount_point}/usr/local/etc/pkg.conf \
-	rquery --repository="FreeBSD-base" '%n' \
-		| wc -l
+if [ "$copy_cache" = "1" ] ; then
+	echo ; echo Copying /var/cache/pkg/FreeBSD- packages from the host
+	set +x
+	set +f
+	cp -p /var/cache/pkg/FreeBSD-* "${mount_point:?}/var/cache/pkg/"
+	set -f
+	set +x
+fi
 
-echo ; echo SMOKE TEST: Counting requested packages
-pkg \
-	-C ${mount_point}/usr/local/etc/pkg.conf \
-	rquery --repository="FreeBSD-base" '%n' \
-		| egrep -v \
-		"FreeBSD-.*(.*-($special_pkg_exclusions)|($pkg_exclusions))$" \
-		| wc -l
-
-#cat ${mount_point}/etc/pkg/FreeBSD.conf
-
-
-###########
-# INSTALL #
-###########
+#echo ; echo SMOKE TEST: Counting requested packages
+#pkg \
+#	--option ABI="${ABI:?}" \
+#	--option IGNORE_OSVERSION="yes" \
+#	--rootdir "${mount_point:?}" \
+#	--repo-conf-dir "${mount_point:?}/etc/pkg" \
+#	rquery --repository="FreeBSD-base" '%n' \
+#	| egrep -v "($base_pkg_exclusions)" \
+#	| wc -l
 
 echo ; echo Installing base packages
 
+if [ "$default_packages" = "1" ] || [ -n "$base_pkg_exclusion" ] ; then
+# No special requests, install every available FreeBSD-* package
 # Strong quoting required for egrep and variables
 pkg \
-	-C ${mount_point}/usr/local/etc/pkg.conf \
+	--option ABI="${ABI:?}" \
+	--option IGNORE_OSVERSION="yes" \
+	--rootdir "${mount_point:?}" \
+	--repo-conf-dir "${mount_point:?}/etc/pkg" \
 	rquery --repository="FreeBSD-base" '%n' \
-		| egrep -v \
-		"FreeBSD-.*(.*-($special_pkg_exclusions)|($pkg_exclusions))$" \
+	| egrep -v "($base_pkg_exclusions)" \
 		| xargs -o pkg \
-			-C ${mount_point}/usr/local/etc/pkg.conf \
-			--rootdir ${mount_point} \
+			--option ABI="${ABI:?}" \
+			--option IGNORE_OSVERSION="yes" \
+			--rootdir "${mount_point:?}" \
+			--repo-conf-dir "${mount_point:?}/etc/pkg" \
 			install \
 			--
+else
 
-#			-o IGNORE_OSVERSION="yes" \
+pkg \
+	--option ABI="${ABI:?}" \
+	--option IGNORE_OSVERSION="yes" \
+	--rootdir "${mount_point:?}" \
+	--repo-conf-dir "${mount_point:?}/etc/pkg" \
+	rquery --repository="FreeBSD-base" '%n' \
+	| egrep -v "($base_pkg_exclusions)" \
+		| xargs -o pkg \
+			--option ABI="${ABI:?}" \
+			--option IGNORE_OSVERSION="yes" \
+			--rootdir "${mount_point:?}" \
+			--repo-conf-dir "${mount_point:?}/etc/pkg" \
+			install \
+			--
+fi
+
+#echo DEBUG checking the size of the result
+#	du -h -d 1 "${mount_point:?}"
 
 #######################
 # ADDITIONAL PACKAGES #
 #######################
 
+# Removing quotation marks here - they are double quotes everywhere but became
+# single on the ride
+
 if [ "$additional_packages" ] ; then
 	echo Installing additional packages
 	pkg \
-		-C ${mount_point}/usr/local/etc/pkg.conf \
-			--rootdir ${mount_point} \
-			install "$additional_packages" || \
-				{ echo Additional packages failed ; exit 1 ; }
+		--option ABI="${ABI:?}" \
+		--option IGNORE_OSVERSION="yes" \
+		--rootdir "${mount_point:?}" \
+		--repo-conf-dir "${mount_point:?}/etc/pkg" \
+		install -y $additional_packages || \
+			{ echo Additional packages failed ; exit 1 ; }
 fi
 
-echo ; echo Generating persistent ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf REPO file
-cat << HERE > ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf
-FreeBSD-base: {
-  enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/\${ABI}/${abi_minor}", 
-  mirror_type: "srv",
-  signature_type: "fingerprints",
-  fingerprints: "/usr/share/keys/pkg"
-}
-HERE
+#################
+# CONFIGURATION #
+#################
 
-[ -f ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf ] || \
-	{ echo FreeBSD-base.conf generation failed ; exit 1 ; }
+if [ "$sideload" = "1" ] ; then
 
-# No, that is the persistent one
-#echo ; echo Moving the bootstrap FreeBSD.conf to the root directory
-# Else pkg will not work upon BE boot
-#mv ${mount_point}/usr/local/etc/pkg/repos/FreeBSD-base.conf ${mount_point}/root/
+	echo Copying configuration files - missing ones will fail for now
+	[ -f /boot/loader.conf ] && cp /boot/loader.conf \
+		"${mount_point:?}/boot/"
+	[ -f /etc/fstab ] && cp /etc/fstab "${mount_point:?}/etc/"
+	#touch "${mount_point:?}/etc/fstab"
+	[ -f /etc/rc.conf ] && cp /etc/rc.conf "${mount_point:?}/etc/"
+	[ -f /etc/sysctl.conf ] && cp /etc/sysctl.conf "${mount_point:?}/etc/"
+	[ -f /etc/group ] && cp /etc/group "${mount_point:?}/etc/"
+	[ -f /etc/pwd.db ] && cp /etc/pwd.db "${mount_point:?}/etc/"
+	[ -f /etc/spwd.db ] && cp /etc/spwd.db "${mount_point:?}/etc/"
+	[ -f /etc/master.passwd ] && cp /etc/master.passwd \
+		"${mount_point:?}/etc/"
+	[ -f /etc/passwd ] && cp /etc/passwd "${mount_point:?}/etc/"
+	[ -f /etc/wpa_supplicant.conf ] && \
+		cp /etc/wpa_supplicant.conf "${mount_point:?}/etc/"
+	# Was failing on host keys
+	cp -rp /etc/ssh/* "${mount_point:?}/etc/ssh/"
+	cp -rp /root/.ssh "${mount_point:?}/root/"
 
-echo ; echo Moving the bootstrap pkg.conf to the root directory
-# Else pkg will not work upon BE boot
-mv ${mount_point}/usr/local/etc/pkg.conf ${mount_point}/root/
+	echo "Sideloading packages"
+	pkg prime-list | xargs -o pkg \
+		--option ABI="${ABI:?}" \
+		--option IGNORE_OSVERSION="yes" \
+		--rootdir "${mount_point:?}" \
+		--repo-conf-dir "${mount_point:?}/etc/pkg" \
+		install -y -- || \
+		{ echo Package installation failed ; exit 1 ; }
 
-if [ "$branch" = "latest" ] ; then
-	echo Setting the default repo to "latest"
-	sed -i '' -e "s/quarterly/latest/" ${mount_point}/etc/pkg/FreeBSD.conf
-fi
-
-###################################
-# Minimum loader.conf and rc.conf #
-###################################
-
-# Challenge: You can create a ZFS VM image from a directory
-# Removing the conditional for now
-
-#if [ "$target_type" = "dataset" ] ; then
-	cat << HERE > ${mount_point}/boot/loader.conf
+elif [ "$target_type" = "dataset" ] || [ "$mkvm_image" = "1" ] ; then
+	# Use sysrc when possible
+	cat << HERE > ${mount_point:?}/boot/loader.conf
 kern.geom.label.disk_ident.enable="0"
 kern.geom.label.gptid.enable="0"
 cryptodev_load="YES"
@@ -572,20 +703,74 @@ zfs_load="YES"
 HERE
 
 	echo ; echo The loader.conf reads:
-	cat ${mount_point}/boot/loader.conf
+	cat ${mount_point:?}/boot/loader.conf
 	echo
 
-	cat << HERE > ${mount_point}/etc/rc.conf
-
+	cat << HERE > ${mount_point:?}/etc/rc.conf
 hostname="propagate"
 zfs_enable="YES"
 HERE
 
 	echo ; echo The rc.conf reads:
-	cat ${mount_point}/etc/rc.conf
+	cat ${mount_point:?}/etc/rc.conf
 	echo
-#fi
+fi
 
+###############
+# CLEAN CACHE #
+###############
+
+#echo DEBUG checking the size of the pkg cache
+#	du -h -d 1 "${mount_point:?}/var/cache/pkg"
+
+if [ "$clean_cache" = "1" ] ; then
+	echo "Cleaning ${mount_point:?}/var/cache/pkg/"
+	find -s -f "${mount_point:?}/var/cache/pkg/" -- -mindepth 1 -delete
+fi
+
+#echo DEBUG checking the size of the pkg cache
+#	du -h -d 1 "${mount_point:?}/var/cache/pkg"
+
+#################
+# UPDATE SCRIPT #
+#################
+
+cat << HERE > "${mount_point:?}/root/update-pkgbase.sh"
+#!/bin/sh
+
+pkg upgrade
+
+if [ -f /etc/ssh/sshd_config.save ] ; then
+	mv /etc/ssh/sshd_config /etc/ssh/sshd_config.default
+	cp /etc/ssh/sshd_config.pkgsave /etc/ssh/sshd_config
+# Check if running?
+	service sshd restart
+fi
+
+if [ -f /etc/group.pkgsave ] ; then
+	mv /etc/group /etc/group.default
+	cp /etc/group.pkgsave /etc/group
+fi
+
+if [ -f /etc/master.passwd.save ] ; then
+	mv /etc/master.passwd /etc/master.passwd.default
+	cp /etc/master.passwd.pkgsave /etc/master.passwd
+	pwd_mkdb -p /etc/master.passwd
+fi
+
+if [ -f /etc/sysctl.conf.pkgsave ] ; then
+	mv /etc/sysctl.conf /etc/sysctl.conf.default
+	cp /etc/sysctl.conf.pkgsave /etc/sysctl.conf
+fi
+
+if [ -f /etc/shells.pkgsave ] ; then
+	mv /etc/shells /etc/shells.default
+	cp /etc/shells.pkgsave /etc/shells
+fi
+HERE
+
+[ -f "${mount_point:?}/root/update-pkgbase.sh" ] || \
+	{ echo "update-packages.sh failed" ; exit 1 ; }
 
 ############
 # VM-IMAGE #
@@ -603,156 +788,135 @@ HERE
 # /usr/src/release/tools/vmimage.subr is a library for VM image creation.
 # Unfortunately, it has a hard requirement of being used by a script in /usr/src
 
-# So we fake an object directory with three boot binaries, given that everything
-# is already a binary, by definition. 
+if [ "$mkvm_image" = 1 ] ; then
 
-# In theory the needed varibles can be exported, rather than the files copied:
-# loader=/tmp/pkgjail/usr/obj/usr/src/amd64.amd64/stand/efi/loader_lua/loader_lua.efi
-# Not a full path: X86GPTBOOTFILE=i386/gptzfsboot/gptzfsboot
-# From: /usr/src/release/scripts/mk-vmimage.sh
-# BOOTPARTS="-b ${BOOTFILES}/i386/pmbr/pmbr
-# From: tools/boot/install-boot.sh
-# cp "${loader}" "${stagedir}/EFI/BOOT/${efibootname}.efi"
-# gpt0=${srcroot}/boot/pmbr
-# gpt2=${srcroot}/boot/gptboot
-# gptzfs2=${srcroot}/boot/gptzfsboot
+# Deleting if re-running
+[ -f "${src_dir}/release/scripts/propagate-mkvm-image.sh" ] && \
+	rm "${src_dir}/release/scripts/propagate-mkvm-image.sh"
 
-# We copy the resulting script into the source tree, but that would fail on a
-# read-only source tree, and will obviously fail if sources are not available.
+	[ -e ${mount_point:?}/vm/fd ] && umount ${mount_point:?}/vm/dev
 
-# Even a symlink will not work
-#+ . ./release/tools/vmimage.subr
-#+ realpath /usr/src/release/scripts/propagate-mkvm-image.sh
-#+ dirname /tmp/pkgbase--mkvm-image.sh
-#+ scriptdir=/tmp
+#################################################
+# COPY FROM DESTINATION TO A FAKE SRC DIRECTORY #
+#################################################
+
+	# Satisfying dependencies in the order in which they failed
+	mkdir -p $fake_src_dir/stand/efi/loader_lua || \
+		{ echo failed to make loader_lua directory ; exit 1 ; }
+
+	cp $mount_point/boot/loader_lua.efi \
+		$fake_src_dir/stand/efi/loader_lua/ || \
+			{ echo loader_lua.efi failed to copy ; exit 1 ; }
+
+	mkdir -p $fake_src_dir/stand/i386/pmbr || \
+		{ echo failed to make pmbr directory ; exit 1 ; }
+
+	cp $mount_point/boot/pmbr \
+		$fake_src_dir/stand/i386/pmbr/ || \
+			{ echo pmbr failed to copy ; exit 1 ; }
+
+	mkdir -p $fake_src_dir/stand/i386/gptzfsboot || \
+		{ echo failed to make gptzfsboot directory ; exit 1 ; }
+
+	cp $mount_point/boot/gptzfsboot \
+		$fake_src_dir/stand/i386/gptzfsboot/ || \
+			{ echo gptzfsboot failed to copy ; exit 1 ; }
+
+	mkdir -p $fake_src_dir/tools/boot || { echo failed ; exit 1 ; }
+
+	# ACTUAL HOST SOURCE DIRECTORY
+	cp /usr/src/tools/boot/install-boot.sh \
+		$fake_src_dir/tools/boot/ || { echo failed ; exit 1 ; }
 
 
-if [ "$vm_image" = 1 ] ; then
+	[ -f "$fake_src_dir/release/scripts/propagate-mkvm-image.sh" ] && \
+		rm $fake_src_dir/release/scripts/propagate-mkvm-image.sh
 
-if [ -d "${mount_point}/usr/src/release" ] ; then
-	src_dir="${mount_point}/usr/src"
-elif [ -d /usr/src/release ] ; then
-	src_dir="/usr/src"
-else
-	echo VM build requires /usr/src/release
-	exit 1
-fi
+	cat << HERE > $fake_src_dir/release/scripts/propagate-mkvm-image.sh
 
-cat << HERE > "/tmp/pkgbase-${release}-mkvm-image.sh"
-#!/bin/sh
-set -xe
+# Trying this in an attempt to call from the original script
+cd $fake_src_dir/release/scripts/
 
-cd ${src_dir}
-pwd
+[ -e ${mount_point:?}/dev/fd ] && umount ${mount_point:?}/dev
 
-mount | grep -q $mount_point/dev && umount $mount_point/dev
-
-# The order in which they failed
-mkdir -p $mount_point/usr/obj/usr/src/amd64.amd64/stand/efi/loader_lua || \\
-	{ echo failed to make loader_lua directory ; exit 1 ; }
-
-cp $work_dir/boot/loader_lua.efi \\
-        $mount_point/usr/obj/usr/src/amd64.amd64/stand/efi/loader_lua/ || \\
-		{ echo loader_lua.efi failed to copy ; exit 1 ; }
-
-mkdir -p $mount_point/usr/obj/usr/src/amd64.amd64/stand/i386/pmbr || \\
-	{ echo failed to make pmbr directory ; exit 1 ; }
-
-cp $work_dir/boot/pmbr \\
-	$mount_point/usr/obj/usr/src/amd64.amd64/stand/i386/pmbr/ || \\
-		{ echo pmbr failed to copy ; exit 1 ; }
-
-mkdir -p $mount_point/usr/obj/usr/src/amd64.amd64/stand/i386/gptzfsboot || \\
-	{ echo failed to make gptzfsboot directory ; exit 1 ; }
-
-cp $work_dir/boot/gptzfsboot \\
-        $mount_point/usr/obj/usr/src/amd64.amd64/stand/i386/gptzfsboot/ || \\
-		{ echo gptzfsboot failed to copy ; exit 1 ; }
-
-export MAKEOBJDIRPREFIX=$mount_point/usr/obj
-VMBASE=/tmp/pkgbase${release}.raw.zfs.img
-WORLDDIR=/usr/src
-DESTDIR=$mount_point
+# REQUIRED
+WORLDDIR=$fake_src_dir
+export MAKEOBJDIRPREFIX=$fake_obj_dir
 VMSIZE=8g
-SWAPSIZE=1g
-VMIMAGE=/tmp/pkgbase${release}.vm.zfs.img
+#export VMFSLIST=zfs
 VMFS=zfs
-TARGET=${hw_platform}
-TARGET_ARCH=${cpu_arch}
+TARGET=amd64
+TARGET_ARCH=amd64
 VMFORMAT=raw
+# THE IMAGE OR PARTITION?
+#export VMIMAGE=$fake_obj_dir/../vm.zfs.img
+VMBASE=raw.zfs.img
+VMIMAGE=vm.zfs.img
+# WHOOPS: SETTING VMROOT MAY BLOW UP makefs (core dump)
+DESTDIR=$mount_point
+#DESTDIR=$fake_obj_dir
+SWAPSIZE=1g
 
-# The heavy lifting
-echo ; echo Building VM image
-
-. ./release/tools/vmimage.subr
+. ../tools/vmimage.subr
 vm_create_disk
-
-# Repeating this
-echo ; echo The resulting VM images is:
-echo /tmp/pkgbase${release}.vm.zfs.img
-echo
-echo ; echo To boot the VM image, run:
-echo ; echo sh "/tmp/pkgbase-${release}-boot-image.sh"
-echo
 HERE
 
-echo ; echo Copying /tmp/pkgbase-${release}-mkvm-image.sh to \
-	${src_dir}/release/scripts/propagate-mkvm-image.sh
+	[ -f "$fake_src_dir/release/scripts/propagate-mkvm-image.sh" ] || \
+		{ echo "$fake_src_dir/release/scripts/propagate-mkvm-image.sh failed" ; exit 1 ; }
 
-cp /tmp/pkgbase-${release}-mkvm-image.sh \
-	${src_dir}/release/scripts/propagate-mkvm-image.sh || \
-		{ echo Script copy failed ; exit ; }
+	echo ; echo To generate the VM-IMAGE, run: ; echo
+	echo sh $fake_src_dir/release/scripts/propagate-mkvm-image.sh
+	echo
 
-echo ; echo To build the VM image, run:
-echo ; echo sh ${src_dir}/release/scripts/propagate-mkvm-image.sh
-echo
-
-echo ; echo Generating a simple bhyve boot script
-
-cat << HERE > "/tmp/pkgbase-${release}-boot-image.sh"
+	echo Generating simple boot script
+cat << HERE > "$fake_src_dir/release/scripts/boot-vm.sh"
 #!/bin/sh
 [ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; }
 [ -e /dev/vmm/propagate ] && { bhyvectl --destroy --vm=propagate ; sleep 1 ; }
 [ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
-        { echo \"BHYVE_UEFI.fd missing\" ; exit 1 ; }
+	{ echo \"BHYVE_UEFI.fd missing\" ; exit 1 ; }
 
 kldstat -q -m vmm || kldload vmm
 sleep 1
 
-$loader_string
 bhyve -m 2G -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
-        -l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
-        -s 2,virtio-blk,/tmp/pkgbase${release}.vm.zfs.img \\
-        propagate
+	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
+	-s 2,virtio-blk,$fake_src_dir/release/scripts/vm.zfs.img \\
+	propagate
 
 sleep 2
 bhyvectl --destroy --vm=propagate
 HERE
 
 echo ; echo To boot the VM image, run:
-echo ; echo "/tmp/pkgbase-${release}-boot-image.sh"
+echo ; echo "sh $fake_src_dir/release/scripts/boot-vm.sh"
 echo
 
-fi
+fi # End if VM-IMAGE
 
 ##################
 # MOUNT HANDLING #
 ##################
 
+# DEBUG DECIDE ON CORRECT BEHAVIOR
+
 if [ "$keep_mounted" = 0 ] ; then
 	if [ "$target_type" = "dataset" ] ; then
-		echo ; echo Unmounting $mount_point
-		umount $mount_point/dev ||
-			{ echo $mount_point/dev failed to unmount ; exit 1 ; }
-		umount $mount_point ||
-			{ echo $mount_point failed to unmount ; exit 1 ; }
+		echo ; echo Unmounting ${mount_point:?}
+		umount ${mount_point:?}/dev ||
+			{ echo ${mount_point:?}/dev umount failed ; exit 1 ; }
+#		umount ${mount_point:?} ||
+#			{ echo ${mount_point:?} failed to unmount ; exit 1 ; }
+			bectl umount `basename $target_input` \
+				${mount_point:?} || \
+				{ echo target BE umount failed ; exit 1 ; }
+
 	else
-		echo ; echo To unmount the boot environment, run:
-		echo umount ${mount_point}/dev
-		echo umount ${mount_point}
+		echo ; echo To unmount the target root, run:
+		echo umount ${mount_point:?}/dev
+		echo umount ${mount_point:?}
 		echo
-echo "Remember that $target_input is set to -o canmount=noauto -o mountpoint=/"
 	fi
 fi
 
-exit 0
+# No closing exit for use wrapped by other scripts
