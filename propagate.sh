@@ -79,7 +79,7 @@
 #
 # To install 14.2-RELEASE to a new boot environment "test" on the zpool "zroot":
 #
-# sh propagate.sh -r 14.2-RELEASE -c -C -m -t zroot/ROOT/test
+# sh propagate.sh -r 14.2-RELEASE -c -C -t zroot/ROOT/test
 #
 # -m will keep it mounted for further configuration
 # -d will install ALL base packages (you probably do not want that)
@@ -88,6 +88,10 @@
 # To create a 14.2-RELEASE PkgBase VM-IMAGE:
 #
 # sh propagate.sh -r 14.2-RELEASE -d -c -C -v
+#
+# To install 15.0-CURRENT to a new boot environment "test" on the zpool "zroot":
+#
+# sh propagate.sh -r 15.0-CURRENT -C -t t14/ROOT/pb15
 
 
 #####################
@@ -180,6 +184,7 @@ copy_cache=0
 clean_cache=0
 mkvm_image=0
 
+# Check after boot/zfs with a full installation
 # Drawing from /usr/src/release/tools/vmimage.subr
 skel_dirs="boot/efi/EFI/BOOT
 dev
@@ -194,6 +199,8 @@ media
 root
 home
 tmp
+net
+proc
 usr/ports
 usr/src
 usr/obj
@@ -201,9 +208,58 @@ var/audit
 var/crash
 var/log
 var/mail
-var/tmp"
+var/tmp
+boot/zfs
+etc/zfs
+boot/firmware
+boot/modules
+boot/images
+boot/fonts
+boot/uboot
+etc/jail.conf.d
+etc/profile.d
+etc/rc.conf.d
+etc/sysctl.kld.d
+etc/zfs/compatibility.d
+var/db/etcupdate
+var/db/etcupdate/current
+var/db/etcupdate/current/boot
+var/db/etcupdate/current/etc
+var/db/etcupdate/current/etc/autofs
+var/db/etcupdate/current/etc/bluetooth
+var/db/etcupdate/current/etc/cron.d
+var/db/etcupdate/current/etc/defaults
+var/db/etcupdate/current/etc/devd
+var/db/etcupdate/current/etc/dma
+var/db/etcupdate/current/etc/gss
+var/db/etcupdate/current/etc/kyua
+var/db/etcupdate/current/etc/mail
+var/db/etcupdate/current/etc/mtree
+var/db/etcupdate/current/etc/newsyslog.conf.d
+var/db/etcupdate/current/etc/pam.d
+var/db/etcupdate/current/etc/periodic
+var/db/etcupdate/current/etc/periodic/daily
+var/db/etcupdate/current/etc/periodic/monthly
+var/db/etcupdate/current/etc/periodic/security
+var/db/etcupdate/current/etc/periodic/weekly
+var/db/etcupdate/current/etc/pkg
+var/db/etcupdate/current/etc/ppp
+var/db/etcupdate/current/etc/rc.d
+var/db/etcupdate/current/etc/security
+var/db/etcupdate/current/etc/ssh
+var/db/etcupdate/current/etc/ssl
+var/db/etcupdate/current/etc/syslog.d
+var/db/etcupdate/current/root
+var/db/etcupdate/current/usr
+var/db/etcupdate/current/usr/share
+var/db/etcupdate/current/usr/share/nls
+var/db/etcupdate/current/var
+var/db/etcupdate/current/var/crash
+usr/libdata"
 
-# NOT SURE: net proc
+# Note permissions
+
+#Note empty files /etc/zfs/exports /etc/zfs/exports.lock
 
 #####################################
 # USER INPUT AND VARIABLE OVERRIDES #
@@ -586,6 +642,9 @@ if [ "$copy_cache" = "1" ] ; then
 	echo ; echo Copying /var/cache/pkg/FreeBSD- packages from the host
 	set +x
 	set +f
+# This could be FreeBSD-*14.2* but verify if 15 is simply 15
+# Example 15: FreeBSD-kernel-generic-nodebug-15.snap20241230210834.pkg:
+# Could craft a string based on "CURRENT" or major/minor
 	cp -p /var/cache/pkg/FreeBSD-* "${mount_point:?}/var/cache/pkg/"
 	set -f
 	set +x
@@ -907,8 +966,7 @@ if [ "$keep_mounted" = 0 ] ; then
 			{ echo ${mount_point:?}/dev umount failed ; exit 1 ; }
 #		umount ${mount_point:?} ||
 #			{ echo ${mount_point:?} failed to unmount ; exit 1 ; }
-			bectl umount `basename $target_input` \
-				${mount_point:?} || \
+			bectl umount `basename $target_input` || \
 				{ echo target BE umount failed ; exit 1 ; }
 
 	else

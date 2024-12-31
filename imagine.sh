@@ -1081,7 +1081,6 @@ case "$target_type" in
 		# A cp -p would be ideal for unmodified images
 		f_extract "$release_image_file" > "$target_path" || \
 		{ echo "$release_image_file extraction failed" ; exit 1 ; }
-		echo ; echo "Output boot image is $target_path"
 
 # Might not have the ending .raw? .img?
 		;; # End image|path
