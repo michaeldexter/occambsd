@@ -45,7 +45,7 @@
 # USAGE #
 #########
 
-# propagate.sh must be run with root privieges and has three modes of operation
+# propagate.sh must be run with root privileges and has three modes of operation
 # to install a given release to:
 #
 # * A pre-existing directory or mounted dataset for use with jail(8)

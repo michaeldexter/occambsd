@@ -958,7 +958,7 @@ if [ "$xml_file" ] && [ "$iso_file" ] ; then
 #!/bin/sh
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
 [ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
-        { echo "BHYVE_UEFI.fd missing" ; exit 1 ; }
+        { echo "BHYVE_UEFI.DD missing" ; exit 1 ; }
 
 kldstat -q -m vmm || kldload vmm
 HERE
@@ -1133,7 +1133,7 @@ esac
 # -Z Rename zpool
 # -T Mirror zfs device
 # -s Add Sources (FreeBSD)
-# -m Mount rquired
+# -m Mount required
 # Detected target type device (grow at the file system level for additions)
 #	Relable for UFS?
 # -x Windows
@@ -1191,7 +1191,7 @@ if [ "$attachment_required" = "1" ] ; then
 		;;
 	esac
 
-	# gpart root_fs will fail without relabling the "linux-data" EFI part
+	# gpart root_fs will fail without relabeling the "linux-data" EFI part
 	if [ "$release_name" = "routeros" ] ; then
 		echo RouterOS: Relabeling /dev/md${md_id}${scheme}1 
 		gpart modify -i 1 -t efi $target_dev || \
@@ -1234,7 +1234,7 @@ zpool_name=$( zdb -l $root_dev | grep " name:" | awk '{print $2}' | tr -d "'" )
 		echo ; echo Obtaining zpool guid from $root_dev
 	zpool_guid=$( zdb -l $root_dev | grep pool_guid | awk '{print $2}' )
 
-	# Needed for fstab handling if attaching and relabling
+	# Needed for fstab handling if attaching and relabeling
 	mount_required=1
 	fi
 
@@ -1413,7 +1413,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 
 # Challenge: Free space handling - fortunately, it is probably at the end
 # Caveat to consider: Running imagine.sh from an imagine.sh installation will
-# conflist on disk labels. Could add a conflict test and increment in the loop
+# conflict on disk labels. Could add a conflict test and increment in the loop
 	gpart show -l $target_dev | tail -n+2 | grep . \
 		| awk '{print $1,$2,$3,$4}' | \
 		while read _start _stop _id _label ; do
@@ -1616,7 +1616,7 @@ if [ "$mount_required" = 1 ] ; then
 			${mount_point:?}/etc/fstab.original
 		touch ${mount_point:?}/etc/fstab
 		# YEP, we want an auto-swapper and maybe
-		# a utility to mount the EFI parition for updating
+		# a utility to mount the EFI partition for updating
 
 		if [ $zpool_newname ] ; then
 			# Must be double quotes for variable expansion
