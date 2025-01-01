@@ -105,6 +105,8 @@ while getopts p:s:o:O:wWkKa:bGgzj9vzZ:S:imn opts ; do
 		profile="$OPTARG"
 		[ -f "$profile" ] || \
 		{ echo "Profile file $profile not found" ; exit 1 ; }
+		sh -n "$profile" || \
+	        { echo "Profile file $profile failed to validate" ; exit 1 ; }
 		. "$profile" || \
 	        { echo "Profile file $profile failed to source" ; exit 1 ; }
 		# target and target_arch are obtained from sourcing
