@@ -145,6 +145,7 @@ release_input=""
 abi_major=""
 abi_minor=""
 base_minor=""
+copy_glob=""
 hw_platform=$( uname -m )	# i.e. amd64|arm64
 cpu_arch=$( uname -p )		# i.e. amd64|aarch64
 target_input=""
@@ -282,8 +283,10 @@ while getopts r:a:t:mdp:scCvzO opts ; do
 
 		if [ "$release_build" = "CURRENT" ] ; then
 			base_minor="base_latest"
+			copy_glob="$release_version"
 		else
 			base_minor="base_release_${abi_minor}"
+			copy_glob="${abi_major}.snap"
 		fi
 
 		# Perform more validation
@@ -642,10 +645,9 @@ if [ "$copy_cache" = "1" ] ; then
 	echo ; echo Copying /var/cache/pkg/FreeBSD- packages from the host
 	set +x
 	set +f
-# This could be FreeBSD-*14.2* but verify if 15 is simply 15
-# Example 15: FreeBSD-kernel-generic-nodebug-15.snap20241230210834.pkg:
-# Could craft a string based on "CURRENT" or major/minor
-	cp -p /var/cache/pkg/FreeBSD-* "${mount_point:?}/var/cache/pkg/"
+# This will fail if there is not a match
+	cp -p /var/cache/pkg/FreeBSD-*${copy_glob}* \
+		"${mount_point:?}/var/cache/pkg/"
 	set -f
 	set +x
 fi
@@ -665,6 +667,7 @@ echo ; echo Installing base packages
 if [ "$default_packages" = "1" ] || [ -n "$base_pkg_exclusion" ] ; then
 # No special requests, install every available FreeBSD-* package
 # Strong quoting required for egrep and variables
+
 pkg \
 	--option ABI="${ABI:?}" \
 	--option IGNORE_OSVERSION="yes" \
@@ -938,7 +941,7 @@ cat << HERE > "$fake_src_dir/release/scripts/boot-vm.sh"
 kldstat -q -m vmm || kldload vmm
 sleep 1
 
-bhyve -m 2G -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
+bhyve -m 1G -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	-s 2,virtio-blk,$fake_src_dir/release/scripts/vm.zfs.img \\
 	propagate

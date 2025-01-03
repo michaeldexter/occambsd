@@ -2,7 +2,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright 2021, 2022, 2023, 2024 Michael Dexter
+# Copyright 2021, 2022, 2023, 2024, 2025 Michael Dexter
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.7.9beta
+# Version v0.8
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -43,6 +43,7 @@ f_usage() {
 	echo "-b (Package base)"
 	echo "-G (Use the GENERIC/stock world)"
 	echo "-g (Use the GENERIC kernel)"
+	echo "-P <patch directory> (NB! This will modify your sources!)"
 	echo "-j (Build for Jail boot)"
 	echo "-9 (Build for 9pfs boot)"
 	echo "-v (Generate VM image and boot scripts)"
@@ -88,6 +89,7 @@ additional_option=""
 package_base=0
 generic_world=0
 generic_kernel=0
+patch_dir=""
 generate_jail=0
 generate_9pfs=0
 generate_vm_image=0
@@ -97,7 +99,7 @@ dry_run=0
 vm_image_size="500m"
 vm_swap_size="100m"
 
-while getopts p:s:o:O:wWkKa:bGgzj9vzZ:S:imn opts ; do
+while getopts p:s:o:O:wWkKa:bGgP:zj9vzZ:S:imn opts ; do
 	case $opts in
 	p)
 		# REQUIRED
@@ -156,6 +158,12 @@ while getopts p:s:o:O:wWkKa:bGgzj9vzZ:S:imn opts ; do
 		;;
 	g)
 		generic_kernel=1
+		;;
+	P)
+		patch_dir="$OPTARG"
+		[ -d "$patch_dir" ] || \
+			{ echo "$patch_dir not found" ; exit 1 ; }
+
 		;;
 	j)
 		generate_jail=1
@@ -424,6 +432,46 @@ if [ "$generic_world" = "1" ] ; then
 	echo ; echo "Overriding build options with stock ones"
 	src_conf="/dev/null"
 fi
+
+
+############################
+# Patch Directory Handling #
+############################
+
+if [ -n "$patch_dir" ] ; then
+	# This step is "destructive" and would need source reversion/rollback
+
+	if [ $(find $patch_dir -maxdepth 0 -empty) ]; then
+		echo No patches in ${patch_dir} to apply
+	else
+		echo Changing directory to ${src_dir}
+		cd "${src_dir}"
+		# Moving to make -C ${src_dir}/release syntax elsewhere
+		# Trickier here
+		pwd
+		echo The contents of patch_dir are
+		echo ${patch_dir}/*
+		echo
+		echo "Applying patches"
+		for diff in $(echo ${patch_dir}/*) ; do
+			echo Running a dry run diff of $diff
+			echo patch -C \< $diff
+#			if [ $( patch -C < $diff ) ] ; then
+			patch -C < $diff
+			return_value=$?
+			if [ "$return_value" = 0 ] ; then
+				echo Diff $diff passed the dry run
+				diff_basename=$( basename $diff )
+				echo Running patch \< $diff
+				echo Applying diff $diff
+				patch < $diff
+			else
+				echo Diff $diff_basename failed to apply
+				exit 1
+			fi
+		done
+	fi # End if patch_dir empty
+fi # End if patch_dir
 
 
 #########################
