@@ -1,10 +1,11 @@
 ## OccamBSD: An application of Occam's razor to FreeBSD
 a.k.a. "super svelte stripped down FreeBSD"
 
-Note that the December, 2024 update is sweeping and due for much testing.
-
 ## Imagine: Virtual and Hardware Machine Boot Image Imaging 
 a.k.a. "An unnecessarily-complex solution to what should be a simple problem"
+
+## Propagate: "Packaged Base" Jails, Boot Environments, and VM-IMAGEs
+a.k.a. "Nope. Not waiting any longer for a packaged base"
 
 This evolving project incorporates several inter-related scripts with the broad goal of producing and/or deploying bootable FreeBSD, OmniOS, Debian, RouterOS, and Windows systems from source or downloaded boot images. Official OpenBSD boot images would be greatly appreciated.
 
