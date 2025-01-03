@@ -58,7 +58,7 @@
 #
 # * Meta Packages
 # * Long lists
-# * egrep -v exclusions
+# * grep -vE exclusions
 # * pkg query/rquery -e evaluation
 #
 # Challenges: You probably want to exclude packages in case a new one
@@ -144,7 +144,6 @@ f_usage() {
 release_input=""
 abi_major=""
 abi_minor=""
-base_minor=""
 copy_glob=""
 hw_platform=$( uname -m )	# i.e. amd64|arm64
 cpu_arch=$( uname -p )		# i.e. amd64|aarch64
@@ -160,8 +159,6 @@ keep_mounted=0
 mount_point="/tmp/propagate/root"
 work_dir="/tmp/propagate"
 default_packages=0
-
-special_pkg_exclusions=""
 
 # A full-featured system, including src
 #base_pkg_exclusions="dbg|dev|lib32|tests"
@@ -277,16 +274,16 @@ while getopts r:a:t:mdp:scCvzO opts ; do
 		release_version=$( echo "$release_input" | cut -d "-" -f 1 )
 		release_build=$( echo "$release_input" | cut -d "-" -f 2 )
 
-		abi_major=$( echo $release_version | cut -d "." -f 1 )
+		abi_major="$( echo "$release_version" | cut -d "." -f 1 )"
 		# cut -d "." -f 2 only works with a .N
-		abi_minor=$( echo $release_version | cut -d "." -f 2 )
+		abi_minor="$( echo "$release_version" | cut -d "." -f 2 )"
 
 		if [ "$release_build" = "CURRENT" ] ; then
-			base_minor="base_latest"
-			copy_glob="$release_version"
-		else
-			base_minor="base_release_${abi_minor}"
+			abi_string="base_latest"
 			copy_glob="${abi_major}.snap"
+		else
+			abi_string="base_release_${abi_minor}"
+			copy_glob="$release_version"
 		fi
 
 		# Perform more validation
@@ -316,112 +313,106 @@ while getopts r:a:t:mdp:scCvzO opts ; do
 			fi	
 
 			echo Creating root directory
-			[ -d $target_input ] || mkdir -p $target_input
-			[ -d $target_input ] || \
-				{ echo mkdir $target_input failed ; exit 1 ; }
+			[ -d "$target_input" ] || mkdir -p "$target_input"
+			[ -d "$target_input" ] || \
+				{ echo "mkdir $target_input failed" ; exit 1 ; }
 			target_type="directory"
 			mount_point="$target_input"
 		else
 
 # DEBUG SHELLCHECK SUGGESTS QUOTING AFTER THE DOLLAR SIGN
-		zpool get name $( echo $target_input | cut -d "/" -f 1 ) \
+		zpool get name "$( echo "$target_input" | cut -d "/" -f 1 )" \
 			> /dev/null 2>&1 || \
-			{ echo Target $target_input appears invalid ; exit 1 ; }
+			{ echo "Target $target_input likely invalid" ; exit 1 ; }
 
-			zfs get name $target_input > /dev/null 2>&1 && \
-				{ echo Target exists - Exiting ; exit 1 ; }
+			zfs get name "$target_input" > /dev/null 2>&1 && \
+				{ echo "Target exists - Exiting" ; exit 1 ; }
 
 			target_type="dataset"
 			echo Creating root dataset
-			zfs get name $target_input > /dev/null 2>&1 || \
+			zfs get name "$target_input" > /dev/null 2>&1 || \
 			zfs create -o canmount=noauto -o mountpoint=/ \
-				$target_input
-			zfs get name $target_input > /dev/null 2>&1 || \
-			{ echo root dataset failed to create ; exit 1 ; }
+				"$target_input"
+			zfs get name "$target_input" > /dev/null 2>&1 || \
+			{ echo "root dataset failed to create" ; exit 1 ; }
 
 # PICK YOUR DATASET PROPERTY PARSING METHOD OF CHOICE FROM BSDINSTALL OR VMIAGE
 			# From /usr/libexec/bsdinstall/zfsboot
 #			echo Sourcing bsdconfig/bsdintall functions/variables
 #			# Obtain default ZFSBOOT_DATASETS
 #			. /usr/libexec/bsdinstall/zfsboot || \
-#				{ echo zfsboot failed to source ; exit 1 ; }
+#				{ echo "zfsboot failed to source" ; exit 1 ; }
 #			. /usr/share/bsdconfig/common.subr || \
-#				{ echo common.subr failed to source ; exit 1 ; }
+#			{ echo "common.subr failed to source" ; exit 1 ; }
 # FOLLOWING /lab/github/occambsd/vmimage.subr
 #			zfs create -o canmount=noauto -o mountpoint=/ \
-#				$target_input
+#				"$target_input"
 
 #                        -o fs=zroot/home\;mountpoint=/home \
 			zfs create -o canmount=noauto \
 				-o mountpoint=/home \
-				$target_input/home || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/home" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/tmp\;mountpoint=/tmp\;exec=on\;setuid=off \
 			zfs create -o canmount=noauto \
 				-o mountpoint=/tmp -o exec=on -o setuid=off \
-				$target_input/tmp || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/tmp" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/usr\;mountpoint=/usr\;canmount=off \
 # OVERRIDING canmount=off with noauto for nesting
 			zfs create \
 				-o mountpoint=/usr -o canmount=noauto \
-				$target_input/usr || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/usr" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/usr/ports\;setuid=off \
 			zfs create -o canmount=noauto \
 				-o setuid=off \
-				$target_input/usr/ports || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/usr/ports" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/usr/src \
 			zfs create -o canmount=noauto \
-				$target_input/usr/src || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/usr/src" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/usr/obj \
 			zfs create -o canmount=noauto \
-				$target_input/usr/obj || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/usr/obj" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/var\;mountpoint=/var\;canmount=off \
 # OVERRIDING canmount=off with noauto for nesting
 			zfs create \
 				-o mountpoint=/var -o canmount=noauto \
-				$target_input/var || \
+				"$target_input/var" || \
 #                        -o fs=zroot/var/audit\;setuid=off\;exec=off \
 			zfs create -o canmount=noauto \
 				-o setuid=off -o exec=off \
-				$target_input/var/audit || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/var/audit" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/var/crash\;setuid=off\;exec=off \
 			zfs create -o canmount=noauto \
 				-o setuid=off -o exec=off \
-				$target_input/var/crash || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/var/crash" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/var/log\;setuid=off\;exec=off \
 			zfs create -o canmount=noauto \
 				-o setuid=off -o exec=off \
-				$target_input/var/log || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/var/log" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/var/mail\;atime=on \
 			zfs create -o canmount=noauto \
 				-o atime=on \
-				$target_input/var/mail || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/var/mail" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 #                        -o fs=zroot/var/tmp\;setuid=off
 			zfs create -o canmount=noauto \
 				-o setuid=off \
-				$target_input/var/tmp || \
-				{ echo dataset failed to create ; exit 1 ; }
+				"$target_input/var/tmp" || \
+				{ echo "dataset failed to create" ; exit 1 ; }
 
 			# BECTL HANDLES OUR NESTING!
-			echo Mounting root dataset
-			bectl mount `basename $target_input` \
-				${mount_point:?} || \
-				{ echo target BE mount failed ; exit 1 ; }
-
-echo DEBUG zfs list grep $taget_input
-zfs list |grep $target_input
-zfs get mounted | grep $target_input
-ls $mount_point
-
+			echo "Mounting root dataset"
+			bectl mount "$( basename "$target_input" )" \
+				"${mount_point:?}" || \
+				{ echo "target BE mount failed" ; exit 1 ; }
 		fi # End dataset handling
 	;;
 	m)
@@ -450,7 +441,7 @@ ls $mount_point
 	;;
 	O)
 		[ "$OPTARG" ] || f_usage
-		"${work_dir:?}"="$OPTARG"
+		work_dir="$OPTARG"
 # Verify that it auto-creates
 #		[ -d "${work_dir:?}" ] || \
 #			{ echo "${work_dir:?} not found" ; exit 1 ; }
@@ -471,7 +462,7 @@ case "$hw_platform" in
 		cpu_arch="aarch64"
 	;;
 	*)
-		echo Invalid architecture
+		echo "Invalid architecture"
 		exit 1
 	;;
 esac
@@ -500,14 +491,12 @@ work_dir="/tmp/propagate"
 #########
 
 if [ "$target_input" = "dataset" ] && [ "$mkvm_image" = "1" ] ; then
-	echo A VM image assumes a work directory but not target directory
-	echo This might be a bad idea
+	echo "A VM image assumes a work directory but not target directory"
 	exit 1
 fi
 
 if [ "$target_type" = "dataset" ] && [ "$mkvm_image" = "1" ] ; then
-	echo A VM image assumes a transient directory
-	echo This might be a bad idea
+	echo "A VM image assumes a transient directory"
 	exit 1
 fi
 
@@ -523,33 +512,32 @@ if [ "$mkvm_image" = "1" ] ; then
 	mount_point="$fake_obj_dir$fake_src_dir/amd64.amd64/release/vm"
 
 	echo Making directories
-	mkdir -p $fake_src_dir/release/scripts || { echo failed ; exit 1 ; }
-	mkdir -p $fake_src_dir/release/tools || { echo failed ; exit 1 ; }
-	mkdir -p ${mount_point:?}/dev
+	mkdir -p "$fake_src_dir/release/scripts" || { echo "failed" ; exit 1 ; }
+	mkdir -p "$fake_src_dir/release/tools" || { echo "failed" ; exit 1 ; }
+	mkdir -p "${mount_point:?}/dev"
 
 	echo Fetching release script and tool
 
 	fetch https://cgit.freebsd.org/src/plain/release/scripts/mk-vmimage.sh \
-		-o $fake_src_dir/release/scripts/mk-vmimage.sh || \
-			{ echo mk-vmimage.sh fetch failed ; exit 1 ; }
+		-o "$fake_src_dir/release/scripts/mk-vmimage.sh" || \
+			{ echo "mk-vmimage.sh fetch failed" ; exit 1 ; }
 
 	fetch https://cgit.freebsd.org/src/plain/release/tools/vmimage.subr \
-		-o $fake_src_dir/release/tools/vmimage.subr || \
-			{ echo vmimage.subr fetch failed ; exit 1 ; }
-
+		-o "$fake_src_dir/release/tools/vmimage.subr" || \
+			{ echo "vmimage.subr fetch failed" ; exit 1 ; }
 fi # End extra VM scaffolding
 
 echo Creating skeleton directories
 
 for directory in $skel_dirs ; do
 	mkdir -vp "${mount_point:?}/${directory:?}" || \
-		{ echo mkdir $directory failed ; exit 1 ; }
+		{ echo "mkdir $directory failed" ; exit 1 ; }
 done
 
 #pkg-static: Cannot open dev/null
 echo Mounting devfs for pkg-static
-mount -t devfs -o ruleset=4 devfs ${mount_point:?}/dev || \
-	{ echo mount devfs failed; exit 1 ; }
+mount -t devfs -o ruleset=4 devfs "${mount_point:?}/dev" || \
+	{ echo "mount devfs failed" ; exit 1 ; }
 
 	mkdir -p "${mount_point:?}/usr/share/keys/pkg/trusted"
 echo Generating pkg.freebsd.org.2013102301 key
@@ -570,7 +558,7 @@ HERE
 echo ; echo Generating "${mount_point:?}/etc/pkg/FreeBSD-base.conf"
 
 mkdir -p "${mount_point:?}/etc/pkg" || \
-	{ echo mkdir ${mount_point:?}/etc/pkg failed ; exit ; }
+	{ echo "mkdir ${mount_point:?}/etc/pkg failed" ; exit ; }
 
 # WILL WE NEED TO OVERWRITE $ABI when cross installing?
 
@@ -582,7 +570,7 @@ cat <<- HERE > "${mount_point:?}/etc/pkg/FreeBSD-base.conf"
 FreeBSD-base: {
   priority: 10
   enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/\${ABI}/${base_minor}"
+  url: "pkg+https://pkg.FreeBSD.org/\${ABI}/${abi_string}"
   mirror_type: "srv"
   signature_type: "fingerprints"
   fingerprints: "/usr/share/keys/pkg"
@@ -610,20 +598,20 @@ FreeBSD-latest: {
 HERE
 
 [ -f "${mount_point:?}/etc/pkg/FreeBSD-latest.conf" ] || \
-	{ echo FreeBSD-latest.conf failed ; exit 1 ; }
+	{ echo "FreeBSD-latest.conf failed" ; exit 1 ; }
 
 mkdir -p "${mount_point:?}/usr/local/etc/pkg/repos" || \
-	{ echo "mkdir ${mount_point:?}/usr/local/etc/pkg/repos failed" ; exit 1 ; }
+{ echo "mkdir ${mount_point:?}/usr/local/etc/pkg/repos failed" ; exit 1 ; }
 
-echo ; echo Generating "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-quarterly.conf"
+echo ; echo "Generating ${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-quarterly.conf"
 cat <<- HERE > "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-quarterly.conf"
 FreeBSD: { enabled: no }
 HERE
 
 [ -f "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-quarterly.conf" ] || \
-	{ echo FreeBSD-quarterly.conf failed ; exit 1 ; }
+	{ echo "FreeBSD-quarterly.conf failed" ; exit 1 ; }
 
-echo Installing pkg
+echo "Installing pkg"
 
 pkg \
 	--option ABI="${ABI:?}" \
@@ -631,7 +619,7 @@ pkg \
 	--rootdir "${mount_point:?}" \
 	--repo-conf-dir "${mount_point:?}/etc/pkg" \
 	install -y -- pkg || \
-		{ echo pkg install failed ; exit 1 ; }
+		{ echo "pkg install failed" ; exit 1 ; }
 
 #####################
 # INSTALL PREFLIGHT #
@@ -642,14 +630,15 @@ pkg \
 ################
 
 if [ "$copy_cache" = "1" ] ; then
-	echo ; echo Copying /var/cache/pkg/FreeBSD- packages from the host
-	set +x
-	set +f
+	echo ; echo "Copying /var/cache/pkg/FreeBSD- packages from the host"
+#cp: /var/cache/pkg/FreeBSD-*14.2.pkg: No such file or directory
+#    /var/cache/pkg/FreeBSD-vi-14.2.pkg
+
 # This will fail if there is not a match
-	cp -p /var/cache/pkg/FreeBSD-*${copy_glob}* \
+#	cp -p "/var/cache/pkg/FreeBSD-*${copy_glob}.pkg" \
+	find /var/cache/pkg -type f | grep "$copy_glob" | xargs -I % cp % \
 		"${mount_point:?}/var/cache/pkg/"
-	set -f
-	set +x
+	
 fi
 
 #echo ; echo SMOKE TEST: Counting requested packages
@@ -659,7 +648,7 @@ fi
 #	--rootdir "${mount_point:?}" \
 #	--repo-conf-dir "${mount_point:?}/etc/pkg" \
 #	rquery --repository="FreeBSD-base" '%n' \
-#	| egrep -v "($base_pkg_exclusions)" \
+#	| grep -vE "($base_pkg_exclusions)" \
 #	| wc -l
 
 echo ; echo Installing base packages
@@ -674,7 +663,7 @@ pkg \
 	--rootdir "${mount_point:?}" \
 	--repo-conf-dir "${mount_point:?}/etc/pkg" \
 	rquery --repository="FreeBSD-base" '%n' \
-	| egrep -v "($base_pkg_exclusions)" \
+	| grep -vE "($base_pkg_exclusions)" \
 		| xargs -o pkg \
 			--option ABI="${ABI:?}" \
 			--option IGNORE_OSVERSION="yes" \
@@ -690,7 +679,7 @@ pkg \
 	--rootdir "${mount_point:?}" \
 	--repo-conf-dir "${mount_point:?}/etc/pkg" \
 	rquery --repository="FreeBSD-base" '%n' \
-	| egrep -v "($base_pkg_exclusions)" \
+	| grep -vE "($base_pkg_exclusions)" \
 		| xargs -o pkg \
 			--option ABI="${ABI:?}" \
 			--option IGNORE_OSVERSION="yes" \
@@ -717,8 +706,8 @@ if [ "$additional_packages" ] ; then
 		--option IGNORE_OSVERSION="yes" \
 		--rootdir "${mount_point:?}" \
 		--repo-conf-dir "${mount_point:?}/etc/pkg" \
-		install -y $additional_packages || \
-			{ echo Additional packages failed ; exit 1 ; }
+		install -y "$additional_packages" || \
+			{ echo "Additional packages failed" ; exit 1 ; }
 fi
 
 #################
@@ -727,7 +716,7 @@ fi
 
 if [ "$sideload" = "1" ] ; then
 
-	echo Copying configuration files - missing ones will fail for now
+	echo "Copying configuration files - missing ones will fail for now"
 	[ -f /boot/loader.conf ] && cp /boot/loader.conf \
 		"${mount_point:?}/boot/"
 	[ -f /etc/fstab ] && cp /etc/fstab "${mount_point:?}/etc/"
@@ -753,7 +742,7 @@ if [ "$sideload" = "1" ] ; then
 		--rootdir "${mount_point:?}" \
 		--repo-conf-dir "${mount_point:?}/etc/pkg" \
 		install -y -- || \
-		{ echo Package installation failed ; exit 1 ; }
+		{ echo "Package installation failed" ; exit 1 ; }
 
 elif [ "$target_type" = "dataset" ] || [ "$mkvm_image" = "1" ] ; then
 	# Use sysrc when possible
@@ -853,53 +842,54 @@ HERE
 if [ "$mkvm_image" = 1 ] ; then
 
 # Deleting if re-running
-[ -f "${src_dir}/release/scripts/propagate-mkvm-image.sh" ] && \
-	rm "${src_dir}/release/scripts/propagate-mkvm-image.sh"
+[ -f "${fake_src_dir}/release/scripts/propagate-mkvm-image.sh" ] && \
+	rm "${fake_src_dir}/release/scripts/propagate-mkvm-image.sh"
 
-	[ -e ${mount_point:?}/vm/fd ] && umount ${mount_point:?}/vm/dev
+	[ -e "${mount_point:?}/vm/fd" ] && umount "${mount_point:?}/vm/dev"
 
 #################################################
 # COPY FROM DESTINATION TO A FAKE SRC DIRECTORY #
 #################################################
 
 	# Satisfying dependencies in the order in which they failed
-	mkdir -p $fake_src_dir/stand/efi/loader_lua || \
-		{ echo failed to make loader_lua directory ; exit 1 ; }
+	mkdir -p "$fake_src_dir/stand/efi/loader_lua" || \
+		{ echo "Failed to make loader_lua directory" ; exit 1 ; }
 
-	cp $mount_point/boot/loader_lua.efi \
-		$fake_src_dir/stand/efi/loader_lua/ || \
-			{ echo loader_lua.efi failed to copy ; exit 1 ; }
+	cp "$mount_point/boot/loader_lua.efi" \
+		"$fake_src_dir/stand/efi/loader_lua/" || \
+			{ echo "loader_lua.efi failed to copy" ; exit 1 ; }
 
-	mkdir -p $fake_src_dir/stand/i386/pmbr || \
-		{ echo failed to make pmbr directory ; exit 1 ; }
+	mkdir -p "$fake_src_dir/stand/i386/pmbr" || \
+		{ echo "pmbr directory failed to make" ; exit 1 ; }
 
-	cp $mount_point/boot/pmbr \
-		$fake_src_dir/stand/i386/pmbr/ || \
-			{ echo pmbr failed to copy ; exit 1 ; }
+	cp "$mount_point/boot/pmbr" \
+		"$fake_src_dir/stand/i386/pmbr/" || \
+			{ echo "pmbr failed to copy" ; exit 1 ; }
 
-	mkdir -p $fake_src_dir/stand/i386/gptzfsboot || \
-		{ echo failed to make gptzfsboot directory ; exit 1 ; }
+	mkdir -p "$fake_src_dir/stand/i386/gptzfsboot" || \
+		{ echo "gptzfsboot directory failed to make" ; exit 1 ; }
 
-	cp $mount_point/boot/gptzfsboot \
-		$fake_src_dir/stand/i386/gptzfsboot/ || \
-			{ echo gptzfsboot failed to copy ; exit 1 ; }
+	cp "$mount_point/boot/gptzfsboot" \
+		"$fake_src_dir/stand/i386/gptzfsboot/" || \
+			{ echo "gptzfsboot failed to copy" ; exit 1 ; }
 
-	mkdir -p $fake_src_dir/tools/boot || { echo failed ; exit 1 ; }
+	mkdir -p "$fake_src_dir/tools/boot" || \
+		{ echo "$fake_src_dir/tools/boot failed to make" ; exit 1 ; }
 
 	# ACTUAL HOST SOURCE DIRECTORY
 	cp /usr/src/tools/boot/install-boot.sh \
-		$fake_src_dir/tools/boot/ || { echo failed ; exit 1 ; }
-
+		"$fake_src_dir/tools/boot/" || \
+			{ echo "install-boot.sh failed to copy" ; exit 1 ; }
 
 	[ -f "$fake_src_dir/release/scripts/propagate-mkvm-image.sh" ] && \
-		rm $fake_src_dir/release/scripts/propagate-mkvm-image.sh
+		rm "$fake_src_dir/release/scripts/propagate-mkvm-image.sh"
 
-	cat << HERE > $fake_src_dir/release/scripts/propagate-mkvm-image.sh
+	cat << HERE > "$fake_src_dir/release/scripts/propagate-mkvm-image.sh"
 
 # Trying this in an attempt to call from the original script
-cd $fake_src_dir/release/scripts/
+cd "$fake_src_dir/release/scripts/"
 
-[ -e ${mount_point:?}/dev/fd ] && umount ${mount_point:?}/dev
+[ -e "${mount_point:?}/dev/fd" ] && umount "${mount_point:?}/dev"
 
 # REQUIRED
 WORLDDIR=$fake_src_dir
@@ -926,11 +916,11 @@ HERE
 	[ -f "$fake_src_dir/release/scripts/propagate-mkvm-image.sh" ] || \
 		{ echo "$fake_src_dir/release/scripts/propagate-mkvm-image.sh failed" ; exit 1 ; }
 
-	echo ; echo To generate the VM-IMAGE, run: ; echo
-	echo sh $fake_src_dir/release/scripts/propagate-mkvm-image.sh
+	echo ; echo "To generate the VM-IMAGE, run:" ; echo
+	echo "sh $fake_src_dir/release/scripts/propagate-mkvm-image.sh"
 	echo
 
-	echo Generating simple boot script
+	echo "Generating simple boot script"
 cat << HERE > "$fake_src_dir/release/scripts/boot-vm.sh"
 #!/bin/sh
 [ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; }
@@ -950,7 +940,7 @@ sleep 2
 bhyvectl --destroy --vm=propagate
 HERE
 
-echo ; echo To boot the VM image, run:
+echo ; echo "To boot the VM image, run:"
 echo ; echo "sh $fake_src_dir/release/scripts/boot-vm.sh"
 echo
 
@@ -964,18 +954,18 @@ fi # End if VM-IMAGE
 
 if [ "$keep_mounted" = 0 ] ; then
 	if [ "$target_type" = "dataset" ] ; then
-		echo ; echo Unmounting ${mount_point:?}
-		umount ${mount_point:?}/dev ||
-			{ echo ${mount_point:?}/dev umount failed ; exit 1 ; }
-#		umount ${mount_point:?} ||
-#			{ echo ${mount_point:?} failed to unmount ; exit 1 ; }
-			bectl umount `basename $target_input` || \
-				{ echo target BE umount failed ; exit 1 ; }
+		echo ; echo "Unmounting ${mount_point:?}"
+		umount "${mount_point:?}/dev" || \
+			{ echo "${mount_point:?}/dev umount failed" ; exit 1 ; }
+#		umount ${mount_point:?} || \
+#			{ echo "${mount_point:?} failed to unmount" ; exit 1 ; }
+			bectl umount "$( basename "$target_input" )" || \
+				{ echo "target BE umount failed" ; exit 1 ; }
 
 	else
-		echo ; echo To unmount the target root, run:
-		echo umount ${mount_point:?}/dev
-		echo umount ${mount_point:?}
+		echo ; echo "To unmount the target root, run:"
+		echo "umount ${mount_point:?}/dev"
+		echo "umount ${mount_point:?}"
 		echo
 	fi
 fi
