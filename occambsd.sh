@@ -76,7 +76,6 @@ work_dir="/tmp/occambsd"
 kernconf_dir="$work_dir"
 src_conf="$work_dir/src.conf"
 buildjobs="$(sysctl -n hw.ncpu)"
-
 # Should any be left unset for use of environment variables?
 profile=""
 target=""
@@ -204,7 +203,7 @@ done
 log_dir="$work_dir/logs"		# Lives under work_dir for mkdir -p
 
 # target is populated by the required profile file
-[ -d $src_dir/sys ] || \
+[ -d "$src_dir/sys" ] || \
 	{ echo "Sources do not appear to be installed or specified" ; exit 1 ; }
 
 # Do not perform in opt args in case there is a positional issue
@@ -225,82 +224,82 @@ fi
 # PREPARATION #
 ###############
 
-[ -d ${work_dir}/root/dev ] && umount ${work_dir}/root/dev
+[ -d "${work_dir}/root/dev" ] && umount "${work_dir}/root/dev"
 
-if ! [ -d $work_dir ] ; then
-	echo Creating $work_dir
+if ! [ -d "$work_dir" ] ; then
+	echo "Creating $work_dir"
 	# Creating log_dir includes parent directory work_dir
 	mkdir -p "$log_dir" || \
-		{ echo Failed to create $work_dir ; exit 1 ; }
+		{ echo "Failed to create $work_dir" ; exit 1 ; }
 else # work_dir exists
 	# Consider a finer-grained cleanse to preserve kernel and world logs
 	# when re-using kernel and world artifacts
 
-	echo $work_dir exists and must be moved or deleted by the user
+	echo "$work_dir exists and must be moved or deleted by the user"
 	exit 1
-#	echo ; echo Cleansing $work_dir
+#	echo ; echo "Cleansing $work_dir"
 #	rm -rf $work_dir/*
 #	mkdir -p $log_dir
 fi
 
-if ! [ -d $obj_dir ] ; then
-	mkdir -p "$obj_dir" || { echo Failed to make $obj_dir ; exit 1 ; }
+if [ ! -d "$obj_dir" ] ; then
+	mkdir -p "$obj_dir" || { echo "Failed to make $obj_dir" ; exit 1 ; }
 fi
 
-echo ; echo Removing previous generated images if present
+echo ; echo "Removing previous generated images if present"
 
 mount -t devfs | \
-	grep ${target}.$target_arch/release/vm-image/dev && \
-	umount $obj_dir/$src_dir/${target}.$target_arch/release/vm-image/dev
+	grep "${target}.$target_arch/release/vm-image/dev" && \
+	umount "$obj_dir/$src_dir/${target}.$target_arch/release/vm-image/dev"
 
-if [ -d $obj_dir/$src_dir/${target}.$target_arch/release ] ; then
-	echo $obj_dir/$src_dir/${target}.$target_arch/release exists and must be moved or deleted by the user
+if [ -d "$obj_dir/$src_dir/${target}.$target_arch/release" ] ; then
+	echo "$obj_dir/$src_dir/${target}.$target_arch/release exists and must be moved or deleted by the user"
 	exit 1
-#	chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/release
-#	rm -rf $obj_dir/$src_dir/${target}.$target_arch/release/*
+#	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/release"
+#	rm -rf "$obj_dir/$src_dir/${target}.$target_arch/release/*"
 fi
 
 # Kernel first depending on how aggressively we clean the object directory
 if [ "$reuse_kernel" = "0" ] ; then
-	echo ; echo Cleaning kernel object directory
+	echo ; echo "Cleaning kernel object directory"
 	# Only clean the requested kernel
-	if [ -d $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf ] ; then
-		echo $obj_dir/$src_dir/${target}.$target_arch/sys exists and must be moved or deleted by the user
+if [ -d "$obj_dir/$src_dir/${target}.${target_arch}/sys/$kernconf" ] ; then
+		echo "$obj_dir/$src_dir/${target}.$target_arch/sys exists and must be moved or deleted by the user"
 		exit 1
-#		chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
-#		rm -rf  $obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf
+#	chflags -R 0 "$obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf"
+#		rm -rf  "$obj_dir/$src_dir/${target}.$target_arch/sys/$kernconf"
 	fi
 	# This would collide with a mix of kernels
 	# cd $src_dir/sys
 	# make clean
 else
-	echo ; echo Reuse kernel requested
-	[ -f "$obj_dir/$src_dir/${target}.$target_arch/sys/${kernconf}/kernel" ] || \
-		{ echo Kernel objects not found for reuse ; exit 1 ; }
+	echo ; echo "Reuse kernel requested"
+[ -f "$obj_dir/$src_dir/${target}.$target_arch/sys/${kernconf}/kernel" ] || \
+		{ echo "Kernel objects not found for reuse" ; exit 1 ; }
 fi
 
 if [ "$reuse_world" = "0" ] ; then
-	echo ; echo Cleaning world object directory
+	echo ; echo "Cleaning world object directory"
 	# This would take kernels with it
 	# chflags -R 0 $obj_dir/$src_dir/${target}.$target_arch
 	# rm -rf  $obj_dir/$src_dir/${target}.$target_arch/*
 
 	# Only clean if there is something to clean, saving time
 	if [ -d "$obj_dir/$src_dir/${target}.$target_arch" ] ; then
-		cd $src_dir
-		make cleandir > $log_dir/cleandir.log 2>&1
+		cd "$src_dir" || { echo "cd $src_dir failed" ; exit 1 ; }
+		make cleandir > "$log_dir/cleandir.log" 2>&1
 	fi
 else
 	[ -d "$obj_dir/$src_dir/${target}.$target_arch/bin/sh" ] || \
-		{ echo World objects not found for reuse ; exit 1 ; }
+		{ echo "World objects not found for reuse" ; exit 1 ; }
 fi
 
 if [ -d "$obj_dir$src_dir/repo" ] ; then
-	echo ; echo Cleaning package repo directory
-	echo $obj_dir$src_dir/repo exists and must be moved or deleted by the user
+	echo ; echo "Cleaning package repo directory"
+	echo "$obj_dir$src_dir/repo exists and must be moved or deleted by the user"
 	exit 1
-#	chflags -R 0 $obj_dir$src_dir/repo
-#	rm -rf $obj_dir$src_dir/repo/*
+#	chflags -R 0 "$obj_dir$src_dir/repo"
+#	rm -rf "$obj_dir$src_dir/repo/*"
 fi
 
 
@@ -308,9 +307,9 @@ fi
 # SRC.CONF #
 ############
 
-echo ; echo Generating $work_dir/all-options.txt
+echo ; echo "Generating $work_dir/all-options.txt"
 
-all_options=$( make -C $src_dir showconfig \
+all_options=$( make -C "$src_dir" showconfig \
 	__MAKE_CONF=/dev/null SRCCONF=/dev/null \
 	| sort \
 	| sed '
@@ -322,58 +321,65 @@ all_options=$( make -C $src_dir showconfig \
 	'
 )
 
-echo "$all_options" > $work_dir/all_options.conf
+echo "$all_options" > "$work_dir/all_options.conf"
 
-echo ; echo Generating $work_dir/src.conf
+echo ; echo "Generating $work_dir/src.conf"
 
 # Prune WITH_ options leaving only WITHOUT_ options
 IFS=" "
-without_options=$( echo $all_options | grep -v WITH_ )
-#echo ; echo without_options reads
-#echo $without_options
+without_options=$( echo "$all_options" | grep -v WITH_ )
+#echo ; echo "without_options reads"
+#echo "$without_options"
 
 # Save off all WITHOUT_s
-echo ; echo Generating $work_dir/all_withouts.txt
-echo $without_options > $work_dir/all_withouts.txt
+echo ; echo "Generating $work_dir/all_withouts.txt"
+echo "$without_options" > "$work_dir/all_withouts.txt"
 
 # Remove enabled_options to result in the desired src.conf
+
+# This user-contributed test is failing and hopefully is mitigated by the sh -n
+#IFS=" "
+#for option in $without_options ; do
+#	num_words_before=$( echo $without_options | wc -w )
+#
+#	# -w: search for whole words; e.g. do not strike
+#	# WITHOUT_FOO_BAR if WITHOUT_FOO is written
+#	without_options=$( echo $without_options | grep -v -w $option )
+#
+#	num_words_after=$( echo $without_options | wc -w )
+#	num_words_removed=$(( $num_words_before - $num_words_after ))
+#	if [ $num_words_removed -ne 1 ]; then
+#		echo "Word $option in build_options has stricken $num_words_removed WITHOUTs, not 1"
+#		exit 1
+#	fi
+#done
+
+# Origial syntax
 IFS=" "
 for option in $build_options ; do
-	num_words_before=$( echo $without_options | wc -w )
-
-	# -w: search for whole words; e.g. don't strike
-	# WITHOUT_FOO_BAR if WITHOUT_FOO is written
-	without_options=$( echo $without_options | grep -v -w $option )
-
-	num_words_after=$( echo $without_options | wc -w )
-	num_words_removed=$(( $num_words_before - $num_words_after ))
-	if [ $num_words_removed -ne 1 ]; then
-		echo word $option in build_options has stricken $num_words_removed WITHOUTs, not 1
-		exit 1
-	fi
+        without_options=$( echo $without_options | grep -v $option )
 done
 
-echo $without_options > $work_dir/src.conf
-
-
-echo DEBUG tailing src.conf
-tail $work_dir/src.conf
+echo "$without_options" > "$work_dir/src.conf"
 
 # Addition option, added for build_option_survey-like abilities
 if ! [ "$additional_option" = "" ] ; then
-echo The additional_option is "$additional_option"
-echo Running grep -v "$additional_option" $work_dir/src.conf
-	grep -v "$additional_option" $work_dir/src.conf > \
-		$work_dir/src.conf.additional
+echo "The additional_option is $additional_option"
+echo "Running grep -v $additional_option $work_dir/src.conf"
+	grep -v "$additional_option" "$work_dir/src.conf" > \
+		"$work_dir/src.conf.additional"
 #echo DEBUG tail of $work_dir/src.conf.additional
 #	mv $work_dir/src.conf.additional $work_dir/src.conf
 fi
 
-#echo ; echo The generated $work_dir/src.conf tails:
+#echo ; echo "The generated $work_dir/src.conf tails:"
 #tail $work_dir/src.conf
 
-ls ${src_dir}/sys/modules | grep -v "Makefile" > $work_dir/all_modules.txt
-echo ; echo All modules are listed in $work_dir/all_modules.txt
+#ls "${src_dir}/sys/modules" | grep -v "Makefile" > "$work_dir/all_modules.txt"
+
+find "${src_dir}/sys/modules" -type d -maxdepth 1 -exec basename {} + \
+	> "$work_dir/all_modules.txt"
+echo ; echo "All modules are listed in $work_dir/all_modules.txt"
 
 # Kernel configuration parameters
 
@@ -383,25 +389,26 @@ echo ; echo All modules are listed in $work_dir/all_modules.txt
 # $kernel_devices	i.e. device		*pci*
 
 # cpu, kernel_modules, and kernel_options, are read from the profile
-echo "cpu	$cpu" > $work_dir/OCCAMBSD
-echo "ident	OCCAMBSD" >> $work_dir/OCCAMBSD
+
+echo "cpu	$cpu" > "$work_dir/OCCAMBSD"
+echo "ident	OCCAMBSD" >> "$work_dir/OCCAMBSD"
 
 if [ "$kernel_modules" ] ; then
 	echo "makeoptions	MODULES_OVERRIDE=\"$kernel_modules\"" \
-		>> $work_dir/OCCAMBSD
+		>> "$work_dir/OCCAMBSD"
 fi
 
 IFS=" "
 if [ "$kernel_options" ] ; then
 	for kernel_option in $kernel_options ; do
-		echo "options	$kernel_option" >> $work_dir/OCCAMBSD
+		echo "options	$kernel_option" >> "$work_dir/OCCAMBSD"
 	done
 fi
 
 IFS=" "
 if [ "$kernel_devices" ] ; then
 	for kernel_device in $kernel_devices ; do
-		echo "device	$kernel_device" >> $work_dir/OCCAMBSD
+		echo "device	$kernel_device" >> "$work_dir/OCCAMBSD"
 	done
 fi
 
@@ -410,18 +417,18 @@ fi
 #IFS=" "
 #if [ "$kernel_includes" ] ; then
 #	for kernel_include in $kernel_includes ; do
-#		echo "include	\"$kernel_include\"" >> $work_dir/OCCAMBSD
+#		echo "include	\"$kernel_include\"" >> "$work_dir/OCCAMBSD"
 #	done
 #fi
 
-#echo ; echo The resulting OCCAMBSD KERNCONF is
+#echo ; echo "The resulting OCCAMBSD KERNCONF is"
 #cat $work_dir/OCCAMBSD
 
-cd $working_directory
+cd "$working_directory" || { echo "cd $working_directory failed" ; exit 1 ; }
 
-echo ; echo Copying profile $profile file to $work_dir
+echo ; echo "Copying profile $profile file to $work_dir"
 
-cp $profile ${work_dir}/ || \
+cp "$profile" "${work_dir}/" || \
 	{ echo "$profile failed to copy to $work_dir" ; exit 1 ; }
 
 # DRY RUN
@@ -441,32 +448,34 @@ fi
 if [ -n "$patch_dir" ] ; then
 	# This step is "destructive" and would need source reversion/rollback
 
-	if [ $(find $patch_dir -maxdepth 0 -empty) ]; then
-		echo No patches in ${patch_dir} to apply
+	if [ "$( find "$patch_dir" -maxdepth 0 -empty )" ]; then
+		echo "No patches in ${patch_dir} to apply"
 	else
-		echo Changing directory to ${src_dir}
-		cd "${src_dir}"
+		echo "Changing directory to ${src_dir}"
+		cd "${src_dir}" || { echo "cd $src_dir" failed ; exit 1 ; }
 		# Moving to make -C ${src_dir}/release syntax elsewhere
 		# Trickier here
 		pwd
-		echo The contents of patch_dir are
-		echo ${patch_dir}/*
+		echo "The contents of patch_dir are"
+		echo "${patch_dir}/*"
 		echo
 		echo "Applying patches"
-		for diff in $(echo ${patch_dir}/*) ; do
-			echo Running a dry run diff of $diff
-			echo patch -C \< $diff
-#			if [ $( patch -C < $diff ) ] ; then
-			patch -C < $diff
+#		for diff in $( echo "${patch_dir}/*" ) ; do
+# Use find? shellcheck wants quote it and then warns it will break it
+		for diff in ${patch_dir}/*  ; do
+			echo "Running a dry run diff of $diff"
+			echo "patch -C \< $diff"
+#			if [ $( patch -C < "$diff" ) ] ; then
+			patch -C < "$diff"
 			return_value=$?
 			if [ "$return_value" = 0 ] ; then
-				echo Diff $diff passed the dry run
-				diff_basename=$( basename $diff )
-				echo Running patch \< $diff
-				echo Applying diff $diff
-				patch < $diff
+				echo "Diff $diff passed the dry run"
+				diff_basename=$( basename "$diff" )
+				echo "Running patch \< $diff"
+				echo "Applying diff $diff"
+				patch < "$diff"
 			else
-				echo Diff $diff_basename failed to apply
+				echo "Diff $diff_basename failed to apply"
 				exit 1
 			fi
 		done
@@ -485,12 +494,12 @@ if [ "$reuse_world" = "1" ] ; then
 		echo ; echo "Using existing world build objects"
 	fi
 else
-	echo ; echo Building world - logging to $log_dir/build-world.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-		-j$buildjobs SRCCONF=$src_conf buildworld \
-		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
-		> $log_dir/build-world.log 2>&1 || \
-			{ echo buildworld failed ; exit 1 ; }
+	echo ; echo "Building world - logging to $log_dir/build-world.log"
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" make -C "$src_dir" \
+		-j"$buildjobs" SRCCONF="$src_conf" buildworld \
+		TARGET="$target" TARGET_ARCH="$target_arch" \
+		> "$log_dir/build-world.log" 2>&1 || \
+			{ echo "buildworld failed" ; exit 1 ; }
 fi
 
 
@@ -505,13 +514,13 @@ if [ "$reuse_kernel" = "1" ] ; then
 		echo ; echo "Using existing kernel build objects"
 	fi
 else
-	echo ; echo Building kernel - logging to $log_dir/build-kernel.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir \
-		make -C $src_dir -j$buildjobs \
-		buildkernel KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
-			> $log_dir/build-kernel.log 2>&1 || \
-				{ echo buildkernel failed ; exit 1 ; }
+	echo ; echo "Building kernel - logging to $log_dir/build-kernel.log"
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" \
+		make -C "$src_dir" -j"$buildjobs" \
+		buildkernel KERNCONFDIR="$kernconf_dir" KERNCONF="$kernconf" \
+		TARGET="$target" TARGET_ARCH="$target_arch" \
+			> "$log_dir/build-kernel.log" 2>&1 || \
+				{ echo "buildkernel failed" ; exit 1 ; }
 fi
 
 # Humanize and fix this
@@ -520,15 +529,14 @@ fi
 #		 | cut -d " " -f1
 
 if [ "$package_base" = "1" ] ; then
-	echo ; echo Packaging base - logging to $log_dir/build-packages.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir \
-		make -C $src_dir -j$buildjobs packages \
-		SRCCONF=$src_conf KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
-			> $log_dir/build-packages.log 2>&1 || \
-				{ echo make packages failed ; exit 1 ; }
-#echo DEBUG $log_dir/build-packages.log reads
-#cat $log_dir/build-packages.log
+	echo ; echo "Packaging base - logging to $log_dir/build-packages.log"
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" \
+		make -C "$src_dir" -j"$buildjobs" packages \
+		SRCCONF="$src_conf" KERNCONFDIR="$kernconf_dir" \
+		KERNCONF="$kernconf" \
+		TARGET="$target" TARGET_ARCH="$target_arch" \
+			> "$log_dir/build-packages.log" 2>&1 || \
+				{ echo "make packages failed" ; exit 1 ; }
 fi
 
 
@@ -537,27 +545,28 @@ fi
 #################
 
 if [ "$generate_jail" = "1" ] ; then
-	[ -d ${work_dir}/root ] || mkdir ${work_dir}/root
+	[ -d "${work_dir}/root" ] || mkdir "${work_dir}/root"
 
 	jls | grep -q occambsd && jail -r occambsd
 
-	echo ; echo Installing Jail world - logging to $log_dir/install-jail-world.log
+	echo ; echo "Installing Jail world - logging to $log_dir/install-jail-world.log"
 
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-	installworld SRCCONF=$src_conf $makeoptions \
-	DESTDIR=${work_dir}/root/ \
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" make -C "$src_dir" \
+	installworld SRCCONF="$src_conf" \
+	DESTDIR="${work_dir}/roow/" \
 	NO_FSCHG=YES \
-		> $log_dir/install-jail-world.log 2>&1
+		> "$log_dir/install-jail-world.log" 2>&1
 
-echo ; echo Installing Jail distribution - logging to $log_dir/jail-distribution.log
+echo ; echo "Installing Jail distribution - logging to $log_dir/jail-distribution.log"
 
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
-	SRCCONF=$src_conf DESTDIR=${work_dir}/root \
-		> $log_dir/jail-distribution.log 2>&1
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" make -C "$src_dir" \
+	distribution \
+	SRCCONF="$src_conf" DESTDIR="${work_dir}/root" \
+		> "$log_dir/jail-distribution.log" 2>&1
 
-        echo ; echo Generating jail.conf
+        echo ; echo "Generating jail.conf"
 
-cat << HERE > $work_dir/jail.conf
+cat << HERE > "$work_dir/jail.conf"
 occambsd {
 	host.hostname = occambsd;
 	path = "$work_dir/root";
@@ -569,17 +578,17 @@ HERE
 
 	echo ; echo "Generating $work_dir/jail-boot.sh script"
 	echo "jail -c -f $work_dir/jail.conf occambsd" > \
-		$work_dir/jail-boot.sh
-	echo "jls" >> $work_dir/jail-boot.sh
-	echo $work_dir/jail-boot.sh
+		"$work_dir/jail-boot.sh"
+	echo "jls" >> "$work_dir/jail-boot.sh"
+	echo "$work_dir/jail-boot.sh"
 
 [ -f "$work_dir/jail-boot.sh" ] || \
 	{ echo "$work_dir/jail-boot.sh failed to create" ; exit 1 ; }
 
 	echo ; echo "Generating $work_dir/jail-halt.sh script"
-	echo "jail -r occambsd" > $work_dir/jail-halt.sh
-	echo "jls" >> $work_dir/jail-halt.sh
-	echo $work_dir/jail-halt.sh
+	echo "jail -r occambsd" > "$work_dir/jail-halt.sh"
+	echo "jls" >> "$work_dir/jail-halt.sh"
+	echo "$work_dir/jail-halt.sh"
 
 [ -f "$work_dir/jail-halt.sh" ] || \
 	{ echo "$work_dir/jail-halt.sh failed to create" ; exit 1 ; }
@@ -591,38 +600,39 @@ fi # End jail
 ######################
 
 if [ "$generate_9pfs" = "1" ] ; then
-	[ -d ${work_dir}/9pfs ] || mkdir ${work_dir}/9pfs
+	[ -d "${work_dir}/9pfs" ] || mkdir "${work_dir}/9pfs"
 
-	echo ; echo Installing 9pfs world - logging to $log_dir/install-9pfs-world.log
+	echo ; echo "Installing 9pfs world - logging to $log_dir/install-9pfs-world.log"
 
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-	installworld SRCCONF=$src_conf $makeoptions \
-	DESTDIR=${work_dir}/9pfs/ \
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" make -C "$src_dir" \
+	installworld SRCCONF="$src_conf" \
+	DESTDIR="${work_dir}/9pfs/" \
 	NO_FSCHG=YES \
-		> $log_dir/install-9pfs-world.log 2>&1
+		> "$log_dir/install-9pfs-world.log" 2>&1
 
-echo ; echo Installing 9pfs distribution - logging to $log_dir/9pfs-distribution.log
+echo ; echo "Installing 9pfs distribution - logging to $log_dir/9pfs-distribution.log"
 
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir distribution \
-	SRCCONF=$src_conf DESTDIR=${work_dir}/9pfs \
-		> $log_dir/9pfs-distribution.log 2>&1
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" \
+	make -C "$src_dir distribution" \
+	SRCCONF="$src_conf" DESTDIR="${work_dir}/9pfs" \
+		> "$log_dir/9pfs-distribution.log" 2>&1
 
 
-	echo ; echo Installing 9pfs kernel - logging to $log_dir/install-9pfs-kernel.log
+	echo ; echo Installing "9pfs kernel - logging to $log_dir/install-9pfs-kernel.log"
 
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir \
-	installkernel SRCCONF=$src_conf $makeoptions \
-	KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-	DESTDIR=${work_dir}/9pfs/ \
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" make -C "$src_dir" \
+	installkernel SRCCONF="$src_conf" \
+	KERNCONFDIR="$kernconf_dir" KERNCONF="$kernconf" \
+	DESTDIR="${work_dir}/9pfs/" \
 	NO_FSCHG=YES \
-		> $log_dir/install-9pfs-kernel.log 2>&1
+		> "$log_dir/install-9pfs-kernel.log" 2>&1
 
-	echo "virtio_p9fs_load=\"YES\"" > ${work_dir}/9pfs/boot/loader.conf
+	echo "virtio_p9fs_load=\"YES\"" > "${work_dir}/9pfs/boot/loader.conf"
 
 	echo "vfs.root.mountfrom=\"p9fs:sharename\"" \
-		>> ${work_dir}/9pfs/boot/loader.conf
+		>> "${work_dir}/9pfs/boot/loader.conf"
 
-	echo "sharename / p9fs rw 0 0" > ${work_dir}/9pfs/etc/fstab
+	echo "sharename / p9fs rw 0 0" > "${work_dir}/9pfs/etc/fstab"
 fi # End 9pfs
 
 
@@ -631,43 +641,45 @@ fi # End 9pfs
 #############
 
 if [ "$generate_vm_image" = "1" ] ; then
-	cd $src_dir/release || { echo cd $src_dir/release failed ; exit 1 ; }
+	cd "$src_dir/release" || \
+		{ echo "cd $src_dir/release failed" ; exit 1 ; }
 
 	# Confirm if this uses KERNCONFDIR
 
 	[ -n "$vm_image_size" ] && vm_size_string="VMSIZE=$vm_image_size"
 	[ -n "$vm_swap_size" ] && vm_swap_string="SWAPSIZE=$vm_swap_size"
 
-	echo ; echo Building VM image - logging to $log_dir/vm-image.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
-		SRCCONF=$src_conf \
-		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
+	echo ; echo "Building VM image - logging to $log_dir/vm-image.log"
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" \
+		make -C "$src_dir/release" \
+		SRCCONF="$src_conf" \
+		KERNCONFDIR="$kernconf_dir" KERNCONF="$kernconf" \
 		vm-image WITH_VMIMAGES=YES VMFORMATS=raw \
-			VMFS=$vmfs $vm_size_string $vm_swap_string \
-			TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
-			> $log_dir/vm-image.log 2>&1 || \
-				{ echo VM image failed ; exit 1 ; }
+			VMFS="$vmfs" "$vm_size_string" "$vm_swap_string" \
+			TARGET="$target" TARGET_ARCH="$target_arch" \
+					> "$log_dir/vm-image.log" 2>&1 || \
+					{ echo "VM image failed" ; exit 1 ; }
 
 if [ -f "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" ] ; then
-	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw to $work_dir
-	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw \
-		$work_dir/ || { echo VM image copy failed ; exit 1 ; }
+	echo ; echo "Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.raw to $work_dir"
+	cp "$obj_dir/$src_dir/${target}.$target_arch/release/vm.raw" \
+		"$work_dir/" || { echo "VM image copy failed" ; exit 1 ; }
 else
-#	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir
+#	echo ; echo "Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir"
 
 
 # DEBUG TRY THE VARIOUS VM IMAGE NAMES - WILL BE HARD FOR VM BOOT
 
 # I sure hope this has not changed: 14.2/15-CURRENT = raw.zfs.img
-	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir
+	echo ; echo "Copying $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw to $work_dir"
 
-output_imgage_size=$( stat -f %z $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw )
+output_imgage_size=$( stat -f %z "$obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw" )
 
 [ "$output_imgage_size" = 0 ] && \
 	{ echo "Resulting image is 0 bytes - verify profile" ; exit 1 ; }
 
-	cp $obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw \
-		$work_dir/vm.raw || { echo VM image copy failed ; exit 1 ; }
+	cp "$obj_dir/$src_dir/${target}.$target_arch/release/vm.${vmfs}.raw" \
+		"$work_dir/vm.raw" || { echo "VM image copy failed" ; exit 1 ; }
 
 fi
 
@@ -675,7 +687,7 @@ fi
 
 # Verify if VM image would be re-using ${target}.$target_arch/release/dist/
 
-	echo ; echo Generating VM scripts
+	echo ; echo "Generating VM scripts"
 
 
 	if [ "$target" = "amd64" ] ; then
@@ -696,9 +708,9 @@ sleep 2
 bhyvectl --destroy --vm=occambsd
 HERE
 
-		echo $work_dir/bhyve-boot-vmimage.sh
+		echo "$work_dir/bhyve-boot-vmimage.sh"
 
-		cat << HERE > $work_dir/xen.cfg
+		cat << HERE > "$work_dir/xen.cfg"
 type = "hvm"
 memory = 1024
 vcpus = 2
@@ -711,28 +723,29 @@ on_reboot = 'restart'
 on_crash = 'restart'
 #vif = [ 'bridge=bridge0' ]
 HERE
-		echo $work_dir/xen.cfg
+		echo "$work_dir/xen.cfg"
 
 		echo "xl list | grep OccamBSD && xl destroy OccamBSD" \
-			> $work_dir/xen-boot-vmimage.sh
+			> "$work_dir/xen-boot-vmimage.sh"
 		echo "xl create -c $work_dir/xen.cfg" \
-			>> $work_dir/xen-boot-vmimage.sh
-		echo $work_dir/xen-boot-vmimage.sh
+			>> "$work_dir/xen-boot-vmimage.sh"
+		echo "$work_dir/xen-boot-vmimage.sh"
 
-		echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > $work_dir/xen-cleanup.sh
-		echo $work_dir/xen-cleanup.sh
+		echo "xl shutdown OccamBSD ; xl destroy OccamBSD ; xl list" > \
+			"$work_dir/xen-cleanup.sh"
+		echo "$work_dir/xen-cleanup.sh"
 
 # Notes while debugging
 #xl console -t pv OccamBSD
 #xl console -t serial OccamBSD
 
 
-		cat << HERE > $work_dir/qemu-boot.sh
+		cat << HERE > "$work_dir/qemu-boot.sh"
 [ \$( which qemu-system-x86_64 ) ] || \\
 	{ echo "qemu-system-x86-64/qemu not installed" ; exit 1 ; }
 qemu-system-x86_64 -m 1024M -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
-		echo $work_dir/qemu-boot.sh
+		echo "$work_dir/qemu-boot.sh"
 	fi
 
 	if [ "$target" = "arm64" ] ; then
@@ -753,14 +766,15 @@ bhyve -m 1024 -o console=stdio \\
 sleep 2
 bhyvectl --destroy --vm=occambsd
 HERE
-		echo $work_dir/bhyve-boot-vmimage.sh
+		echo "$work_dir/bhyve-boot-vmimage.sh"
 
-		cat << HERE > $work_dir/qemu-boot.sh
+		cat << HERE > "$work_dir/qemu-boot.sh"
 [ \$( which qemu-system-aarch64 ) ] || { echo "qemu-system-aarch64 not installed" ; exit 1 ; }
-[ -f /usr/local/share/qemu/edk2-aarch64-code.fd ] || { echo "edk2-qemu-x64 not installed" ; exit 1 ; }
+[ -f /usr/local/share/qemu/edk2-aarch64-code.fd ] || \\
+	{ echo "edk2-qemu-x64 not installed" ; exit 1 ; }
 qemu-system-aarch64 -m 1024M -cpu cortex-a57 -machine virt -bios edk2-aarch64-code.fd -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
-		echo $work_dir/qemu-boot.sh
+		echo "$work_dir/qemu-boot.sh"
 	fi
 
 fi # End: generate_vm_image
@@ -784,7 +798,7 @@ sleep 2
 bhyvectl --destroy --vm=occambsd
 HERE
 
-	echo $work_dir/bhyve-boot-9pfs.sh
+	echo "$work_dir/bhyve-boot-9pfs.sh"
 
 fi # End 9pfs
 
@@ -794,36 +808,38 @@ fi # End 9pfs
 #######
 
 if [ "$generate_isos" = "1" ] ; then
-	echo ; echo Building CD-ROM ISO images - logging to $log_dir/isos.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
+	echo ; echo "Building CD-ROM ISO images - logging to $log_dir/isos.log"
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" \
+		make -C "$src_dir/release" \
 		SRCCONF=$src_conf \
-		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-		TARGET=$target TARGET_ARCH=$target_arch $makeoptions \
+		KERNCONFDIR="$kernconf_dir" KERNCONF="$kernconf" \
+		TARGET="$target" TARGET_ARCH="$target_arch" \
 		cdrom \
-			> $log_dir/isos.log 2>&1 || \
+			> "$log_dir/isos.log" 2>&1 || \
 				{ echo "Build ISOs failed" ; exit 1 ; }
 
-	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso to $work_dir
-	cp $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso $work_dir/
+	echo ; echo "Copying $obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso to $work_dir"
+	cp "$obj_dir/$src_dir/${target}.$target_arch/release/disc1.iso" \
+		"$work_dir/"
 
-	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/bootonly.iso to $work_dir
-	cp $obj_dir/$src_dir/${target}.$target_arch/release/bootonly.iso $work_dir/
+	echo ; echo "Copying $obj_dir/$src_dir/${target}.$target_arch/release/bootonly.iso to $work_dir"
+cp "$obj_dir/$src_dir/${target}.$target_arch/release/bootonly.iso" "$work_dir/"
 
 	echo ; echo "Generating ISO scripts"
 
-	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/disc1.iso disc1" >> $work_dir/bhyve-boot-disc1.sh 
-	echo $work_dir/bhyve-boot-disc1.sh
+	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/disc1.iso disc1" >> "$work_dir/bhyve-boot-disc1.sh"
+	echo "$work_dir/bhyve-boot-disc1.sh"
 
 	echo "bhyvectl --destroy --vm=disc1" \
-		> $work_dir/bhyve-cleanup-disc1.sh
-	echo $work_dir/bhyve-cleanup-disc1.sh
+		> "$work_dir/bhyve-cleanup-disc1.sh"
+	echo "$work_dir/bhyve-cleanup-disc1.sh"
 
-	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/bootonly.iso bootonly" >> $work_dir/bhyve-boot-bootonly.sh 
-	echo $work_dir/bhyve-boot-bootonly.sh
+	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/bootonly.iso bootonly" >> "$work_dir/bhyve-boot-bootonly.sh"
+	echo "$work_dir/bhyve-boot-bootonly.sh"
 
 	echo "bhyvectl --destroy --vm=bootonly" \
-		> $work_dir/bhyve-cleanup-bootonly.sh
-	echo $work_dir/bhyve-cleanup-bootonly.sh
+		> "$work_dir/bhyve-cleanup-bootonly.sh"
+	echo "$work_dir/bhyve-cleanup-bootonly.sh"
 
 fi
 
@@ -833,26 +849,28 @@ fi
 ############
 
 if [ "$generate_memstick" = "1" ] ; then
-	echo ; echo Building mini-memstick image - logging to $log_dir/mini-memstick.log
-	\time -h env MAKEOBJDIRPREFIX=$obj_dir make -C $src_dir/release \
-		SRCCONF=$src_conf \
-		KERNCONFDIR=$kernconf_dir KERNCONF=$kernconf \
-		TARGET=$target TARGET_ARCH=$target_arch \
+	echo ; echo "Building mini-memstick image - logging to $log_dir/mini-memstick.log"
+	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" \
+		make -C "$src_dir/release" \
+		SRCCONF="$src_conf" \
+		KERNCONFDIR="$kernconf_dir" KERNCONF="$kernconf" \
+		TARGET="$target" TARGET_ARCH="$target_arch" \
 		mini-memstick \
-			> $log_dir/mini-memstick.log 2>&1 || \
-				{ echo mini-memstick failed ; exit 1 ; }
+			> "$log_dir/mini-memstick.log" 2>&1 || \
+				{ echo "mini-memstick failed" ; exit 1 ; }
 
-	echo ; echo Copying $obj_dir/$src_dir/${target}.$target_arch/release/mini-memstick.img to $work_dir
-	cp $obj_dir/$src_dir/${target}.$target_arch/release/mini-memstick.img $work_dir/
+	echo ; echo "Copying $obj_dir/$src_dir/${target}.$target_arch/release/mini-memstick.img to $work_dir"
+cp "$obj_dir/$src_dir/${target}.$target_arch/release/mini-memstick.img" \
+ "${work_dir}"
 
 	echo ; echo "Generating mini-memstick scripts"
 
-	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/mini-memstick.img mini-memstick" >> $work_dir/bhyve-boot-mini-memstick.sh 
-	echo $work_dir/bhyve-boot-mini-memstick.sh
+	echo "sh /usr/share/examples/bhyve/vmrun.sh -d /tmp/occambsd/mini-memstick.img mini-memstick" >> "$work_dir/bhyve-boot-mini-memstick.sh"
+	echo "$work_dir/bhyve-boot-mini-memstick.sh"
 
 	echo "bhyvectl --destroy --vm=mini-memstick" \
-		> $work_dir/bhyve-cleanup-mini-memstick.sh
-	echo $work_dir/bhyve-cleanup-mini-memstick.sh
+		> "$work_dir/bhyve-cleanup-mini-memstick.sh"
+	echo "$work_dir/bhyve-cleanup-mini-memstick.sh"
 fi
 
 echo
