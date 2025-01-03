@@ -78,8 +78,21 @@ src_conf="$work_dir/src.conf"
 buildjobs="$(sysctl -n hw.ncpu)"
 # Should any be left unset for use of environment variables?
 profile=""
+
+# Defaults that are sourced from the profile but are initializing here
+
+# "build_options" is fundamentally confusing as it is the disabled "WITHOUT"s,
+# meaning that the components are INCLUDED in the build. OccamBSD disables ALL
+# build options by default and enables desired ones by inverting "WITHOUT"s.
+
 target=""
 target_arch=""
+cpu=""
+build_options=""
+kernel_devices=""
+kernel_modules=""
+kernel_options=""
+
 reuse_world=0
 reuse_world_dirty=0
 reuse_kernel=0
