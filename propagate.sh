@@ -916,9 +916,9 @@ HERE
 	[ -f "$fake_src_dir/release/scripts/propagate-mkvm-image.sh" ] || \
 		{ echo "$fake_src_dir/release/scripts/propagate-mkvm-image.sh failed" ; exit 1 ; }
 
-	echo ; echo "To generate the VM-IMAGE, run:" ; echo
-	echo "sh $fake_src_dir/release/scripts/propagate-mkvm-image.sh"
-	echo
+	echo ; echo "Generating the VM-IMAGE"
+	sh $fake_src_dir/release/scripts/propagate-mkvm-image.sh || \
+		{ echo "sh $fake_src_dir/release/scripts/propagate-mkvm-image.sh failed" ; exit 1 ; }
 
 	echo "Generating simple boot script"
 cat << HERE > "$fake_src_dir/release/scripts/boot-vm.sh"

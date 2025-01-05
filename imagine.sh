@@ -198,7 +198,7 @@ release_image_file=""
 #release_image_xz=""
 release_branch=""
 fs_type="ufs"
-omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151050.cloud.raw.zst"
+omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151052b.cloud.raw.zst"
 
 debian_amd64_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-nocloud-amd64.raw"
 debian_arm64_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-nocloud-arm64.raw"

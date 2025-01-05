@@ -67,6 +67,7 @@ f_usage() {
 # DEFAULT VARIABLES #
 #####################
 
+# Should any be left unset for use of environment variables?
 working_directory=$( pwd )		# Used after cd for cleanup
 kernconf="OCCAMBSD"			# Can be overridden with GENERIC
 vmfs="ufs"				# Can be overridden with zfs
@@ -76,23 +77,6 @@ work_dir="/tmp/occambsd"
 kernconf_dir="$work_dir"
 src_conf="$work_dir/src.conf"
 buildjobs="$(sysctl -n hw.ncpu)"
-# Should any be left unset for use of environment variables?
-profile=""
-
-# Defaults that are sourced from the profile but are initializing here
-
-# "build_options" is fundamentally confusing as it is the disabled "WITHOUT"s,
-# meaning that the components are INCLUDED in the build. OccamBSD disables ALL
-# build options by default and enables desired ones by inverting "WITHOUT"s.
-
-target=""
-target_arch=""
-cpu=""
-build_options=""
-kernel_devices=""
-kernel_modules=""
-kernel_options=""
-
 reuse_world=0
 reuse_world_dirty=0
 reuse_kernel=0
@@ -110,6 +94,26 @@ generate_memstick=0
 dry_run=0
 vm_image_size="500m"
 vm_swap_size="100m"
+
+# Defaults that are sourced from the profile but are initializing here
+
+# "build_options" is fundamentally confusing as it is the disabled "WITHOUT"s,
+# meaning that the components are INCLUDED in the build. OccamBSD disables ALL
+# build options by default and enables desired ones by inverting "WITHOUT"s.
+
+profile=""
+target=""
+target_arch=""
+cpu=""
+build_options=""
+kernel_devices=""
+kernel_modules=""
+kernel_options=""
+
+all_options=""
+without_options=""
+with_options=""
+src_conf_options=""
 
 while getopts p:s:o:O:wWkKa:bGgP:zj9vzZ:S:imn opts ; do
 	case $opts in
@@ -334,7 +338,7 @@ all_options=$( make -C "$src_dir" showconfig \
 	'
 )
 
-echo "$all_options" > "$work_dir/all_options.conf"
+echo "$all_options" > "$work_dir/all-options.txt"
 
 echo ; echo "Generating $work_dir/src.conf"
 
@@ -345,8 +349,8 @@ without_options=$( echo "$all_options" | grep -v WITH_ )
 #echo "$without_options"
 
 # Save off all WITHOUT_s
-echo ; echo "Generating $work_dir/all_withouts.txt"
-echo "$without_options" > "$work_dir/all_withouts.txt"
+echo ; echo "Generating $work_dir/all-withouts.txt"
+echo "$without_options" > "$work_dir/all-withouts.txt"
 
 # Remove enabled_options to result in the desired src.conf
 
@@ -370,10 +374,23 @@ echo "$without_options" > "$work_dir/all_withouts.txt"
 # Origial syntax
 IFS=" "
 for option in $build_options ; do
-        without_options=$( echo $without_options | grep -v $option )
+        without_options=$( echo $without_options | grep -v -w $option )
 done
 
 echo "$without_options" > "$work_dir/src.conf"
+
+echo ; echo Resulting statistics: ; echo
+
+echo -n "All options : " ; wc -l $work_dir/all-options.txt ; echo
+echo -n "All WITHOUT options : " ; wc -l $work_dir/all-withouts.txt ; echo
+echo -n "The src.conf options : " ; wc -l $work_dir/src.conf ; echo
+
+echo "The build_options from the profile:"
+echo "$build_options"
+
+#echo DEBUG all-options.txt reads: ; cat $work_dir/all-options.txt
+#echo DEBUG all-withouts.txt reads: ; cat $work_dir/all-withouts.txt
+#echo DEBUG src.conf reads: ; cat $work_dir/src.conf
 
 # Addition option, added for build_option_survey-like abilities
 if ! [ "$additional_option" = "" ] ; then
@@ -753,12 +770,12 @@ HERE
 #xl console -t serial OccamBSD
 
 
-		cat << HERE > "$work_dir/qemu-boot.sh"
+		cat << HERE > "$work_dir/qemu-boot-vmimage.sh"
 [ \$( which qemu-system-x86_64 ) ] || \\
 	{ echo "qemu-system-x86-64/qemu not installed" ; exit 1 ; }
 qemu-system-x86_64 -m 1024M -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
-		echo "$work_dir/qemu-boot.sh"
+		echo "$work_dir/qemu-boot-vmimage.sh"
 	fi
 
 	if [ "$target" = "arm64" ] ; then
@@ -781,13 +798,13 @@ bhyvectl --destroy --vm=occambsd
 HERE
 		echo "$work_dir/bhyve-boot-vmimage.sh"
 
-		cat << HERE > "$work_dir/qemu-boot.sh"
+		cat << HERE > "$work_dir/qemu-boot-vmiage.sh"
 [ \$( which qemu-system-aarch64 ) ] || { echo "qemu-system-aarch64 not installed" ; exit 1 ; }
 [ -f /usr/local/share/qemu/edk2-aarch64-code.fd ] || \\
 	{ echo "edk2-qemu-x64 not installed" ; exit 1 ; }
 qemu-system-aarch64 -m 1024M -cpu cortex-a57 -machine virt -bios edk2-aarch64-code.fd -nographic -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -rtc base=utc -drive file=/tmp/occambsd/vm.raw,format=raw,index=0,media=disk 
 HERE
-		echo "$work_dir/qemu-boot.sh"
+		echo "$work_dir/qemu-boot-vmimage.sh"
 	fi
 
 fi # End: generate_vm_image
