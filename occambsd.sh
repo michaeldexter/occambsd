@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.8
+# Version v0.9
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -40,12 +40,12 @@ f_usage() {
 	echo "-K (Reuse the previous kernel objects without cleaning)"
 # Need reuse PkgBase?
 	echo "-a <additional build option to exclude>"
-	echo "-b (Package base)"
-	echo "-G (Use the GENERIC/stock world)"
+	echo "-b (Package base - runs 'make packages')"
+	echo "-G (Use the GENERIC/stock world - increase image size as needed)"
 	echo "-g (Use the GENERIC kernel)"
 	echo "-P <patch directory> (NB! This will modify your sources!)"
 	echo "-j (Build for Jail boot)"
-	echo "-9 (Build for 9pfs boot)"
+	echo "-9 (Build for 9pfs boot - 15.0-CURRENT only)"
 	echo "-v (Generate VM image and boot scripts)"
 	echo "-z (Generate ZFS VM image and boot scripts)"
 	echo "-Z <size> (VM image siZe i.e. 500m - default is 5g)"
@@ -263,7 +263,7 @@ if [ ! -d "$obj_dir" ] ; then
 	mkdir -p "$obj_dir" || { echo "Failed to make $obj_dir" ; exit 1 ; }
 fi
 
-echo ; echo "Removing previous generated images if present"
+echo ; echo "Checking for previous generated images if present"
 
 mount -t devfs | \
 	grep "${target}.$target_arch/release/vm-image/dev" && \
