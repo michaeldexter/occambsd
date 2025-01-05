@@ -111,6 +111,7 @@ echo ; echo "Synopsis: Create a 15.0-CURRENT PkgBase VM-IMAGE"
 the_test="sh propagate.sh -r 15.0-CURRENT -d -c -C -v"
 boot_bhyve="/tmp/propagate/src/release/scripts/boot-vm.sh"
 boot_qemu=""
+boot_xen=""
 f_ask && { f_clean_propagate ; f_build && f_boot ; }
 
 # Works
@@ -124,6 +125,8 @@ f_ask && { f_clean_occambsd ; f_build && f_boot ; }
 echo ; echo "Synopsis: Build a minimum 14.x system with ZFS, and VM boot"
 the_test="sh occambsd.sh -p profile-amd64-zfs14.txt -z -v"
 boot_bhyve="/tmp/occambsd/bhyve-boot-vmimage.sh"
+boot_qemu=""
+boot_xen=""
 f_ask && { f_clean_occambsd ; f_build && f_boot ; }
 
 # Error: Solaris: NOTICE: Cannot find the pool label for 'zroot'
@@ -154,20 +157,26 @@ f_ask && { f_clean_imagine ; f_build && f_boot ; }
 # Note: root/<no password>
 echo ; echo "Synopsis: Retrieve a 14.2 stock ARM64 ZFS VM-IMAGE and VM boot"
 the_test="sh imagine.sh -r 14.2-RELEASE -z -v -a arm64"
-boot_bhyve="/root/imagine-work/qemu-14.2-RELEASE-arm64-zfs.sh"
+boot_bhyve=""
+boot_qemu=""/root/imagine-work/qemu-14.2-RELEASE-arm64-zfs.sh"
+boot_xen=""
 f_ask && { f_clean_imagine ; f_build && f_boot ; }
 
 # Works
 # Note: root/<no password>
 echo ; echo "Synopsis: Retrieve a 14.2 stock RISC-V ZFS VM-IMAGE and VM boot"
 the_test="sh imagine.sh -r 14.2-RELEASE -z -v -a riscv"
+boot_bhyve=""
 boot_qemu="/root/imagine-work/qemu-14.2-RELEASE-riscv-zfs.sh"
+boot_xen=""
 f_ask && { f_clean_imagine ; f_build && f_boot ; }
 
 # Note: root/<no password>
 echo ; echo "Synopsis: Retrieve a 15.0 ZFS VM-IMAGE, grow to 10G, and VM boot"
-the_test="sh imagine.sh -r 14.2-RELEASE -z -v -g 10"
-boot_bhyve="/root/imagine-work/boot-bhyve.sh"
+the_test="sh imagine.sh -r 15.0-CURRENT -z -v -g 10"
+boot_bhyve="/root/imagine-work/bhyve-15.0-CURRENT-amd64-zfs.sh"
+boot_qemu="/root/imagine-work/qemu-15.0-CURRENT-amd64-zfs.sh"
+boot_xen="/root/imagine-work/xen-15.0-CURRENT-amd64-zfs.sh"
 f_ask && { f_clean_imagine ; f_build && f_boot ; }
 
 # bhyve works
@@ -176,6 +185,7 @@ echo ; echo "Synopsis: Retrieve an OmniOS VM-IMAGE and VM boot"
 the_test="sh imagine.sh -r omnios -v"
 boot_bhyve="/root/imagine-work/bhyve-omnios-amd64-zfs.sh"
 boot_qemu="/root/imagine-work/qemu-omnios-amd64-zfs.sh"
+boot_xen="/root/imagine-work/xen-omnios-amd64-zfs.sh"
 f_ask && { f_clean_imagine ; f_build && f_boot ; }
 
 # bhyve works
@@ -190,7 +200,9 @@ f_ask && { f_clean_imagine ; f_build && f_boot ; }
 # Note: admin/<no password>
 echo ; echo "Synopsis: Retrieve a RouterOS VM-IMAGE and VM boot"
 the_test="sh imagine.sh -r routeros -v"
-boot_bhyve="sh /root/imagine-work/boot-bhyve.sh"
+boot_bhyve="/root/imagine-work/bhyve-routeros-amd64-ext4.sh"
+boot_qemu="/root/imagine-work/qemu-routeros-amd64-ext4.sh"
+boot_xen="/root/imagine-work/xen-routeros-amd64-ext4.sh"
 f_ask && { f_clean_imagine ; f_build && f_boot ; }
 
 # Configure an OccamBSD profile with UEFI for this handoff

@@ -659,10 +659,10 @@ echo ; echo "Installing 9pfs distribution - logging to $log_dir/9pfs-distributio
 
 	echo "virtio_p9fs_load=\"YES\"" > "${work_dir}/9pfs/boot/loader.conf"
 
-	echo "vfs.root.mountfrom=\"p9fs:sharename\"" \
+	echo "vfs.root.mountfrom=\"p9fs:occambsd\"" \
 		>> "${work_dir}/9pfs/boot/loader.conf"
 
-	echo "sharename / p9fs rw 0 0" > "${work_dir}/9pfs/etc/fstab"
+	echo "occambsd / p9fs rw 0 0" > "${work_dir}/9pfs/etc/fstab"
 fi # End 9pfs
 
 
@@ -821,7 +821,7 @@ kldstat -q -m vmm || kldload vmm
 sleep 1
 bhyveload -m 1024 -h $work_dir/9pfs occambsd   
 bhyve -m 1024 -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
-	-s 2,virtio-9p,sharename=$work_dir/9pfs \\
+	-s 2,virtio-9p,occambsd=$work_dir/9pfs \\
 	occambsd
 
 sleep 2
