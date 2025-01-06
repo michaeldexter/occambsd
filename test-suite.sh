@@ -38,6 +38,10 @@ f_clean_occambsd () {
 		chflags -R 0 /usr/obj/usr/src/amd64.amd64
 		rm -rf /usr/obj/usr/src/amd64.amd64
 	fi
+	if [ -d /usr/obj/usr/src/repo ] ; then
+		chflags -R 0 /usr/obj/usr/src/repo
+		rm -rf /usr/obj/usr/src/repo
+	fi
 }
 
 f_clean_propagate () {
@@ -112,6 +116,20 @@ the_test="sh propagate.sh -r 15.0-CURRENT -d -c -C -v"
 boot_bhyve="/tmp/propagate/src/release/scripts/boot-vm.sh"
 boot_qemu=""
 boot_xen=""
+f_ask && { f_clean_propagate ; f_build && f_boot ; }
+
+
+echo ; echo "Synopsis: Build a minimum 14.2 system with PkgBase, and VM boot"
+the_test="sh occambsd.sh -p profile-amd64-zfs14.txt -v -b"
+boot_bhyve="/tmp/occambsd/bhyve-boot-vmimage.sh"
+boot_qemu="/tmp/occambsd/qemu-boot-vmimage.sh"
+boot_xen="/tmp/occambsd/xen-boot-vmimage.sh"
+f_ask && { f_clean_occambsd ; f_build && f_boot ; }
+
+echo ; echo "Synopsis: OMG Propagate the PkgBase packages of the last build!"
+echo This may coredump makefs and/or fail to boot, but keep at it!
+the_test="sh propagate.sh -r 14.2-RELEASE -v -u file:///usr/obj/usr/src/repo/FreeBSD:14:amd64/14.2/"
+boot_bhyve="/tmp/propagate/src/release/scripts/boot-vm.sh"
 f_ask && { f_clean_propagate ; f_build && f_boot ; }
 
 # Works
@@ -205,14 +223,15 @@ boot_qemu="/root/imagine-work/qemu-routeros-amd64-ext4.sh"
 boot_xen="/root/imagine-work/xen-routeros-amd64-ext4.sh"
 f_ask && { f_clean_imagine ; f_build && f_boot ; }
 
-# Configure an OccamBSD profile with UEFI for this handoff
+# Configure an OccamBSD profile with UEFI for handoff to Propagate
 # Fails: Assumes UEFI and the VM wants bhyveload
 echo ; echo "Synopsis: imagine.sh the an OccamBSD VM-IMAGE, and VM boot"
-the_test="sh imagine.sh -r /tmp/occambsd/vm.raw -t /tmp/boot.raw -v"
+the_test="sh imagine.sh -r /usr/obj/usr/src/amd64.amd64/release/vm.ufs.raw -t /tmp/boot.raw -v -b"
 boot_bhyve="/root/imagine-work/bhyve-vm.raw.sh"
 boot_qmeu="/root/imagine-work/qemu-vm.raw.sh"
 boot_xen="/root/imagine-work/xen-vm.raw.sh"
 f_ask && { f_clean_imagine ; f_build && f_boot ; }
+
 
 exit
 

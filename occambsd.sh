@@ -726,11 +726,14 @@ fi
 #!/bin/sh
 [ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; } 
 [ -e /dev/vmm/occambsd ] && { bhyvectl --destroy --vm=occambsd ; sleep 1 ; }
+[ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
+	{ echo "BHYVE_UEFI.DD missing" ; exit 1 ; }
 
 kldstat -q -m vmm || kldload vmm
 sleep 1
-bhyveload -m 1024 -d $work_dir/vm.raw occambsd
+#bhyveload -m 1024 -d $work_dir/vm.raw occambsd
 bhyve -m 1024 -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
+	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
         -s 2,virtio-blk,$work_dir/vm.raw \\
         occambsd
 

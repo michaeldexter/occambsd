@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.0.6
+# Version v.0.0.7
 
 # propagate.sh - Packaged Base installer to boot environments and VM-IMAGES 
 
@@ -119,6 +119,7 @@ f_usage() {
 	echo "   i.e. zroot/ROOT/pkgbase15, zroot/jails/pkgbase15 datasets or"
 	echo "   /jails/myjail directory"
 	echo "   Default: /tmp/propagate/root unless VM image is selected)"
+	echo "-u <Custom Repo URL>"
 	echo "-m (Keep boot environment mounted for further configuration)"
 	echo "-d (Default FreeBSD installation package set with sources)"
 	echo "-p \"<additional packages>\" (Quoted space-separated list)"
@@ -150,6 +151,10 @@ cpu_arch=$( uname -p )		# i.e. amd64|aarch64
 target_input=""
 target_prefix=""
 target_type=""			# directory or dataset
+base_repo_url=""
+base_repo_string=""
+signature_string=""
+#FYI: "file:///usr/obj/usr/src/repo/FreeBSD:14:amd64/14.2/"
 keep_mounted=0
 
 #############################
@@ -263,7 +268,7 @@ usr/libdata"
 # USER INPUT AND VARIABLE OVERRIDES #
 #####################################
 
-while getopts r:a:t:mdp:scCvzO opts ; do
+while getopts r:a:t:u:mdp:scCvzO opts ; do
 	case $opts in
 	r)
 		[ "$OPTARG" ] || f_usage
@@ -415,6 +420,10 @@ while getopts r:a:t:mdp:scCvzO opts ; do
 				{ echo "target BE mount failed" ; exit 1 ; }
 		fi # End dataset handling
 	;;
+	u)
+		[ "$OPTARG" ] || f_usage
+		base_repo_url="$OPTARG"
+	;;
 	m)
 		keep_mounted=1
 	;;
@@ -562,6 +571,13 @@ mkdir -p "${mount_point:?}/etc/pkg" || \
 
 # WILL WE NEED TO OVERWRITE $ABI when cross installing?
 
+if [ -n "$base_repo_url" ] ; then
+	base_repo_string="$base_repo_url"
+else
+	base_repo_string="pkg+https://pkg.FreeBSD.org/\${ABI}/${abi_string}"
+	signature_string="fingerprints"
+fi
+
 # UCL!
 # <<- will strip tab indenting
 # 'HERE' to not expand, allowing $ABI
@@ -570,9 +586,9 @@ cat <<- HERE > "${mount_point:?}/etc/pkg/FreeBSD-base.conf"
 FreeBSD-base: {
   priority: 10
   enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/\${ABI}/${abi_string}"
+  url: "$base_repo_string"
   mirror_type: "srv"
-  signature_type: "fingerprints"
+  signature_type: "$signature_string"
   fingerprints: "/usr/share/keys/pkg"
 }
 HERE
@@ -589,16 +605,15 @@ cat <<- HERE > "${mount_point:?}/etc/pkg/FreeBSD-latest.conf"
 FreeBSD-latest: {
   priority: 10
   enabled: yes
-  url: "pkg+https://pkg.FreeBSD.org/\${ABI}/latest",
-  mirror_type: "srv",
-  signature_type: "fingerprints",
-  fingerprints: "/usr/share/keys/pkg",
+  url: "pkg+https://pkg.FreeBSD.org/\${ABI}/latest"
+  mirror_type: "srv"
+  signature_type: "fingerprints"
+  fingerprints: "/usr/share/keys/pkg"
   enabled: yes
 }
 HERE
 
 [ -f "${mount_point:?}/etc/pkg/FreeBSD-latest.conf" ] || \
-	{ echo "FreeBSD-latest.conf failed" ; exit 1 ; }
 
 mkdir -p "${mount_point:?}/usr/local/etc/pkg/repos" || \
 { echo "mkdir ${mount_point:?}/usr/local/etc/pkg/repos failed" ; exit 1 ; }
