@@ -860,7 +860,8 @@ if [ "$mkvm_image" = 1 ] ; then
 [ -f "${fake_src_dir}/release/scripts/propagate-mkvm-image.sh" ] && \
 	rm "${fake_src_dir}/release/scripts/propagate-mkvm-image.sh"
 
-	[ -e "${mount_point:?}/vm/fd" ] && umount "${mount_point:?}/vm/dev"
+	[ -e "${mount_point:?}/vm/dev/fd" ] && umount "${mount_point:?}/vm/dev"
+	[ -e "/tmp/propagate/dev/fd" ] && umount "/tmp/propagate/dev"
 
 #################################################
 # COPY FROM DESTINATION TO A FAKE SRC DIRECTORY #
@@ -905,6 +906,8 @@ if [ "$mkvm_image" = 1 ] ; then
 cd "$fake_src_dir/release/scripts/"
 
 [ -e "${mount_point:?}/dev/fd" ] && umount "${mount_point:?}/dev"
+[ -e "${mount_point:?}/vm/dev/fd" ] && umount "${mount_point:?}/vm/dev"
+[ -e "/tmp/propagate/dev/fd" ] && umount "/tmp/propagate/dev"
 
 # REQUIRED
 WORLDDIR=$fake_src_dir
