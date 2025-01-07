@@ -23,6 +23,17 @@
 # pick up where the prvious one leaves off, such as building a VM image in
 # OccamBSD and using it as Imagine input
 #
+# If you enter single user mode on boot, there is a good chance that /etc/fstab
+# is invalid, often because of the EFI partition, which you probably do not
+# want mounted in the first place. Swapping and dumping is another conversation.
+#
+# A quick way to resolve this situation is to run:
+#
+# mount -uw /
+# mv /etc/fstab /etc/fstab.disabled
+# touch /etc/fstab
+# exit
+#
 # Note that VM boot may disrupt the flow of the script
 #
 # Note that Xen is only slowly being framed in but you can try Xenomorph!

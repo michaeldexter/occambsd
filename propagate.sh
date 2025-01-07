@@ -761,24 +761,42 @@ if [ "$sideload" = "1" ] ; then
 
 elif [ "$target_type" = "dataset" ] || [ "$mkvm_image" = "1" ] ; then
 	# Use sysrc when possible
+	# These are pulled from the 14.2-RELEASE ZFS VM-IMAGE
 	cat << HERE > ${mount_point:?}/boot/loader.conf
-kern.geom.label.disk_ident.enable="0"
-kern.geom.label.gptid.enable="0"
-cryptodev_load="YES"
-zfs_load="YES"
+kern.geom.label.disk_ident.enable=0
+zfs_load=YES
+#kern.geom.label.gptid.enable="0"
+#cryptodev_load="YES"
 HERE
 
 	echo ; echo The loader.conf reads:
 	cat ${mount_point:?}/boot/loader.conf
 	echo
 
+	# These are pulled from the 14.2-RELEASE ZFS VM-IMAGE
 	cat << HERE > ${mount_point:?}/etc/rc.conf
 hostname="propagate"
 zfs_enable="YES"
+zpool_reguid="zroot"
+zpool_upgrade="zroot"
+ifconfig_DEFAULT="DHCP inet6 accept_rtadv"
+growfs_enable="YES"
 HERE
 
 	echo ; echo The rc.conf reads:
 	cat ${mount_point:?}/etc/rc.conf
+	echo
+
+	# This may easily trip up boot
+	# These are pulled from the 14.2-RELEASE ZFS VM-IMAGE
+	cat << HERE > ${mount_point:?}/etc/fstab
+# Custom /etc/fstab for FreeBSD VM images
+/dev/gpt/swapfs  none    swap    sw      0       0
+/dev/gpt/efiesp /boot/efi       msdosfs     rw      2       2
+	HERE
+
+	echo ; echo The fstab reads:
+	cat ${mount_point:?}/etc/fstab
 	echo
 fi
 
