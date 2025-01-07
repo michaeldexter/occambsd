@@ -119,8 +119,8 @@ boot_xen=""
 f_ask && { f_clean_propagate ; f_build && f_boot ; }
 
 
-echo ; echo "Synopsis: Build a minimum 14.2 system with PkgBase, and VM boot"
-the_test="sh occambsd.sh -p profile-amd64-zfs14.txt -v -b"
+ncho ; echo "Synopsis: Build a minimum 14.2 system with PkgBase, and VM boot"
+the_test="sh occambsd.sh -p profile-amd64-zfs14.txt -z -v -b"
 boot_bhyve="/tmp/occambsd/bhyve-boot-vmimage.sh"
 boot_qemu="/tmp/occambsd/qemu-boot-vmimage.sh"
 boot_xen="/tmp/occambsd/xen-boot-vmimage.sh"

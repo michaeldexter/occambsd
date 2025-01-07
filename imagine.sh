@@ -958,7 +958,7 @@ if [ "$xml_file" ] && [ "$iso_file" ] ; then
 #!/bin/sh
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
 [ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
-        { echo "BHYVE_UEFI.DD missing" ; exit 1 ; }
+        { echo "BHYVE_UEFI.fd missing" ; exit 1 ; }
 
 kldstat -q -m vmm || kldload vmm
 HERE
