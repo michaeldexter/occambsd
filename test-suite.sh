@@ -44,6 +44,7 @@
 # The Windows tests are there as they depend on an ISO, which we cannot retrieve
 
 f_clean_occambsd () {
+	echo "Running f_clean_occambsd"
 	[ -d /tmp/occambsd ] && rm -rf /tmp/occambsd
 	if [ -d /usr/obj/usr/src/amd64.amd64 ] ; then
 		chflags -R 0 /usr/obj/usr/src/amd64.amd64
@@ -56,6 +57,7 @@ f_clean_occambsd () {
 }
 
 f_clean_propagate () {
+	echo "Running f_clean_propagate"
 	# Add a test
 	umount /tmp/propagate/tmp/propagate/src/amd64.amd64/release/vm/dev
 	if [ -f /tmp/propagate ] ; then
@@ -65,6 +67,7 @@ f_clean_propagate () {
 }
 
 f_clean_imagine () {
+	echo "Running f_clean_imagine"
 #	zpool export zroot
 	rm /root/imagine-work/*.raw.*
 	rm /root/imagine-work/*.sh
@@ -85,8 +88,8 @@ f_ask () {
 }
 
 f_boot () {
-echo DEBUG boot_bhyve is $boot_bhyve
-echo DEBUG boot_qemu is $boot_qemu
+#echo DEBUG boot_bhyve is $boot_bhyve
+#echo DEBUG boot_qemu is $boot_qemu
 	echo -n "Boot in bhyve? (y/n): " ; read response
 	[ "$response" = "y" -o "$response" = "n" ] || \
 		{ echo Invalid input ; exit 1 ; }
@@ -131,7 +134,7 @@ f_ask && { f_clean_propagate ; f_build && f_boot ; }
 
 
 # Works
-ncho ; echo "Synopsis: Build a minimum 14.2 system with PkgBase, and VM boot"
+echo ; echo "Synopsis: Build a minimum 14.2 system with PkgBase, and VM boot"
 the_test="sh occambsd.sh -p profile-amd64-zfs14.txt -z -v -b"
 boot_bhyve="/tmp/occambsd/bhyve-boot-vmimage.sh"
 boot_qemu="/tmp/occambsd/qemu-boot-vmimage.sh"

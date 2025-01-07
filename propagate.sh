@@ -762,10 +762,11 @@ if [ "$sideload" = "1" ] ; then
 elif [ "$target_type" = "dataset" ] || [ "$mkvm_image" = "1" ] ; then
 	# Use sysrc when possible
 	# These are pulled from the 14.2-RELEASE ZFS VM-IMAGE
+	# Adding kern.geom.label.gptid.enable="0"
 	cat << HERE > ${mount_point:?}/boot/loader.conf
 kern.geom.label.disk_ident.enable=0
 zfs_load=YES
-#kern.geom.label.gptid.enable="0"
+kern.geom.label.gptid.enable="0"
 #cryptodev_load="YES"
 HERE
 
@@ -789,11 +790,11 @@ HERE
 
 	# This may easily trip up boot
 	# These are pulled from the 14.2-RELEASE ZFS VM-IMAGE
-	cat << HERE > ${mount_point:?}/etc/fstab
-# Custom /etc/fstab for FreeBSD VM images
-/dev/gpt/swapfs  none    swap    sw      0       0
-/dev/gpt/efiesp /boot/efi       msdosfs     rw      2       2
-	HERE
+#	cat << HERE > ${mount_point:?}/etc/fstab
+## Custom /etc/fstab for FreeBSD VM images
+#/dev/gpt/swapfs  none    swap    sw      0       0
+#/dev/gpt/efiesp /boot/efi       msdosfs     rw      2       2
+#HERE
 
 	echo ; echo The fstab reads:
 	cat ${mount_point:?}/etc/fstab
@@ -878,6 +879,7 @@ if [ "$mkvm_image" = 1 ] ; then
 [ -f "${fake_src_dir}/release/scripts/propagate-mkvm-image.sh" ] && \
 	rm "${fake_src_dir}/release/scripts/propagate-mkvm-image.sh"
 
+	[ -e "${mount_point:?}/dev/fd" ] && umount "${mount_point:?}/dev"
 	[ -e "${mount_point:?}/vm/dev/fd" ] && umount "${mount_point:?}/vm/dev"
 	[ -e "/tmp/propagate/dev/fd" ] && umount "/tmp/propagate/dev"
 
@@ -953,7 +955,7 @@ HERE
 		{ echo "$fake_src_dir/release/scripts/propagate-mkvm-image.sh failed" ; exit 1 ; }
 
 	echo ; echo "Generating the VM-IMAGE"
-	sh $fake_src_dir/release/scripts/propagate-mkvm-image.sh || \
+	sh "$fake_src_dir/release/scripts/propagate-mkvm-image.sh" || \
 		{ echo "sh $fake_src_dir/release/scripts/propagate-mkvm-image.sh failed" ; exit 1 ; }
 
 	echo "Generating simple boot script"
