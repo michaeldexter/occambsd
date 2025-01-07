@@ -191,7 +191,7 @@ f_ask && { f_clean_imagine ; f_build && f_boot ; }
 echo ; echo "Synopsis: Retrieve a 14.2 stock ARM64 ZFS VM-IMAGE and VM boot"
 the_test="sh imagine.sh -r 14.2-RELEASE -z -v -a arm64"
 boot_bhyve=""
-boot_qemu=""/root/imagine-work/qemu-14.2-RELEASE-arm64-zfs.sh"
+boot_qemu="/root/imagine-work/qemu-14.2-RELEASE-arm64-zfs.sh"
 boot_xen=""
 f_ask && { f_clean_imagine ; f_build && f_boot ; }
 
