@@ -119,6 +119,7 @@ boot_xen=""
 f_ask && { f_clean_propagate ; f_build && f_boot ; }
 
 
+# Works
 ncho ; echo "Synopsis: Build a minimum 14.2 system with PkgBase, and VM boot"
 the_test="sh occambsd.sh -p profile-amd64-zfs14.txt -z -v -b"
 boot_bhyve="/tmp/occambsd/bhyve-boot-vmimage.sh"
@@ -126,8 +127,8 @@ boot_qemu="/tmp/occambsd/qemu-boot-vmimage.sh"
 boot_xen="/tmp/occambsd/xen-boot-vmimage.sh"
 f_ask && { f_clean_occambsd ; f_build && f_boot ; }
 
+# Works
 echo ; echo "Synopsis: OMG Propagate the PkgBase packages of the last build!"
-echo This may coredump makefs and/or fail to boot, but keep at it!
 the_test="sh propagate.sh -r 14.2-RELEASE -v -u file:///usr/obj/usr/src/repo/FreeBSD:14:amd64/14.2/"
 boot_bhyve="/tmp/propagate/src/release/scripts/boot-vm.sh"
 f_ask && { f_clean_propagate ; f_build && f_boot ; }
