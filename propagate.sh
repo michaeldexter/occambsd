@@ -63,7 +63,7 @@
 #
 # Challenges: You probably want to exclude packages in case a new one
 # appears or the base set is re-arranged. Dependencies may surprise you.
-#
+# Use the -G switch to graph them; view the graph using Graphviz.
 #
 # To install 14.2-RELEASE to the default location of /tmp/propagate/root,
 # copying in packages from the host (must also be 14.2-RELEASE), and clean the
@@ -125,6 +125,7 @@ f_usage() {
 	echo "-p \"<additional packages>\" (Quoted space-separated list)"
 	echo "-s (Perform best-effort sideload of the current configuration)"
 	echo "-c (Copy cached FreeBSD- packages from the host - must match!)"
+        echo "-G (Write a graph of base package selections and dependencies)"
 	echo "-C (Clean package cache after installation)"
 	echo "-v (Generate VM image and boot scripts)"
 	echo "-O <output directory/work> (Default: /tmp/propagate)"
@@ -186,6 +187,7 @@ sideload=0
 copy_cache=0
 clean_cache=0
 mkvm_image=0
+write_graph=0
 
 # Check after boot/zfs with a full installation
 # Drawing from /usr/src/release/tools/vmimage.subr
@@ -268,7 +270,7 @@ usr/libdata"
 # USER INPUT AND VARIABLE OVERRIDES #
 #####################################
 
-while getopts r:a:t:u:mdp:scCvzO opts ; do
+while getopts r:a:t:u:mdp:scGCvzO opts ; do
 	case $opts in
 	r)
 		[ "$OPTARG" ] || f_usage
@@ -441,6 +443,9 @@ while getopts r:a:t:u:mdp:scCvzO opts ; do
 	;;
 	c)
 		copy_cache=1
+	;;
+	G)
+		write_graph=1
 	;;
 	C)
 		clean_cache=1
@@ -702,6 +707,22 @@ pkg \
 			--repo-conf-dir "${mount_point:?}/etc/pkg" \
 			install \
 			--
+fi
+
+if [ "$write_graph" = "1" ] ; then
+	graph_filename="${work_dir:?}/dep-graph.g"
+        echo
+        echo "drawing dependency graph"
+	awk -f FreeBSD-pkgbase-dep-graph.awk \
+	    -v pkg="pkg --option ABI=\"${ABI:?}\" \
+	                --option IGNORE_OSVERSION=yes \
+	                --rootdir \"${mount_point:?}\" \
+	                --repo-conf-dir \"${mount_point:?}/etc/pkg\"" \
+	    -v repository=FreeBSD-base \
+	    -v base_pkg_exclusions="$base_pkg_exclusions" \
+	    > "$graph_filename"
+	echo " -- graph is in $graph_filename"
+        echo
 fi
 
 #echo DEBUG checking the size of the result
