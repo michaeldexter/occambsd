@@ -633,6 +633,12 @@ HERE
 
 echo "Installing pkg"
 
+#	--option OSVERSION="${release_input:?}" \
+# sys/sys/param.h:#define __FreeBSD_version 1402000
+# git -C /usr/src show releng/14.1:sys/sys/param.h | sed -n 's/^#define __FreeBSD_version //p'
+# Broke in pkg 2.0, relaxed in 2.0.4
+#	--option OSVERSION="1402000" \
+
 pkg \
 	--option ABI="${ABI:?}" \
 	--option IGNORE_OSVERSION="yes" \
@@ -710,9 +716,8 @@ pkg \
 fi
 
 if [ "$write_graph" = "1" ] ; then
-	graph_filename="${work_dir:?}/dep-graph.g"
-        echo
-        echo "drawing dependency graph"
+	graph_filename="${work_dir:?}/dependency-graph.g"
+        echo ; echo "Writing graphics/graphviz dependency graph $graph_filename"
 	awk -f FreeBSD-pkgbase-dep-graph.awk \
 	    -v pkg="pkg --option ABI=\"${ABI:?}\" \
 	                --option IGNORE_OSVERSION=yes \
@@ -721,8 +726,7 @@ if [ "$write_graph" = "1" ] ; then
 	    -v repository=FreeBSD-base \
 	    -v base_pkg_exclusions="$base_pkg_exclusions" \
 	    > "$graph_filename"
-	echo " -- graph is in $graph_filename"
-        echo
+	echo ; echo "This can be graphed with 'fdp -Tx11 ${work_dir:?}/dependency-graph.g' and similar"
 fi
 
 #echo DEBUG checking the size of the result

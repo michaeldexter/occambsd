@@ -160,14 +160,20 @@
                 <RunSynchronous>
                     <RunSynchronousCommand wcm:action="add">
                         <Order>1</Order>
-                        <Path>bcdedit /ems {default} on</Path>
+                        <Path>bcdedit /emsboot on</Path>
                     </RunSynchronousCommand>
                     <RunSynchronousCommand wcm:action="add">
                         <Order>2</Order>
-                        <Path>bcdedit /emssettings emsport:1 emsbaudrate:115200</Path>
+<!--                        <Path>bcdedit /ems {default} on</Path> -->
+                        <Path>bcdedit /ems on</Path>
                     </RunSynchronousCommand>
                     <RunSynchronousCommand wcm:action="add">
                         <Order>3</Order>
+<!--                        <Path>bcdedit /emssettings emsport:1 emsbaudrate:9600</Path> -->
+                        <Path>bcdedit /emssettings emsport:1 emsbaudrate:115200</Path>
+                    </RunSynchronousCommand>
+                    <RunSynchronousCommand wcm:action="add">
+                        <Order>4</Order>
                         <Path>netsh advfirewall firewall add rule name="ICMP Allow incoming V4 echo request" protocol=icmpv4:8,any dir=in action=allow</Path>
                     </RunSynchronousCommand>
                 </RunSynchronous>

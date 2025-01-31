@@ -474,6 +474,7 @@ fi
 
 if [ "$xml_file" ] ; then
 	[ "$iso_file" ] || { echo "-x requires -i" ; exit 1 ; }
+	[ "$grow_size" ] || { echo "-x requires -g" ; exit 1 ; }
 	[ "$include_src" = 0 ] || { echo "-s not supported with -x" ; exit 1 ; }
 	# Disable this as a second boot does the installation
 	grow_required=0
@@ -938,7 +939,7 @@ if [ "$xml_file" ] && [ "$iso_file" ] ; then
 		-o $work_dir/windows/windows.iso $work_dir/windows/iso || \
 			{ echo mkisofs failed ; exit 1 ; }
 
-	echo ; echo The resulting ISO image is $work_dir/windows/install.iso
+	echo ; echo The resulting ISO image is $work_dir/windows/windows.iso
 
 	cd -
 
