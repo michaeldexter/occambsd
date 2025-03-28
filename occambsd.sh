@@ -146,6 +146,7 @@ while getopts p:s:o:O:wWkKa:bGgP:zj9vzZ:S:imn opts ; do
 	O)
 		work_dir="$OPTARG"
   		kernconf_dir="$OPTARG"
+                src_conf="$work_dir/src.conf"
 		;;
 	w)
 		reuse_world=1
