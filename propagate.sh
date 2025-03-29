@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.0.7
+# Version v.0.0.8
 
 # propagate.sh - Packaged Base installer to boot environments and VM-IMAGES 
 
@@ -127,7 +127,10 @@ f_usage() {
 	echo "-c (Copy cached FreeBSD- packages from the host - must match!)"
         echo "-G (Write a graph of base package selections and dependencies)"
 	echo "-C (Clean package cache after installation)"
+	echo "-e (Configuration script to execute after OS installation)"
 	echo "-v (Generate VM image and boot scripts)"
+	echo "-Z <size> (VM image siZe i.e. 10g  - default is 8g)"
+	echo "-S <size> (VM image Swap size i.e. 2g - default is 1g)"
 	echo "-O <output directory/work> (Default: /tmp/propagate)"
 	echo
 	exit 0
@@ -186,6 +189,8 @@ additional_packages=""
 sideload=0
 copy_cache=0
 clean_cache=0
+execute_script=0
+configuration_script=""
 mkvm_image=0
 write_graph=0
 
@@ -261,6 +266,8 @@ var/db/etcupdate/current/usr/share/nls
 var/db/etcupdate/current/var
 var/db/etcupdate/current/var/crash
 usr/libdata"
+vm_image_size="8g"
+vm_swap_size="1g"
 
 # Note permissions
 
@@ -270,7 +277,7 @@ usr/libdata"
 # USER INPUT AND VARIABLE OVERRIDES #
 #####################################
 
-while getopts r:a:t:u:mdp:scGCvzO opts ; do
+while getopts r:a:t:u:mdp:scGCe:vzZ:S:O opts ; do
 	case $opts in
 	r)
 		[ "$OPTARG" ] || f_usage
@@ -450,8 +457,26 @@ while getopts r:a:t:u:mdp:scGCvzO opts ; do
 	C)
 		clean_cache=1
 	;;
+	e)
+		execute_script=1
+		[ "$OPTARG" ] || f_usage
+		configuration_script="$OPTARG"
+		sh -n "$configuration_script" || \
+		{ echo "$configuration_script failed to validate" ; exit 1 ; }
+	;;
 	v)
 		mkvm_image=1
+	;;
+	Z)
+		[ "$OPTARG" ] || f_usage
+		# Would be nice to support/validate n<m|g|M|G|>
+		vm_image_size="$OPTARG"
+	;;
+	S)
+		[ "$OPTARG" ] || f_usage
+		# Would be nice to support/validate n<m|g|M|G|>
+		vm_swap_size="$OPTARG"
+
 	;;
 	O)
 		[ "$OPTARG" ] || f_usage
@@ -579,6 +604,9 @@ mkdir -p "${mount_point:?}/etc/pkg" || \
 if [ -n "$base_repo_url" ] ; then
 	base_repo_string="$base_repo_url"
 else
+	# 2025-02 now supported: "pkg+https://pkg.FreeBSD.org/\${ABI}/base_release_${VERSION_MINOR}"
+	# "pkg+https://pkg.freebsd.org/${ABI}/kmods_latest_${VERSION_MINOR}"
+	# "Can be a problem when installing the first time with -o OSVERSION"
 	base_repo_string="pkg+https://pkg.FreeBSD.org/\${ABI}/${abi_string}"
 	signature_string="fingerprints"
 fi
@@ -756,6 +784,7 @@ fi
 
 if [ "$sideload" = "1" ] ; then
 
+# Push a working configuration to a fresh installation
 	echo "Copying configuration files - missing ones will fail for now"
 	[ -f /boot/loader.conf ] && cp /boot/loader.conf \
 		"${mount_point:?}/boot/"
@@ -771,6 +800,8 @@ if [ "$sideload" = "1" ] ; then
 	[ -f /etc/passwd ] && cp /etc/passwd "${mount_point:?}/etc/"
 	[ -f /etc/wpa_supplicant.conf ] && \
 		cp /etc/wpa_supplicant.conf "${mount_point:?}/etc/"
+	[ -f /etc/exports ] && \
+		cp /etc/exports "${mount_point:?}/etc/"
 	# Was failing on host keys
 	cp -rp /etc/ssh/* "${mount_point:?}/etc/ssh/"
 	cp -rp /root/.ssh "${mount_point:?}/root/"
@@ -784,6 +815,8 @@ if [ "$sideload" = "1" ] ; then
 		install -y -- || \
 		{ echo "Package installation failed" ; exit 1 ; }
 
+# If a "fresh" installation to a dataset, make minimally bootable
+# Perform additional configuration later
 elif [ "$target_type" = "dataset" ] || [ "$mkvm_image" = "1" ] ; then
 	# Use sysrc when possible
 	# These are pulled from the 14.2-RELEASE ZFS VM-IMAGE
@@ -821,10 +854,36 @@ HERE
 #/dev/gpt/efiesp /boot/efi       msdosfs     rw      2       2
 #HERE
 
+fi
+
+if [ -f "${mount_point:?}/etc/fstab" ] ; then
 	echo ; echo The fstab reads:
 	cat ${mount_point:?}/etc/fstab
 	echo
+else
+	echo ; echo The VM resulting system does not contain an fstab ; echo
 fi
+
+##########################
+# ADVANCED CONFIGURATION #
+##########################
+
+# Canonically run rc.local.sh with the mount point
+
+if [ "$execute_script" = 1 ] ; then
+#configuration_script=""
+	[ -f "$configuration_script" ] || 
+		{ echo "$configuration_script not found" ; exit 1 ; }
+
+	sh -n "$configuration_script" || 
+		{ echo "$configuration_script failed to validate" ; exit 1 ; }
+
+	echo ; echo "Executing $configuration_script"
+
+	echo DEBUG would run...
+	echo sh $configuration_script ${mount_point:?}
+fi
+
 
 ###############
 # CLEAN CACHE #
@@ -938,9 +997,13 @@ if [ "$mkvm_image" = 1 ] ; then
 		{ echo "$fake_src_dir/tools/boot failed to make" ; exit 1 ; }
 
 	# ACTUAL HOST SOURCE DIRECTORY
-	cp /usr/src/tools/boot/install-boot.sh \
-		"$fake_src_dir/tools/boot/" || \
-			{ echo "install-boot.sh failed to copy" ; exit 1 ; }
+#	cp /usr/src/tools/boot/install-boot.sh \
+#		"$fake_src_dir/tools/boot/" || \
+#			{ echo "install-boot.sh failed to copy" ; exit 1 ; }
+
+	fetch https://cgit.freebsd.org/src/plain/tools/boot/install-boot.sh \
+		-o "$fake_src_dir/tools/boot/install-boot.sh" || \
+			{ echo "install-boot.sh fetch failed" ; exit 1 ; }
 
 	[ -f "$fake_src_dir/release/scripts/propagate-mkvm-image.sh" ] && \
 		rm "$fake_src_dir/release/scripts/propagate-mkvm-image.sh"
@@ -957,7 +1020,7 @@ cd "$fake_src_dir/release/scripts/"
 # REQUIRED
 WORLDDIR=$fake_src_dir
 export MAKEOBJDIRPREFIX=$fake_obj_dir
-VMSIZE=8g
+VMSIZE="$vm_image_size"
 #export VMFSLIST=zfs
 VMFS=zfs
 TARGET=amd64
@@ -968,9 +1031,9 @@ VMFORMAT=raw
 VMBASE=raw.zfs.img
 VMIMAGE=vm.zfs.img
 # WHOOPS: SETTING VMROOT MAY BLOW UP makefs (core dump)
-DESTDIR=$mount_point
-#DESTDIR=$fake_obj_dir
-SWAPSIZE=1g
+DESTDIR="$mount_point"
+#DESTDIR="$fake_obj_dir"
+SWAPSIZE="$vm_swap_size"
 
 . ../tools/vmimage.subr
 vm_create_disk
