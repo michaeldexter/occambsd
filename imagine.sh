@@ -2,7 +2,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright 2022, 2023, 2024 Michael Dexter
+# Copyright 2022, 2023, 2024, 2025 Michael Dexter
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.5.5beta
+# Version v.0.5.6
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -173,8 +173,8 @@ f_usage() {
 	echo "-z (Use a 14.0-RELEASE or newer root on ZFS image)"
 	echo "-Z <new zpool name>"
 	echo "-A (Set the ZFS ARC to only cache metadata)"
-	echo "-x <autounattend.xml file for Windows> (Requires -i and -g)"
-	echo "-i <Installation ISO file for Windows> (Requires -x and -g)"
+	echo "-x <autounattend.xml file for Windows> (Requires -i)"
+	echo "-i <Full path to installation ISO file for Windows> (Requires -x)"
 	echo
 	exit 0
 }
@@ -220,6 +220,8 @@ root_part=""
 zpool_name=""
 zpool_rename=0
 zpool_newname=""
+zroot_in_use=0
+zpool_newname_in_use=0
 zfs_arc_metadata=0
 label_id1=100			# We could let the user override these with -l
 label_id2=200			# and -L to avoid conficts
@@ -230,6 +232,7 @@ target_dev2=""
 target_type=""
 target_path=""
 target_prefix=""
+iso_prefix=""
 target_size=""
 mirror_path=""
 mirror_size=""
@@ -384,7 +387,7 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvx:i: opts ; do
 		boot_scripts=1
 		# DEBUG Refactor: This might be more than we need
 		release_name="windows"
-		release_input="windows" # Mutually exclusive  with release_input
+		release_input="windows" # Mutually exclusive with release_input
 		framebuffer_required=1
 		target_type="oneboot"
 		fs_type="ntfs"
@@ -394,6 +397,9 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvx:i: opts ; do
 		iso_file="$OPTARG"
 		[ -r "$iso_file" ] || \
 			{ echo "$iso_file missing or unreadable" ; exit 1 ; }
+		iso_prefix=$( printf %.1s "$iso_file" )
+		[ "$iso_prefix" = "/" ] || \
+		{ echo "ISO must be prefixed with a full path" ; exit 1 ; }
 		target_type="oneboot"
 	;;
 
@@ -410,8 +416,10 @@ done
 if [ "$target_prefix" = "/dev/" ] ; then
 	[ -c "$target_input" ] || { echo "$target_input not found" ; exit 1 ; }
 	if [ "$force" = 0 ] ; then
-		echo "WARNING! Writing to $target_input !"
+		echo ; echo "WARNING! Writing to $target_input !" ; echo
 		diskinfo -v $target_input
+		gpart show $target_input
+		echo ; echo "WARNING! Writing to $target_input !" ; echo
 		echo -n "Continue? (y/n): " ; read confirmation
 		[ "$confirmation" = "y" ] || exit 0
 	fi
@@ -422,6 +430,8 @@ if [ "$mirror_path" ] || [ "$mirror_path" = "img" ] ; then
 	if [ "$force" = 0 ] ; then
 		echo "WARNING! Writing to $mirror_path !"
 		diskinfo -v $mirror_path
+		gpart show $mirror_path
+		echo ; echo "WARNING! Writing to $mirror_path !" ; echo
 		echo -n "Continue? (y/n): " ; read confirmation2
 		[ "$confirmation2" = "y" ] || exit 0
 	fi
@@ -461,20 +471,16 @@ fi
 # TESTS - FAIL EARLY #
 ######################
 
-# This test gives a false positive with -t and -T
-#if [ "$zpool_newname" ] || [ "$mirror_path" ] ; then
-#	# A mirror path could give a false positive but better safe than sorry
-#	zpool get name $zpool_newname > /dev/null 2>&1 && \
-#{ echo zpool $zpool_newname in use and will conflict - use -Z ; exit 1 ; }
-#fi
-
 if [ "$target_prefix" = "/dev/" ] ; then
 	[ "$vmdk" = 0 ] || { echo "-v does not support devices" ; exit 1 ; }
 fi
 
 if [ "$xml_file" ] ; then
 	[ "$iso_file" ] || { echo "-x requires -i" ; exit 1 ; }
-	[ "$grow_size" ] || { echo "-x requires -g" ; exit 1 ; }
+	if [ "$target_type" = "img" ] ; then
+		[ "$grow_size" ] || \
+			{ echo "-x without -t requires -g" ; exit 1 ; }
+	fi
 	[ "$include_src" = 0 ] || { echo "-s not supported with -x" ; exit 1 ; }
 	# Disable this as a second boot does the installation
 	grow_required=0
@@ -851,6 +857,21 @@ else # Input is a path to an image or invalid
 
 fi # End -t TARGET HEAVY LIFTING
 
+
+# Test for default and requested zpool name collisions - must be post-cleanse
+if [ "$fs_type" = "zfs" ] ; then
+	zpool get name zroot > /dev/null 2>&1 && zroot_in_use=1
+	[ "$zroot_in_use" = 1 -a "$zpool_rename" = 0 ] && \
+	{ echo zpool zroot in use and will conflict - use -Z ; exit 1 ; }
+
+	if [ -n "$zpool_newname" ] ; then
+		zpool get name $zpool_newname > /dev/null 2>&1 && \
+			zpool_newname_in_use=1
+	fi
+
+	[ "$zpool_newname_in_use" = 1 -a "$zpool_rename" = 0 ] && \
+{ echo zpool $zpool_newname in use and will conflict - use -Z ; exit 1 ; }
+fi
 
 # grow_required=1 could have been set by target_type="dev"
 # Test is regardless of where it was set
@@ -1229,7 +1250,7 @@ root_part="$( gpart show $target_dev | grep $root_fs | awk '{print $3}' )"
 root_dev="${target_dev}p${root_part}"
 
 	if [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
-		echo ; echo Obtaining zpool guid from $root_dev
+		echo ; echo Obtaining zpool name from $root_dev
 zpool_name=$( zdb -l $root_dev | grep " name:" | awk '{print $2}' | tr -d "'" )
 
 		echo ; echo Obtaining zpool guid from $root_dev
@@ -1355,7 +1376,8 @@ fi # End grow_required
 #if [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
 if [ "$fs_type" = "zfs" -a "$attachment_required" = 1 ] ; then
 
-# Save much potential headache: plan for rootfs1 and rootfs2 being on the host
+# Defaults: bootfs efiesp|efiboot swapfs rootfs
+# Save much potential headache: plan for rootfs0 and rootfs1 being on the host
 # and always relabling the partitions if:
 # -g Growing - attachement required/relabel required
 # -Z Renaming - attachment required/relabel required
@@ -1445,6 +1467,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 			status=progress conv=sync || \
 				{ echo "MBR and GPT dd failed" ; exit 1 ; }
 
+		echo
 		echo Recovering the partition table - not using 'gpart backup'
 		gpart recover $target_dev2 || \
 			{ echo "gpart recover failed" ; exit 1 ; }
@@ -1470,7 +1493,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 			status=progress conv=sync || \
 				{ echo "p${scheme} dd failed" ; exit 1 ; }
 
-		echo Mirroring the second partition
+		echo ; echo Mirroring the second partition
 #		dd if=${target_dev}p2 of=${target_dev2}p2 bs=512 \
 		dd if=${target_dev}${scheme}2 of=${target_dev2}${scheme}2 \
 			status=progress conv=sync || \
@@ -1483,6 +1506,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		zpool import -o autoexpand=on -N -f \
 		-d /dev/gpt/rootfs$label_id1 $zpool_guid $zpool_newname || \
 			{ echo "$zpool_newname failed to import" ; exit 1 ; }
+		zpool_name="$zpool_newname"
 		zpool status -v $zpool_name
 
 		zpool online -e $zpool_newname /dev/gpt/rootfs$label_id1 || \
@@ -1493,11 +1517,12 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 	elif [ "$zpool_rename" = 1 ] ; then
 		echo ; echo Importing zpool with new name $zpool_newname
 		zpool import -N -f \
-			-d /dev/gpt/rootfs$label_id1 $zpool_guid $zpool_newname || \
+		-d /dev/gpt/rootfs$label_id1 $zpool_guid $zpool_newname || \
 			{ echo "$zpool_newname failed to import" ; exit 1 ; }
+		zpool_name="$zpool_newname"
 		zpool status -v $zpool_name
 
-		zpool_name="$zpool_newname"
+# DEBUG: BUG! /dev/gpt/rootfs$label_id1 FAILS ON OMNIOS!
 
 	elif [ "$grow_required" = 1 ] ; then
 		echo ; echo Importing and expanding zpool $zpool_name
@@ -1541,7 +1566,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 
 		# Renaming the pool may find "zroot" despite trying labelclear
 		zpool attach -f $zpool_name \
-			/dev/gpt/rootfs$label_id1 /dev/gpt/rootfs$label_id1 || \
+			/dev/gpt/rootfs$label_id1 /dev/gpt/rootfs$label_id2 || \
 			{ echo "zpool device attachment failed" ; exit 1 ; }
 		zpool status -v $zpool_name
 
@@ -1611,16 +1636,21 @@ if [ "$mount_required" = 1 ] ; then
 			{ echo "$zpool_name failed to import" ; exit 1 ; }
 		zpool status -v $zpool_name
 
-		echo ; echo Modifying the fstab 
-		# This is a sin and why TrueNAS uses UUIDs
-		mv ${mount_point:?}/etc/fstab \
-			${mount_point:?}/etc/fstab.original
+		if [ -f ${mount_point:?}/etc/fstab ] ; then
+			echo ; echo Modifying the fstab 
+			# This is a sin and why TrueNAS uses UUIDs
+			mv ${mount_point:?}/etc/fstab \
+				${mount_point:?}/etc/fstab.original
+		fi
+
 		touch ${mount_point:?}/etc/fstab
+
 		# YEP, we want an auto-swapper and maybe
 		# a utility to mount the EFI partition for updating
 
 		if [ $zpool_newname ] ; then
 			# Must be double quotes for variable expansion
+# DEBUG: sed: -I or -i may not be used with stdin
 			sed -i -e "s/zroot/$zpool_newname/g" 
 				${mount_point:?}/etc/rc.conf
 		fi
@@ -1747,11 +1777,11 @@ if [ "$boot_scripts" = 1 ] ; then
 
 if [ -n "$mirror_path" ] ; then
 	case "$target_type" in
-		img|path)
+	img|path)
 	storage_string="-s 2,nvme,$vm_device -s 3,nvme,${target_path}.mirror"
 	;;
 	dev)
-	storage_string="-s 2,nvme,$vm_device -s 3,nvme,$target_dev2"
+		storage_string="-s 2,nvme,$vm_device -s 3,nvme,$target_dev2"
 	;;
 	*)
 		echo Something went wrong
@@ -1798,6 +1828,11 @@ HERE
 		qemu_script="qemu-${release_input}-${hw_platform}-${fs_type}.sh"
 			fi
 
+# DEBUG: QEMU needs help when used with hardware devices
+#+ qemu_script=qemu-/tmp/propagate/src/release/scripts/vm.zfs.img-amd64-zfs.sh
+#+ storage_string='-drive file=/dev/da4,format=raw -drive file=.mirror,format=raw'
+#imagine.sh: cannot create /root/imagine-work/qemu-/tmp/propagate/src/release/scripts/vm.zfs.img-amd64-zfs.sh: No such file or directory
+
 if [ -n "$mirror_path" ] ; then
 	storage_string="-drive file=${vm_device},format=raw -drive file=${target_path}.mirror,format=raw"
 else
@@ -1822,6 +1857,12 @@ HERE
 #######
 # XEN #
 #######
+
+# DEBUG: Need help with mirrored hardware devices
+# imagine.sh: cannot create /root/imagine-work/xen-/tmp/propagate/src/release/scripts/vm.zfs.img-amd64-zfs.cfg: No such file or directory
+#imagine.sh: cannot create /root/imagine-work/xen-/tmp/propagate/src/release/scripts/vm.zfs.img-amd64-zfs.sh: No such file or directory
+#imagine.sh: cannot create /root/imagine-work/xen-/tmp/propagate/src/release/scripts/vm.zfs.img-amd64-zfs.sh: No such file or directory
+
 
 # Should be conditional to not generate if mirrored
 # Solution appears to be two comma-separated strings in "disk"
@@ -1950,6 +1991,8 @@ if [ "$keep_mounted" = 0 ] ; then
 	elif [ "$fs_type" = "zfs" ] ; then
 
 			echo ; echo "Exporting $zpool_name"
+			echo ; echo Sleeping 10 seconds to be safe
+			sleep 10
 			zpool export $zpool_name || \
 				{ echo "zpool export failed" ; exit 1 ; }
 		fi
@@ -1987,5 +2030,12 @@ else
 		fi
 	fi
 fi # End keep_mounted
+
+# Could be very helpful when round-tripping disk images and physical devices
+if [ "$target_type" = "img" -o "$target_type" = "path" ] ; then
+	echo ; echo "Saving off image size as ${target_path}.size"
+	stat -f %z $target_path > ${target_path}.size || \
+		{ echo image size stat failed ; exit 1 ; }
+fi
 
 exit 0
