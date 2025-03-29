@@ -584,7 +584,7 @@ if [ "$generate_jail" = "1" ] ; then
 
 	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" make -C "$src_dir" \
 	installworld SRCCONF="$src_conf" \
-	DESTDIR="${work_dir}/roow/" \
+	DESTDIR="${work_dir}/root/" \
 	NO_FSCHG=YES \
 		> "$log_dir/install-jail-world.log" 2>&1
 
