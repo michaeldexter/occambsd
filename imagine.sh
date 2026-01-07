@@ -2,7 +2,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright 2022, 2023, 2024, 2025 Michael Dexter
+# Copyright 2022, 2023, 2024, 2025, 2026 Michael Dexter
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.5.6
+# Version v.0.5.9
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -108,6 +108,8 @@
 # imagine.sh -z is consistent in how it relabels partitions, making for a
 # conflict if you try to run imagine.sh from an imagine.sh destination.
 # Workaround: Us a UFS image to install to a ZFS one.
+# Remember that FreeBSD Xen guests require these loader.conf entries for the serial console:
+# console="comconsole"
 
 
 # EXAMPLES
@@ -170,6 +172,7 @@ f_usage() {
 	echo "-M <Mount point> (Default: /media)"
 	echo "-V (Generate VMDK image wrapper)"
 	echo "-v (Generate VM boot scripts)"
+	echo "-n (Include tap0 e1000 network device in VM boot scripts)"
 	echo "-z (Use a 14.0-RELEASE or newer root on ZFS image)"
 	echo "-Z <new zpool name>"
 	echo "-A (Set the ZFS ARC to only cache metadata)"
@@ -198,15 +201,16 @@ release_image_file=""
 #release_image_xz=""
 release_branch=""
 fs_type="ufs"
-omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151052b.cloud.raw.zst"
+#omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151054.cloud.raw.zst"
+omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151056/omnios-r151056.cloud.raw.zst"
 
-debian_amd64_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-nocloud-amd64.raw"
-debian_arm64_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-nocloud-arm64.raw"
-#debian_amd64_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.raw"
-#debian_arm64_url="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-arm64.raw"
+debian_amd64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-amd64.raw"
+debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-arm64.raw"
+#debian_amd64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.raw"
+#debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.raw"
 
-routeros_amd64_url="https://download.mikrotik.com/routeros/7.15.3/chr-7.15.3.img.zip"
-routeros_arm64_url="https://download.mikrotik.com/routeros/7.15.3/chr-7.15.3-arm64.img.zip"
+routeros_amd64_url="https://download.mikrotik.com/routeros/7.20.6/chr-7.20.6.img.zip"
+routeros_arm64_url="https://download.mikrotik.com/routeros/7.20.6/chr-7.20.6-arm64.img.zip"
 
 memtest86_url="https://www.memtest86.com/downloads/memtest86-usb.zip"
 
@@ -247,7 +251,11 @@ xml_file=""
 iso_file=""
 vmdk=0
 boot_scripts=0
+#vm_networking=0
 vm_device=""
+fbuf_string=""
+storage_string=""
+network_string=""
 vm_name="vm0"			# Embedded Default
 vm_ram="4096"			# Embedded Default
 vm_cores=1			# Embedded Default
@@ -264,7 +272,7 @@ md_id=42			# Default for easier cleanup if interrupted
 # USER INPUT AND VARIABLE OVERRIDES #
 #####################################
 
-while getopts O:a:r:zZ:At:T:ofg:smMVvx:i: opts ; do
+while getopts O:a:r:zZ:At:T:ofg:smMVvnx:i: opts ; do
 	case $opts in
 	O)
 		work_dir="$OPTARG"
@@ -319,6 +327,10 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvx:i: opts ; do
 	v)
 		# root required to execute bhyve and Xen boot scripts
 		boot_scripts=1
+	;;
+
+	n)
+		network_string="-s 4,e1000,tap0"
 	;;
 
 	g)
@@ -389,7 +401,6 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvx:i: opts ; do
 		release_name="windows"
 		release_input="windows" # Mutually exclusive with release_input
 		framebuffer_required=1
-		target_type="oneboot"
 		fs_type="ntfs"
 	;;
 
@@ -400,7 +411,6 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvx:i: opts ; do
 		iso_prefix=$( printf %.1s "$iso_file" )
 		[ "$iso_prefix" = "/" ] || \
 		{ echo "ISO must be prefixed with a full path" ; exit 1 ; }
-		target_type="oneboot"
 	;;
 
 	*)
@@ -477,15 +487,20 @@ fi
 
 if [ "$xml_file" ] ; then
 	[ "$iso_file" ] || { echo "-x requires -i" ; exit 1 ; }
-	if [ "$target_type" = "img" ] ; then
+
+	# Default is img
+	if [ "$target_input" = "img" ] ; then
 		[ "$grow_size" ] || \
 			{ echo "-x without -t requires -g" ; exit 1 ; }
 	fi
 	[ "$include_src" = 0 ] || { echo "-s not supported with -x" ; exit 1 ; }
 	# Disable this as a second boot does the installation
 	grow_required=0
-	[ "$target_input" ] || \
-		target_input="${work_dir}/windows-${hw_platform}-${fs_type}.raw"
+
+# Pointless until further notice
+	# Default not overridden with -t
+#	[ "$target_input" = "img" ] || \
+#		target_path="${work_dir}/windows-${hw_platform}-${fs_type}.raw"
 fi
 
 if [ "$iso_file" ] ; then
@@ -703,7 +718,7 @@ elif [ "$release_input" = "routeros" ] ; then
 # CUSTOM IMAGE #
 ################
 
-elif [ -f "$release_input" ] ; then # if a path to an image
+elif [ -f "$release_input" ] ; then # if a path to an arbitrary image
 
 	# Arbitrary image may have arbitrary sources - manual copy needed
 	[ "$include_src" = 1 ] && \
@@ -714,7 +729,7 @@ elif [ -f "$release_input" ] ; then # if a path to an image
 	release_image_file="$release_input"
 	custom_image_file="$( basename $release_input )"
 	release_name="custom"
-	release_type="raw"
+	release_type="img"
 	# Note that the vmrun.sh "file" test for boot blocks
 
 
@@ -784,39 +799,8 @@ fi # End -r RELEASE HEAVY LIFTING
 # a path to a file
 
 echo ; echo Status: Beginning -t target handling
-if [ "$target_input" = "img" ] ; then
-	target_type="img"
 
-	[ -d "$work_dir" ] || mkdir -p "$work_dir"
-	[ -d "$work_dir" ] || { echo "mkdir -p $work_dir failed" ; exit 1 ; }
-
-	if [ -n "$mirror_path" ] ; then
-		[ "$mirror_path" = "img" ] || \
-			{ echo "-t and -T must both be images" ; exit 1 ; }
-	fi
-
-	if [ "$release_name" = "omnios" ] ; then
-		fs_type="zfs"
-		target_path="${work_dir}/omnios-${hw_platform}-${fs_type}.raw"
-	elif [ "$release_name" = "debian" ] ; then
-		fs_type="ext4"
-		target_path="${work_dir}/debian-${hw_platform}-${fs_type}.raw"
-	elif [ "$release_name" = "routeros" ] ; then
-		fs_type="ext4"
-		target_path="${work_dir}/routeros-${hw_platform}-${fs_type}.raw"
-	elif [ "$release_name" = "windows" ] ; then
-		fs_type="ntfs"
-		target_path="${work_dir}/windows-${hw_platform}-${fs_type}.raw"
-	elif [ "$release_name" = "custom" ] ; then
-		fs_type=""
-		target_path="${work_dir}/$custom_image_file"
-	else
-		# Challenge: FreeBSD does not have a notion of release_name
-		# TEST with "path" because that might get inserted
-		target_path="${work_dir}/FreeBSD-${hw_platform}-${release_input}-${fs_type}.raw"
-	fi
-
-elif [ "$target_prefix" = "/dev/" ] ; then
+if [ "$target_prefix" = "/dev/" ] ; then
 
 	grow_required=1
 	target_type="dev"
@@ -842,18 +826,56 @@ elif [ "$target_prefix" = "/dev/" ] ; then
 
 	# After the size comparison in case the user backs out
 	f_cleanse_device $target_dev
+else
+	target_type="img"
 
-elif [ "$target_type" = "oneboot" ] ; then
-	echo "Preparing for installation upon oneboot"
-else # Input is a path to an image or invalid
+# Used for VM boot scripts but there could be a scenario where release is an
+# arbitrary image and the target is a hardware device:  work_dir is not needed
+
+	[ -d "$work_dir" ] || mkdir -p "$work_dir"
+	[ -d "$work_dir" ] || { echo "mkdir -p $work_dir failed" ; exit 1 ; }
+
+	if [ -n "$mirror_path" ] ; then
+		[ "$mirror_path" = "img" ] || \
+			{ echo "-t and -T must both be images" ; exit 1 ; }
+	fi
+
+	if [ "$release_name" = "omnios" ] ; then
+		fs_type="zfs"
+# If not a device and not overridden
+		[ "$target_input" = "img" ] && \
+		target_path="${work_dir}/omnios-${hw_platform}-${fs_type}.raw"
+	elif [ "$release_name" = "debian" ] ; then
+		fs_type="ext4"
+		[ "$target_input" = "img" ] && \
+		target_path="${work_dir}/debian-${hw_platform}-${fs_type}.raw"
+	elif [ "$release_name" = "routeros" ] ; then
+		fs_type="ext4"
+		[ "$target_input" = "img" ] && \
+		target_path="${work_dir}/routeros-${hw_platform}-${fs_type}.raw"
+	elif [ "$release_name" = "windows" ] ; then
+		fs_type="ntfs"
+		[ "$target_input" = "img" ] && \
+		target_path="${work_dir}/windows-${hw_platform}-${fs_type}.raw"
+	elif [ "$release_name" = "custom" ] ; then
+		fs_type=""
+		[ "$target_input" = "img" ] && \
+		target_path="${work_dir}/$custom_image_file"
+	else
+		# Challenge: FreeBSD does not have a notion of release_name
+		# TEST with "path" because that might get inserted
+		[ "$target_input" = "img" ] && \
+		target_path="${work_dir}/FreeBSD-${hw_platform}-${release_input}-${fs_type}.raw"
+	fi
+
 	# Validate parent directory
-	[ -d $( dirname "$target_input" ) ] || \
+	[ -d $( dirname "$target_path" ) ] || \
 		{ echo "-t directory path does not exist" ; exit 1 ; }
-	[ -w $( dirname "$target_input" ) ] || \
+	[ -w $( dirname "$target_path" ) ] || \
 		{ echo "-t directory path is not writable" ; exit 1 ; }
-	# Not true if Windows...
-	target_type="path"
-	target_path="$target_input"
+
+	# Overridden by user
+	[ "$target_input" = "img" ] || target_path="$target_input"
 
 fi # End -t TARGET HEAVY LIFTING
 
@@ -975,7 +997,7 @@ if [ "$xml_file" ] && [ "$iso_file" ] ; then
 #########
 
 	# Used here and below
-	fbuf_string="-s 29,fbuf,tcp=0.0.0.0:5900,w=1024,h=768 -s 30,xhci,tablet"
+	fbuf_string="-s 29,fbuf,tcp=0.0.0.0:5999,w=1024,h=768 -s 30,xhci,tablet"
 	cat << HERE > $work_dir/bhyve-windows-iso.sh
 #!/bin/sh
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
@@ -991,8 +1013,8 @@ HERE
 
 	# Note the >> to not overwrite
 	cat << HERE >> $work_dir/bhyve-windows-iso.sh
-echo ; echo Removing previous $vm_device if present
-[ -f $vm_device ] && rm $vm_device
+echo ; echo Removing previous $vm_path if present
+[ -f $vm_path ] && rm $vm_path
 
 echo ; echo truncating ${grow_size}GB $vm_device
 truncate -s ${grow_size}G $vm_device
@@ -1010,6 +1032,7 @@ bhyve -c 2 -m $vm_ram -H -A -D \\
 	-s 0,hostbridge \\
 	-s 1,ahci-cd,$work_dir/windows/windows.iso \\
 	-s 2,nvme,$vm_device \\
+	$network_string \\
         $fbuf_string \\
 	-s 31,lpc \\
 	$vm_name
@@ -1018,7 +1041,7 @@ sleep 2
 bhyvectl --destroy --vm=$vm_name
 HERE
 
-	echo Note: bhyve-windows-iso.sh
+	echo Note: $work_dir/bhyve-windows-iso.sh
 
 
 ########
@@ -1060,9 +1083,9 @@ HERE
 -usbdevice tablet
 HERE
 
-	echo Note: qemu-windows-iso.sh
+	echo Note: $work_dir/qemu-windows-iso.sh
 
-	echo ; echo "Note $work_dir/bhyve|qemu-windows-iso.sh to boot the VM once for installation, which will be on 0.0.0.0:5900 for VNC attachment for monitoring."
+	echo ; echo "Note $work_dir/bhyve|qemu-windows-iso.sh to boot the VM once for installation, which will be on 0.0.0.0:5999 for VNC attachment for monitoring."
 
 	echo ; echo "Boot the resulting VM with the standard bhyve boot script or your utility of choice. The second boot will apply the configuration and reboot, making it ready for further use."
 
@@ -1092,24 +1115,24 @@ fi
 echo ; echo Status: Entering case target_type for imaging
 
 case "$target_type" in
-	oneboot)
-		echo "Preparing for installation upon oneboot"
-		;;
-
-	img|path)
+	img)
 		# Delete existing target image if present
-		[ -f "$target_path" ] && rm "$target_path"
+		 [ -f "$target_path" ] && rm "$target_path"
 
-		# A cp -p would be ideal for unmodified images
-		f_extract "$release_image_file" > "$target_path" || \
+		if [ "$release_input" = "windows" ] ; then
+			echo "Preparing Windows ISO and boot script"
+		else
+			# A cp -p would be ideal for unmodified images
+			f_extract "$release_image_file" > "$target_path" || \
 		{ echo "$release_image_file extraction failed" ; exit 1 ; }
+		fi
 
 # Might not have the ending .raw? .img?
-		;; # End image|path
+		;; # End image
 
 	dev)
 		if [ "$xml_file" ] ; then
-			echo "Still preparing for installation upon oneboot"
+			echo "Preparing Windows ISO and boot script"
 		else
 			if [ "$release_name" = "custom" ] ; then
 				# Used for "path" release input
@@ -1172,7 +1195,7 @@ esac
 echo ; echo Status: Checking attachment_required
 if [ "$attachment_required" = "1" ] ; then
 
-	if [ "$target_type" = "img" -o "$target_type" = "path" ] ; then
+	if [ "$target_type" = "img" ] ; then
 
 		mdconfig -lv | grep -q "md$md_id" > /dev/null 2>&1 && \
 { echo "md$md_id must be detached with mdconfig -du $md_id" ; exit 1 ; }
@@ -1336,7 +1359,7 @@ echo ; echo Status: Checking grow_required
 if [ "$grow_required" = 1 ] ; then
 
 	if [ "$xml_file" ] ; then
-		echo "Still preparing for installation upon oneboot"
+		echo "Preparing Windows ISO and boot script"
 	else
 		echo ; echo "Resizing $root_dev with gpart"
 		# Should be file system-agnostic
@@ -1636,14 +1659,24 @@ if [ "$mount_required" = 1 ] ; then
 			{ echo "$zpool_name failed to import" ; exit 1 ; }
 		zpool status -v $zpool_name
 
+		# Might not have been mouting the root dataset which is
+		# set to canmount=noauto
+
+		zfs mount ${zpool_name}/ROOT/default || \
+			{ echo "${zpool_name}/ROOT/default failed to mount" ; exit 1 ; }
+
+		echo DEBUG listing the mount point ${mount_point:?}
+		ls ${mount_point:?}
+
 		if [ -f ${mount_point:?}/etc/fstab ] ; then
 			echo ; echo Modifying the fstab 
 			# This is a sin and why TrueNAS uses UUIDs
 			mv ${mount_point:?}/etc/fstab \
 				${mount_point:?}/etc/fstab.original
+		else
+			touch ${mount_point:?}/etc/fstab
 		fi
 
-		touch ${mount_point:?}/etc/fstab
 
 		# YEP, we want an auto-swapper and maybe
 		# a utility to mount the EFI partition for updating
@@ -1752,10 +1785,10 @@ if [ "$boot_scripts" = 1 ] ; then
 		else
 			vm_device="$target_path"
 		fi
-	elif [ -n "$target_dev" ] ; then
+	elif [ "$target_dev" ] ; then
 		vm_device="$target_dev"
-	elif [ "$target_type" = "oneboot" ] ; then
-		echo "Preparing for installation upon oneboot"
+	elif [ "$release_name" = "windows" ] ; then
+		echo "Preparing Windows ISO and boot script"
 	else
 		echo "Something went wrong"
 		exit 1
@@ -1777,7 +1810,7 @@ if [ "$boot_scripts" = 1 ] ; then
 
 if [ -n "$mirror_path" ] ; then
 	case "$target_type" in
-	img|path)
+	img)
 	storage_string="-s 2,nvme,$vm_device -s 3,nvme,${target_path}.mirror"
 	;;
 	dev)
@@ -1791,6 +1824,9 @@ if [ -n "$mirror_path" ] ; then
 else
 	storage_string="-s 2,nvme,$vm_device"
 fi
+
+#if [ "$vm_networking" = "1" ] ; then
+#fi
 
 			cat << HERE > "${work_dir}/$bhyve_script"
 #!/bin/sh
@@ -1806,12 +1842,13 @@ bhyve -c $vm_cores -m $vm_ram -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
 	-l bootrom,/usr/local/share/uefi-firmware/BHYVE_UEFI.fd \\
 	$storage_string \\
         $fbuf_string \\
+	$network_string \\
         $vm_name
 
 # Devices to consider:
 
-# -s 3,virtio-net,tap0 \\
-# -s 3,e1000,tap0 \\
+# -s 4,virtio-net,tap0 \\
+# -s 4,e1000,tap0 \\
 
 sleep 2
 bhyvectl --destroy --vm=$vm_name
@@ -1822,7 +1859,8 @@ HERE
 ########
 # QEMU #
 ########
-			if [ "$target_type" = "path" ] ; then
+
+			if [ "$custom_image_file" ] ; then
 				qemu_script="qemu-${custom_image_file}.sh"
 			else
 		qemu_script="qemu-${release_input}-${hw_platform}-${fs_type}.sh"
@@ -1867,7 +1905,9 @@ HERE
 # Should be conditional to not generate if mirrored
 # Solution appears to be two comma-separated strings in "disk"
 
-			if [ "$target_type" = "path" ] ; then
+
+# DEBUG YOU SURE THIS IS A THING?
+			if [ "$custom_image_file" ] ; then
 				qemu_script="qemu-${custom_image_file}.sh"
 				xen_cfg="xen-${custom_image_file}.cfg"
 				xen_script="xen-${custom_image_file}.sh"
@@ -1925,8 +1965,8 @@ bhyve -c $vm_cores -m $vm_ram -o console=stdio \\
 
 # Devices to consider:
 
-# -s 3,virtio-net,tap0 \\
-# -s 3,e1000,tap0 \\
+# -s 4,virtio-net,tap0 \\
+# -s 4,e1000,tap0 \\
 
 sleep 2
 bhyvectl --destroy --vm=$vm_name
@@ -2000,7 +2040,7 @@ if [ "$keep_mounted" = 0 ] ; then
 	fi # End mount_required
 
 	if [ "$attachment_required" = 1 ] ; then
-		if [ "$target_type" = "img" -o "$target_type" = "path" ] ; then
+		if [ "$target_type" = "img" ] ; then
 			echo ; echo "Destroying $target_dev"
 			mdconfig -du $md_id || \
 	{ echo "$target_dev mdconfig -du failed" ; mdconfig -lv ; exit 1 ; }
@@ -2023,7 +2063,7 @@ else
 		echo ; echo "Run 'zpool export $zpool_name' when finished"
 	fi
 
-	if [ "$target_type" = "img" -o "$target_type" = "path" ] ; then
+	if [ "$target_type" = "img" ] ; then
 		echo "Run 'mdconfig -du $md_id' when finished"
 		if [ -n "$mirror_path" ] ; then
 			echo ; echo "Run 'mdconfig -du $md_id2' when finished"
@@ -2032,10 +2072,12 @@ else
 fi # End keep_mounted
 
 # Could be very helpful when round-tripping disk images and physical devices
-if [ "$target_type" = "img" -o "$target_type" = "path" ] ; then
-	echo ; echo "Saving off image size as ${target_path}.size"
-	stat -f %z $target_path > ${target_path}.size || \
-		{ echo image size stat failed ; exit 1 ; }
+if [ ! "$release_name" = "windows" ] ; then
+	if [ "$target_type" = "img" ] ; then
+		echo ; echo "Saving off image size as ${target_path}.size"
+		stat -f %z $target_path > ${target_path}.size || \
+			{ echo image size stat failed ; exit 1 ; }
+	fi
 fi
 
 exit 0
