@@ -4,7 +4,19 @@ target="amd64"
 target_arch="amd64"
 cpu="HAMMER"
 
-build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_EFI WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_DYNAMICROOT WITHOUT_FP_LIBC WITHOUT_VI WITHOUT_CRYPT WITHOUT_OPENSSL WITHOUT_MAIL WITHOUT_DMAGENT WITHOUT_MAILWRAPPER WITHOUT_SENDMAIL WITHOUT_CASPER WITHOUT_CAPSICUM"
+build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_BOOT WITHOUT_LOADER_LUA WITHOUT_LOCALES WITHOUT_ZONEINFO WITHOUT_DYNAMICROOT WITHOUT_FP_LIBC WITHOUT_VI WITHOUT_CRYPT WITHOUT_OPENSSL WITHOUT_MAIL WITHOUT_DMAGENT WITHOUT_MAILWRAPPER WITHOUT_SENDMAIL WITHOUT_CASPER WITHOUT_CAPSICUM"
+# WITHOUT_EFI
+
+#--- all_subdir_stand/efi ---
+#SOURCE_DATE_EPOCH=1704067200  objcopy -j .peheader -j .text -j .sdata -j .data  -j .dynamic -j .dynsym -j .rel.dyn  -j .rela.dyn -j .reloc -j .eh_frame  --output-target=efi-app-x86_64 boot1.sym boot1.efi
+#objcopy: error: invalid output format: 'efi-app-x86_64'
+#*** [boot1.efi] Error code 1
+
+#make[5]: stopped making "all" in /usr/src/stand/efi/boot1
+#make[5]: 1 error
+
+
+
 
 # 14.0R VM-IMAGE creation requires /usr/bin/newaliases and /usr/libexec/dma
 

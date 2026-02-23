@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.5.9
+# Version v.0.99
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -141,7 +141,7 @@
 
 # To generate a 10GB RISC-V system with root-on-ZFS and a QEMU boot script:
 #
-# sh imagine.sh -a riscv -r 14.0-RELEASE -z -g 10 -b
+# sh imagine.sh -a riscv -r 15.0-RELEASE -z -g 10 -b
 #
 # Add '-V' to generate a VMDK that is VMware compatible, because you can
 
@@ -152,30 +152,35 @@
 
 f_usage() {
 	echo ; echo "USAGE:"
-	echo "-O <output directory> (Default: /root/imagine-work)"
+	echo "-O <output directory> (Default: ~/imagine-work)"
 	echo "-a <architecture> [ amd64 | arm64 | i386 | riscv ] (Default: Host)"
-	echo "-r [ obj | /path/to/image | <version> | omnios | debian ] (Required)"
+	echo "-r [ obj | /path/to/image | <version> | omnios | debian ]"
 
 # HOW ARE obj and path any different? ONE TRIGGERS SRC - obj calculates the
 # object directory path, for better or for worse
 
 	echo "obj i.e. /usr/obj/usr/src/<target>.<target_arch>/release/vm.ufs.raw"
 	echo "/path/to/image.raw for an existing image"
-	echo "<version> i.e. 14.0-RELEASE | 15.0-CURRENT | 15.0-ALPHAn|BETAn|RCn"
-	echo "-o (Offline mode to re-use fetched releases and src.txz)"
+	echo "<version> i.e. 15.0-RELEASE | 16.0-CURRENT | 15.0-ALPHAn|BETAn|RCn"
+	echo "(Default: Host)"
+	echo "-o (Offline mode to re-use fetched releases)"
 	echo "-t <target> [ img | /dev/<device> | /path/myimg ] (Default: img)"
 	echo "-T <mirror target> [ img | /dev/<device> ]"
-	echo "-f (FORCE imaging to a device without asking)"
+	echo "-f (FORCE imaging to a device without prompting for confirmation)"
 	echo "-g <gigabytes> (grow image to gigabytes i.e. 10)"
-	echo "-s (Include src.txz or /usr/src as appropriate)"
+	echo "-p \"<packages>\" (Quoted space-separated list)"
+	echo "-c (Copy cached packages from the host to the target)"
+	echo "-C (Clean package cache after installation)"
+	echo "-u (Add root/root and freebsd/freebsd users and enable sshd)"
+	echo "-d (Enable crash dumping)"
 	echo "-m (Mount image and keep mounted for further configuration)"
 	echo "-M <Mount point> (Default: /media)"
 	echo "-V (Generate VMDK image wrapper)"
 	echo "-v (Generate VM boot scripts)"
 	echo "-n (Include tap0 e1000 network device in VM boot scripts)"
-	echo "-z (Use a 14.0-RELEASE or newer root on ZFS image)"
-	echo "-Z <new zpool name>"
-	echo "-A (Set the ZFS ARC to only cache metadata)"
+	echo "-U (Use a UFS image rather than ZFS image)"
+	echo "-Z <new zpool name if conflicting i.e. with zroot>"
+	echo "-A (Enable ZFS ARC cache to default rather than metadata)"
 	echo "-x <autounattend.xml file for Windows> (Requires -i)"
 	echo "-i <Full path to installation ISO file for Windows> (Requires -x)"
 	echo
@@ -191,7 +196,7 @@ work_dir=~/imagine-work		# Default - fails if quoted
 hw_platform=$( uname -m )	# i.e. arm64
 cpu_arch=$( uname -p )		# i.e. aarch64
 arch_string=""
-release_input=""
+release_input=$( uname -r | cut -d "-" -f1,2 )
 offline_mode=0
 force=0
 release_type=""
@@ -200,17 +205,18 @@ release_image_url=""
 release_image_file=""
 #release_image_xz=""
 release_branch=""
-fs_type="ufs"
+fs_type="zfs"
 #omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151054.cloud.raw.zst"
 omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151056/omnios-r151056.cloud.raw.zst"
+omnios_arm64_url="https://downloads.omnios.org/media/braich/braich-151055.raw.zst"
 
 debian_amd64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-amd64.raw"
 debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-arm64.raw"
 #debian_amd64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.raw"
 #debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.raw"
 
-routeros_amd64_url="https://download.mikrotik.com/routeros/7.20.6/chr-7.20.6.img.zip"
-routeros_arm64_url="https://download.mikrotik.com/routeros/7.20.6/chr-7.20.6-arm64.img.zip"
+routeros_amd64_url="https://download.mikrotik.com/routeros/7.21/chr-7.21.img.zip"
+routeros_arm64_url="https://download.mikrotik.com/routeros/7.21/chr-7.21-arm64.img.zip"
 
 memtest86_url="https://www.memtest86.com/downloads/memtest86-usb.zip"
 
@@ -226,7 +232,7 @@ zpool_rename=0
 zpool_newname=""
 zroot_in_use=0
 zpool_newname_in_use=0
-zfs_arc_metadata=0
+zfs_arc_default=0
 label_id1=100			# We could let the user override these with -l
 label_id2=200			# and -L to avoid conficts
 #target_input="raw"		# Default not helpful if -x
@@ -243,7 +249,11 @@ mirror_size=""
 force=0
 grow_required=0
 grow_size=""
-include_src=0
+packages=""
+copy_package_cache=0
+clean_package_cache=0
+add_users=0
+enable_crash_dumping=0
 mount_required=0
 keep_mounted=0
 mount_point="/media"
@@ -272,7 +282,7 @@ md_id=42			# Default for easier cleanup if interrupted
 # USER INPUT AND VARIABLE OVERRIDES #
 #####################################
 
-while getopts O:a:r:zZ:At:T:ofg:smMVvnx:i: opts ; do
+while getopts O:a:r:ot:T:fg:p:cCudmM:VvnUZ:Ax:i: opts ; do
 	case $opts in
 	O)
 		work_dir="$OPTARG"
@@ -302,21 +312,78 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvnx:i: opts ; do
 		offline_mode=1
 	;;
 
-	z)
-		# Set for download, only modify if getting fancy
-		fs_type="zfs"
-		# Not attachment_required if only copying to an image file 
-	;;
-
 	t)
 		[ "$( id -u )" = 0 ] || { echo "Must be root" ; exit 1 ; } 
 		[ "$OPTARG" ] || f_usage
 		target_input="$OPTARG"
 		target_prefix=$( printf %.5s "$target_input" )
 	;;
+
+	T)
+		[ "$( id -u )" = 0 ] || { echo "Must be root" ; exit 1 ; } 
+		[ "$OPTARG" ] || f_usage
+		mirror_path="$OPTARG"
+		[ "$mirror_path" = "img" ] || [ -c "$mirror_path" ] || \
+			{ echo "Likely invalid -T input" ; exit 1 ; }
+		# Mounting is required for fstab modifications
+		mount_required=1
+		attachment_required=1
+	;;
+
 	f)
 		# Write to a device without prompting for confirmation
 		force=1
+	;;
+
+	g)
+		grow_required=1
+		grow_size="$OPTARG"
+		# Implied numeric validation
+		[ "$grow_size" -gt 7 ] || \
+			{ echo "-g must be a number larger than 7" ; exit 1 ; }
+		attachment_required=1
+	;;
+
+	p)
+		[ "$( id -u )" = 0 ] || { echo "Must be root" ; exit 1 ; } 
+		[ "$OPTARG" ] || f_usage
+		packages="$OPTARG"
+		grow_required=1
+		mount_required=1
+		attachment_required=1
+	;;
+
+	c)
+		copy_package_cache=1
+	;;
+
+	C)
+		clean_package_cache=1
+	;;
+
+	u)
+		add_users=1
+		mount_required=1
+		attachment_required=1
+	;;
+
+	d)
+		enable_crash_dumping=1
+		mount_required=1
+		attachment_required=1
+	;;
+
+	m)
+		mount_required=1
+		keep_mounted=1
+		attachment_required=1
+	;;
+
+	M)
+		[ "$OPTARG" ] || f_usage
+		mount_point="$OPTARG"
+		[ -d "$mount_point" ] || \
+			{ echo "Mount point $mount_point missing" ; exit 1 ; }
 	;;
 
 	V)
@@ -333,13 +400,9 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvnx:i: opts ; do
 		network_string="-s 4,e1000,tap0"
 	;;
 
-	g)
-		grow_required=1
-		grow_size="$OPTARG"
-		# Implied numeric validation
-		[ "$grow_size" -gt 7 ] || \
-			{ echo "-g must be a number larger than 7" ; exit 1 ; }
-		attachment_required=1
+	U)
+		fs_type="ufs"
+		# Not attachment_required if only copying to an image file 
 	;;
 
 	Z)
@@ -353,42 +416,9 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvnx:i: opts ; do
 	;;
 
 	A)
-		zfs_arc_metadata=1
+		zfs_arc_default=1
 		fs_type="zfs"
 		attachment_required=1
-	;;
-
-	T)
-		[ "$( id -u )" = 0 ] || { echo "Must be root" ; exit 1 ; } 
-		[ "$OPTARG" ] || f_usage
-		mirror_path="$OPTARG"
-		[ "$mirror_path" = "img" ] || [ -c "$mirror_path" ] || \
-			{ echo "Likely invalid -T input" ; exit 1 ; }
-		# Mounting is required for fstab modifications
-		mount_required=1
-		attachment_required=1
-	;;
-
-	s)
-		[ "$( id -u )" = 0 ] || { echo "Must be root" ; exit 1 ; } 
-		include_src=1
-		grow_required=1
-		mount_required=1
-		attachment_required=1
-	;;
-
-	m)
-		# root required to mount the image for extracting in src.txz
-		mount_required=1
-		keep_mounted=1
-		attachment_required=1
-	;;
-
-	M)
-		[ "$OPTARG" ] || f_usage
-		mount_point="$OPTARG"
-		[ -d "$mount_point" ] || \
-			{ echo "Mount point $mount_point missing" ; exit 1 ; }
 	;;
 
 	x)
@@ -419,7 +449,6 @@ while getopts O:a:r:zZ:At:T:ofg:smMVvnx:i: opts ; do
 	esac
 done
 
-[ -n "$release_input" ] || f_usage
 
 # Get the hardware device write warnings out of the way early
 
@@ -428,7 +457,7 @@ if [ "$target_prefix" = "/dev/" ] ; then
 	if [ "$force" = 0 ] ; then
 		echo ; echo "WARNING! Writing to $target_input !" ; echo
 		diskinfo -v $target_input
-		gpart show $target_input
+		gpart show -l $target_input
 		echo ; echo "WARNING! Writing to $target_input !" ; echo
 		echo -n "Continue? (y/n): " ; read confirmation
 		[ "$confirmation" = "y" ] || exit 0
@@ -440,7 +469,7 @@ if [ "$mirror_path" ] || [ "$mirror_path" = "img" ] ; then
 	if [ "$force" = 0 ] ; then
 		echo "WARNING! Writing to $mirror_path !"
 		diskinfo -v $mirror_path
-		gpart show $mirror_path
+		gpart show -l $mirror_path
 		echo ; echo "WARNING! Writing to $mirror_path !" ; echo
 		echo -n "Continue? (y/n): " ; read confirmation2
 		[ "$confirmation2" = "y" ] || exit 0
@@ -467,22 +496,37 @@ case "$hw_platform" in
 	;;
 esac
 
-# Needed for ZFS fstab sins
+# Needed for ZFS handling
 if [ "$fs_type" = "zfs" ] && [ "$grow_required" = 1 ] ; then
-	mount_required=1
+	if [ "$release_name" = "omnios" ] ; then
+		mount_required=0
+	else # release_input is a version for FreeBSD
+		mount_required=1
+	fi
 fi
 
-if [ "$fs_type" = "ufs" ] && [ -n "$mirror_path" ] ; then
-	echo Device mirroring only works with ZFS
-fi
+[ "$enable_crash_dumping" = "1" ] && packages="$packages gdb"
 
 
 ######################
 # TESTS - FAIL EARLY #
 ######################
 
+# Copying packages probably, but not necessarily requires growth
+# Checking for available space would come too late for clean-up
+# Could compare the package cache size to the typical available free space
+# or requested growth size
+#if [ "$copy_package_cache" = "1" ] ; then
+#	{ echo "-c requires -g" ; exit 1 ; }
+#fi
+
 if [ "$target_prefix" = "/dev/" ] ; then
 	[ "$vmdk" = 0 ] || { echo "-v does not support devices" ; exit 1 ; }
+fi
+
+if [ "$fs_type" = "ufs" ] && [ -n "$mirror_path" ] ; then
+	echo Device mirroring only works with ZFS
+	exit 1
 fi
 
 if [ "$xml_file" ] ; then
@@ -493,7 +537,7 @@ if [ "$xml_file" ] ; then
 		[ "$grow_size" ] || \
 			{ echo "-x without -t requires -g" ; exit 1 ; }
 	fi
-	[ "$include_src" = 0 ] || { echo "-s not supported with -x" ; exit 1 ; }
+	[ "$packages" ] || { echo "-p not supported with -x" ; exit 1 ; }
 	# Disable this as a second boot does the installation
 	grow_required=0
 
@@ -501,7 +545,7 @@ if [ "$xml_file" ] ; then
 	# Default not overridden with -t
 #	[ "$target_input" = "img" ] || \
 #		target_path="${work_dir}/windows-${hw_platform}-${fs_type}.raw"
-fi
+fi # End if xml_file
 
 if [ "$iso_file" ] ; then
 	[ "$xml_file" ] || { echo "-i requires -x" ; exit 1 ; }
@@ -509,6 +553,15 @@ fi
 
 [ -n "$release_input" ] || [ -n "$xml_file" ] || \
 	{ echo "-r <release> or -x/-i are required" ; f_usage ; exit 1 ; }
+
+[ -n "$mirror_path" ] && [ "$vmdk" = 1 ] && \
+	{ echo "Mirroring does not support VMDK" ; exit 1 ; }
+
+
+#############
+# FUNCTIONS #
+#############
+
 
 f_fetch_image () # $1 release_image_file $2 release_image_url
 {
@@ -608,16 +661,24 @@ elif [ "$release_input" = "omnios" ] ; then
 
 # TEST AND FAIL EARLY
 # Group these tests above?
-	[ "$include_src" = 1 ] && \
-		{ echo "-s src not available with OmniOS images" ; exit 1 ; }
+	[ "$packages" ] && \
+		{ echo "-s packages not available with OmniOS" ; exit 1 ; }
 
 	[ "$zpool_rename" = 0 ] || \
-		{ echo "-Z renaming not yet supported" ; exit 1 ; } 
+		{ echo "-Z renaming not yet supported with OmniOS" ; exit 1 ; } 
 
 	[ -n "$mirror_path" ] && \
-		{ echo "-T mirroring not yet supported" ; exit 1 ; }
+		{ echo "-T mirroring not yet supported with OmniOS" ; exit 1 ; }
 
-	release_image_url="$omnios_amd64_url"
+	case "$hw_platform" in
+		amd64) release_image_url="$omnios_amd64_url"
+		;;
+		arm64) release_image_url="$omnios_arm64_url"
+		;;
+		*) echo Invalid hardware architecture ; exit 1
+		;;
+	esac
+
 	release_name="omnios"
 	release_image_file="$( basename $release_image_url )"
 
@@ -650,14 +711,14 @@ elif [ "$release_input" = "debian" ] ; then
 	release_image_file="$( basename $release_image_url )"
 
 # TEST AND FAIL EARLY - can only test after parsing -r input
-	[ "$include_src" = 1 ] && \
-		{ echo "-s src not available with Debian images" ; exit 1 ; }
+	[ "$packages" ] && \
+		{ echo "-s Packages not available with Debian" ; exit 1 ; }
 
 	[ "$fs_type" = "zfs" ] && \
-		{ echo "-z ZFS not available with Debian images" ; exit 1 ; }
+		{ echo "-z ZFS not available with Debian" ; exit 1 ; }
 
 	[ -n "$mirror_path" ] && \
-			{ echo "-T mirroring not supported" ; exit 1 ; }
+		{ echo "-T mirroring not supported with Debian" ; exit 1 ; }
 
 # Redundant from FreeBSD/xz - refactor if possible
 # Create the work directory if missing
@@ -693,11 +754,11 @@ elif [ "$release_input" = "routeros" ] ; then
 	release_image_file="$( basename $release_image_url )"
 
 # TEST AND FAIL EARLY - can only test after parsing -r input
-	[ "$include_src" = 1 ] && \
-		{ echo "-s src not available with RouterOS images" ; exit 1 ; }
+	[ "$packages" ] && \
+		{ echo "-s Packages not available with RouterOS" ; exit 1 ; }
 
 	[ "$fs_type" = "zfs" ] && \
-		{ echo "-z ZFS not available with RouterOS images" ; exit 1 ; }
+		{ echo "-z ZFS not available with RouterOS" ; exit 1 ; }
 
 	[ -n "$mirror_path" ] && \
 			{ echo "-T mirroring not supported" ; exit 1 ; }
@@ -720,9 +781,9 @@ elif [ "$release_input" = "routeros" ] ; then
 
 elif [ -f "$release_input" ] ; then # if a path to an arbitrary image
 
-	# Arbitrary image may have arbitrary sources - manual copy needed
-	[ "$include_src" = 1 ] && \
-		{ echo "-s src not available with a custom image" ; exit 1 ; }
+	# Too complex to address
+	[ "$packages" ] && \
+	{ echo "-s Packages not available with a custom image" ; exit 1 ; }
 
 	custom_image_file="$( basename $release_input )"
 
@@ -744,8 +805,7 @@ else
 		{ echo "Invalid release" ; exit 1 ; }
 	echo "$release_input" | grep -q "FreeBSD" && \
 		{ echo "Invalid release" ; exit 1 ; }
-# Do we want to harmonize release_name="freebsd"?
-	release_name="$release_input"
+	release_name="freebsd"
 	release_version=$( echo "$release_input" | cut -d "-" -f 1 )
 	# Further validate the numeric version?
 	release_build=$( echo "$release_input" | cut -d "-" -f 2 )
@@ -760,34 +820,22 @@ else
 	esac
 
 # THIS CAN BE A MOVING TARGET
-	release_image_url="https://download.freebsd.org/${release_branch}/VM-IMAGES/${release_name}/${cpu_arch}/Latest/FreeBSD-${release_name}-${arch_string}-${fs_type}.raw.xz"
+	release_image_url="https://download.freebsd.org/${release_branch}/VM-IMAGES/${release_input}/${cpu_arch}/Latest/FreeBSD-${release_input}-${arch_string}-${fs_type}.raw.xz"
 
 	release_image_file="$( basename $release_image_url )"
 
-	[ -d "${work_dir}/${release_name}" ] || \
-		mkdir -p "${work_dir}/${release_name}"
-	[ -d "${work_dir}/${release_name}" ] || \
-		{ echo "mkdir ${work_dir}/${release_name} failed" ; exit 1 ; }
+	[ -d "${work_dir}/${release_input}" ] || \
+		mkdir -p "${work_dir}/${release_input}"
+	[ -d "${work_dir}/${release_input}" ] || \
+		{ echo "mkdir ${work_dir}/${release_input} failed" ; exit 1 ; }
 
 	# Needed for fetch to save the upstream file name
-	cd "${work_dir}/${release_name}"
+	cd "${work_dir}/${release_input}"
 
 	f_fetch_image "$release_image_file" "$release_image_url"
 
-release_dist_url="https://download.freebsd.org/${release_branch}/$arch_string/$release_name"
-src_url="https://download.freebsd.org/${release_branch}/${hw_platform}/${cpu_arch}/${release_name}/src.txz"
+release_dist_url="https://download.freebsd.org/${release_branch}/$arch_string/$release_input"
 
-	if [ "$include_src" = 1 ] ; then
-		if [ -r	"src.txz" ] ; then
-			if [ "$offline_mode" = 0 ] ; then
-				fetch -a -i src.txz "$src_url" || \
-				{ echo "$src_url fetch failed" ; exit 1 ; }
-			fi
-	else
-			fetch -a "$src_url" || \
-				{ echo "$src_url fetch failed" ; exit 1 ; }
-		fi
-	fi
 fi # End -r RELEASE HEAVY LIFTING
 
 
@@ -884,7 +932,7 @@ fi # End -t TARGET HEAVY LIFTING
 if [ "$fs_type" = "zfs" ] ; then
 	zpool get name zroot > /dev/null 2>&1 && zroot_in_use=1
 	[ "$zroot_in_use" = 1 -a "$zpool_rename" = 0 ] && \
-	{ echo zpool zroot in use and will conflict - use -Z ; exit 1 ; }
+	{ echo ; echo zpool zroot in use and will conflict - use -Z ; exit 1 ; }
 
 	if [ -n "$zpool_newname" ] ; then
 		zpool get name $zpool_newname > /dev/null 2>&1 && \
@@ -920,7 +968,6 @@ if [ "$xml_file" ] && [ "$iso_file" ] ; then
 	# This will take care of quite a few of them
 
 	mount_required=0
-	include_src=0
 	attachment_required=0
 
 	which 7z > /dev/null 2>&1 || \
@@ -1147,7 +1194,7 @@ case "$target_type" in
 
 				gpart recover $target_dev || \
 					{ echo gpart recover failed ; exit 1 ; }
-				gpart show $target_dev
+				gpart show -l $target_dev
 		fi
 	;; # End dev
 	
@@ -1213,10 +1260,17 @@ if [ "$attachment_required" = "1" ] ; then
 		mdconfig -lv
 		target_dev="/dev/md$md_id"
 
-		mdconfig -lv
-
 		gpart recover $target_dev || \
 			{ echo gpart recover failed ; exit 1 ; }
+
+		if [ "$release_name" = "omnios" ] ; then
+			echo "Deleting the OmniOS solaris-reserved partition"
+			gpart delete -i 9 md$md_id || \
+				{ echo "gpart delete failed" ; exit 1 ; }
+		fi
+
+		mdconfig -lv
+		gpart show -l md$md_id
 	fi
 
 # FreeBSD /dev/${target_dev}${scheme}N is now dev/img agnostic at this point
@@ -1280,7 +1334,9 @@ zpool_name=$( zdb -l $root_dev | grep " name:" | awk '{print $2}' | tr -d "'" )
 	zpool_guid=$( zdb -l $root_dev | grep pool_guid | awk '{print $2}' )
 
 	# Needed for fstab handling if attaching and relabeling
-	mount_required=1
+		if [ "$release_input" = "freebsd" ] ; then
+			mount_required=1
+		fi
 	fi
 
 # Disk images are now attached memory devices, allowing for identical handling
@@ -1366,7 +1422,7 @@ if [ "$grow_required" = 1 ] ; then
 
 		gpart resize -i "$root_part" "$target_dev" || \
 			{ echo "gpart resize failed" ; exit 1 ; }
-		gpart show "$target_dev"
+		gpart show -l "$target_dev"
 
 		gpart recover $target_dev || \
 			{ echo "gpart recover failed" ; exit 1 ; }
@@ -1412,9 +1468,6 @@ if [ "$fs_type" = "zfs" -a "$attachment_required" = 1 ] ; then
 
 	if [ -n "$mirror_path" ] ; then
 
-		[ "$vmdk" = 1 ] && \
-			{ echo "Mirroring does not support VMDK" ; exit 1 ; }
-
 # We are sure it is mdconfig attached?
 gpart show -l $target_dev
 
@@ -1447,9 +1500,8 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 
 	fi # End if mirror_path PREP of images that are now equally devices
 
-# Relabel the first, always-existing device, image or hardware
+	echo ; echo Relabeling $target_dev
 
-	echo Relabeling $target_dev
 	# Remove digits from default labels and add a new ID
 	# The host could have root-on-RaidZ with many devices
 	# Using 100 and 200 set in $label_id1 and $label_id2
@@ -1474,7 +1526,10 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 
 	if [ -n "$mirror_path" ] ; then
 
-# FYI data partitions: FreeBSD = 4 OmniOS = 2
+# RECENT FreeBSD
+# FYI zpool partition IDs: FreeBSD = 4 OmniOS = 2
+# Partition types: FreeBSD = freebsd-zfs OmniOS = apple-zfs
+# labels: FreeBSD = zfs0 OmniOS = zfs
 
 ##############################################################################
 #	NOT mirroring with gpart backup because of that gpt bug
@@ -1511,19 +1566,18 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		# Is there any reason this should be by label or is this safer?
 		# That could avoid ${scheme}
 		echo Mirroring the first partition
-#		dd if=${target_dev}p1 of=${target_dev2}p1 bs=512 \
 		dd if=${target_dev}${scheme}1 of=${target_dev2}${scheme}1 \
 			status=progress conv=sync || \
 				{ echo "p${scheme} dd failed" ; exit 1 ; }
 
 		echo ; echo Mirroring the second partition
-#		dd if=${target_dev}p2 of=${target_dev2}p2 bs=512 \
 		dd if=${target_dev}${scheme}2 of=${target_dev2}${scheme}2 \
 			status=progress conv=sync || \
 				{ echo "p${scheme} dd failed" ; exit 1 ; }
 
 	fi # End mirror_path partition mirroring and relabeling
 
+	# OmniOS pre-excluded
 	if [ "$zpool_rename" = 1 ] && [ "$grow_required" = 1 ] ; then
 		echo ; echo Importing and expanding zpool with guid $zpool_guid
 		zpool import -o autoexpand=on -N -f \
@@ -1537,6 +1591,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		zpool_name="$zpool_newname"
 		zpool status -v $zpool_name
 
+	# OmniOS pre-excluded
 	elif [ "$zpool_rename" = 1 ] ; then
 		echo ; echo Importing zpool with new name $zpool_newname
 		zpool import -N -f \
@@ -1545,18 +1600,48 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		zpool_name="$zpool_newname"
 		zpool status -v $zpool_name
 
+
+# Resized but complete?
+#root@omnios:~# zpool list
+#NAME    SIZE  ALLOC   FREE  CKPOINT  EXPANDSZ   FRAG    CAP  DEDUP    HEALTH  ALTROOT
+#rpool  7.50G   918M  6.60G        -        2G     0%    11%  1.00x    ONLINE  -
+
+
+#zpool online -e rpool /dev/md0p2
+
+
 # DEBUG: BUG! /dev/gpt/rootfs$label_id1 FAILS ON OMNIOS!
+# Which should not be relabled
 
 	elif [ "$grow_required" = 1 ] ; then
 		echo ; echo Importing and expanding zpool $zpool_name
-		zpool import -o autoexpand=on -N -f \
-			-d /dev/gpt/rootfs$label_id1 $zpool_name || \
+
+		if [ "$release_name" = "freebsd" ] ; then
+			zpool import -o autoexpand=on -N -f \
+				-d /dev/gpt/rootfs$label_id1 $zpool_name || \
 			{ echo "$zpool_name failed to import" ; exit 1 ; }
-		zpool status -v $zpool_name
+			zpool status -v $zpool_name
 
-		zpool online -e $zpool_name /dev/gpt/rootfs$label_id1 || \
+			zpool online -e $zpool_name \
+				/dev/gpt/rootfs$label_id1 || \
 			{ echo "$zpool_name failed to online -e" ; exit 1 ; }
+		elif [ "$release_name" = "omnios" ] ; then
+			zpool import -o autoexpand=on -N -f rpool || \
+			{ echo "rpool failed to import" ; exit 1 ; }
 
+			zpool online -e $zpool_name /dev/md${md_id}p2 || \
+			{ echo "rpool online failed" ; exit 1 ; }
+
+# Find a better method than by md_id, but it works
+#NOTICE: Performing full ZFS device scan!
+#NOTICE: Original /devices path (/pseudo/lofi@1:b) not available; ZFS is trying an alternate path (/pci@0,0/pcifb5d,a0a@2/blkdev@w589CFC20E4BC0001,0:b)
+#NOTICE: vdev_disk_open /dev/md42p2: update devid from '<none>' to 'id1,kdev@i589cfc20e4bc0001/b'
+#NOTICE: vdev_disk_open /dev/md42p2: update devid from '<none>' to 'id1,kdev@i589cfc20e4bc0001/b'
+
+		else
+			echo "$release_name not supported or other error"
+			exit 1
+		fi
 	else
 		# Import without expansion or rename
 		zpool import -N -f -d /dev/gpt/rootfs$label_id1 $zpool_name || \
@@ -1577,7 +1662,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 			{ echo "zpool upgrade failed" ; exit 1 ; }
 	fi
 
-	if [ "$zfs_arc_metadata" = 1 ] ; then
+	if [ "$zfs_arc_default" = 0 ] ; then
 		echo ; echo Setting primarycache=metadata for $zpool_name
 		zfs set primarycache=metadata $zpool_name || \
 		{ echo "zfs set primarycache=metadata failed" ; exit 1 ; }
@@ -1620,9 +1705,9 @@ fi # End ZFS HANDLING
 ###################################
 
 if [ "$release_name" = "routeros" ] ; then
-	echo RouterOS: Relabeling /dev/md${md_id}${scheme}1 
+	echo "RouterOS: Relabeling /dev/md${md_id}${scheme}1"
 	gpart modify -i 1 -t linux-data $target_dev || \
-		{ echo $target_dev part 1 relabel failed ; exit 1 ; }
+		{ echo "$target_dev part 1 relabel failed" ; exit 1 ; }
 fi
 
 
@@ -1641,19 +1726,19 @@ if [ "$mount_required" = 1 ] ; then
 
 	if [ "$root_fs" = "freebsd-ufs" ] ; then
 		mount $root_dev ${mount_point:?} || \
-			{ echo mount failed ; exit 1 ; }
+			{ echo "mount failed" ; exit 1 ; }
 
 	elif [ "$root_fs" = "linux-data" ] ; then
 		kldstat -q -m fusefs || kldload fusefs
 		kldstat -q -m fusefs || \
 			{ echo fusefs.ko failed to load ; exit 1 ; }
 		fuse-ext2 $root_dev ${mount_point:?} -o rw+ || \
-			{ echo $root_dev fuse-ext2 mount failed ; exit 1 ; }
+			{ echo "$root_dev fuse-ext2 mount failed" ; exit 1 ; }
 
 #	elif [ "$root_fs" = "freebsd-zfs" ] ; then
 	elif [ "$fs_type" = "zfs" ] ; then
 
-		echo ; echo Importing zpool $zpool_name for mounting
+		echo ; echo "Importing zpool $zpool_name for mounting"
 		# Device path not required
 		zpool import -R ${mount_point:?} $zpool_name || \
 			{ echo "$zpool_name failed to import" ; exit 1 ; }
@@ -1663,20 +1748,76 @@ if [ "$mount_required" = 1 ] ; then
 		# set to canmount=noauto
 
 		zfs mount ${zpool_name}/ROOT/default || \
-			{ echo "${zpool_name}/ROOT/default failed to mount" ; exit 1 ; }
+		{ echo "${zpool_name}/ROOT/default failed to mount" ; exit 1 ; }
 
-		echo DEBUG listing the mount point ${mount_point:?}
-		ls ${mount_point:?}
+
+
+
+
+# DEBUG bun NOT WORKING!
+
+#echo bun
+
+#Mounting child datasets
+#+ zfs list -rH -o mountpoint,name,canmount,mounted -s mountpoint zroot/ROOT/default
+#+ read _mp _name _canmount _mounted
+#+ [ zroot/ROOT/default '=' img ]
+#+ [ noauto '=' off ]
+#+ [ yes '=' yes ]
+#+ continue
+#+ read _mp _name _canmount _mounted
+#+ [ -f /media/etc/fstab ]
+#+ echo
+
+
+### OH! Of course...
+#exit 1 ; This is the STANDARD, non-nested LAYOUT!!!
+#Generate mount/umount scripts?!?
+echo hopefully we can use ZFS mount and duh relative paths
+# WHOOOPS WAS AIMING AT THE BOOT ENVIRONMENT
+
+		echo ; echo Mounting child datasets
+                # Syntax from propagate.sh for fully-nested datasets
+                # Inspired by /etc/rc.d/zfsbe
+                zfs list -rH -o mountpoint,name,canmount,mounted \
+                        -s mountpoint ${zpool_name} | \
+                while read _mp _name _canmount _mounted ; do
+                        [ "$_mp" = "none" ] && continue
+                        [ "$_name" = "$target_input" ] && continue
+                        [ "$_canmount" = "off" ] && continue
+                        [ "$_mounted" = "yes" ] && continue
+echo looping!
+			zfs mount $_name
+                done
+# mount -t zfs $_name $mount_point/$( echo $_mp | cut -d / -f3-)
+
+mount | grep $zpool_name
+echo did the child datasets mount? ; read mount
+
 
 		if [ -f ${mount_point:?}/etc/fstab ] ; then
-			echo ; echo Modifying the fstab 
-			# This is a sin and why TrueNAS uses UUIDs
-			mv ${mount_point:?}/etc/fstab \
+			echo ; echo Attempting to update the fstab
+			cp ${mount_point:?}/etc/fstab \
 				${mount_point:?}/etc/fstab.original
+efi_label=$( grep efiboot ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d / -f 4  )
+swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d / -f 4  )
+			sed -i -e "s/$swap_label/swapfs$label_id1/g" \
+				${mount_point:?}/etc/fstab
+
+			sed -i -e "s/$efi_label/efiboot$label_id1/g" \
+				${mount_point:?}/etc/fstab
+
+			echo ; echo Mounting EFI partition
+			mount_msdosfs /dev/gpt/efiboot$label_id1 \
+				${mount_point:?}/boot/efi || \
+					{ echo "EFI mount failed" ; exit 1 ; }
 		else
+			echo ; echo "Creating empty fstab"
 			touch ${mount_point:?}/etc/fstab
 		fi
 
+			echo ; echo "${mount_point:?}/etc/fstab reads:" 
+			cat ${mount_point:?}/etc/fstab
 
 		# YEP, we want an auto-swapper and maybe
 		# a utility to mount the EFI partition for updating
@@ -1684,7 +1825,7 @@ if [ "$mount_required" = 1 ] ; then
 		if [ $zpool_newname ] ; then
 			# Must be double quotes for variable expansion
 # DEBUG: sed: -I or -i may not be used with stdin
-			sed -i -e "s/zroot/$zpool_newname/g" 
+			sed -i -e "s/zroot/$zpool_newname/g" \
 				${mount_point:?}/etc/rc.conf
 		fi
 	else
@@ -1693,32 +1834,143 @@ if [ "$mount_required" = 1 ] ; then
 	fi # End if root_fs
 
 
-###################
-# SOURCE HANDLING #
-###################
+####################
+# PACKAGE HANDLING #
+####################
+
+	# Separating from selecting new packages to install
+	if [ "$copy_package_cache" = "1" ] ; then
+		echo ; echo "Copying /var/cache/pkg/ packages from the host"
+
+		# NOT INCLUDED IN THE UPSTREAM IMAGE
+		[ -d "${mount_point:?}/var/cache/pkg" ] || \
+			mkdir -p "${mount_point:?}/var/cache/pkg"
+
+		[ -d "${mount_point:?}/var/cache/pkg" ] || \
+	{ echo "mkdir ${mount_point:?}/var/cache/pkg/ failed" ; exit 1 ; }
+
+		cp /var/cache/pkg/* "${mount_point:?}/var/cache/pkg/" || \
+			{ echo "Package copy failed" ; exit 1 ; }
+
+	fi
 
 	# Must mount would already be set
-	if [ "$include_src" = 1 ] ; then
-		if [ "$release_type" = "xz" ] ; then
+	if [ -n "$packages" ] ; then
 
-		[ -f "${work_dir}/${release_name}/src.txz" ] || \
-			{ echo "src.txz missing" ; exit 1 ; }
-		# Add dpv(1) progress?
-		echo "Extracting ${work_dir}/${release_name}/src.txz"
-		cat "${work_dir}/${release_name}/src.txz" | \
-			tar -xpf - -C ${mount_point:?}/ || \
-				{ echo "src.txz extraction failed" ; exit 1 ; }
-		else
-			echo ; echo "Copying /usr/src"
-			tar cf - /usr/src | tar xpf - -C ${mount_point:?}/ || \
-				{ echo "/usr/src failed to copy" ; exit 1 ; }
+		[ -f ${mount_point:?}/var/db/pkg/local.sqlite ] || \
+			{ echo Target is not package bootstrapped ; exit 1 ; }
+
+		[ -d ${mount_point:?}/usr/local/etc/pkg/repos ] || \
+			mkdir -p ${mount_point:?}/usr/local/etc/pkg/repos
+
+# Handled by RE
+#		echo "Enabling base package repo"
+#		echo "FreeBSD-base: { enabled: yes }" > \
+#		${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-base.conf
+
+		# Pulled from propagate.sh
+		release_version=$( echo "$release_input" | cut -d "-" -f 1 )
+		VERSION_MAJOR=$( echo "$release_version" | cut -d "." -f 1 )
+		ABI="FreeBSD:${VERSION_MAJOR}:$cpu_arch"
+
+		echo ; echo "Installing pkg"
+		pkg \
+			--option ABI="${ABI:?}" \
+			--rootdir "${mount_point:?}" \
+			--repo-conf-dir "${mount_point:?}/etc/pkg" \
+			--option IGNORE_OSVERSION="yes" \
+			install -y -- pkg || \
+				{ echo "pkg install failed" ; exit 1 ; }
+
+# Consider a package upgrade here if using RELEASE images!
+
+		echo ; echo "Temporarily enabling base repo in /etc/pkg"
+		sed -i -e "s/enabled: no/enabled: yes/g" \
+			${mount_point:?}/etc/pkg/FreeBSD.conf
+
+		echo ; echo "Updating existing base packages"
+		pkg \
+			--option ABI="${ABI:?}" \
+			--rootdir "${mount_point:?}" \
+			--repo-conf-dir "${mount_point:?}/etc/pkg" \
+			--option IGNORE_OSVERSION="yes" \
+			upgrade -y || \
+				{ echo "Package upgrade failed" ; exit 1 ; }
+
+		# Consider backing up FreeBSD.conf and restoring it
+		echo ; echo "Installing $packages"
+		pkg \
+			--option ABI="${ABI:?}" \
+			--rootdir "${mount_point:?}" \
+			--repo-conf-dir "${mount_point:?}/etc/pkg" \
+			--option IGNORE_OSVERSION="yes" \
+			install -y $packages || \
+				{ echo "Package install failed" ; exit 1 ; }
+
+		# Consider backing up FreeBSD.conf and restoring it
+		echo ; echo "Temporarily disabling base repo in /etc/pkg"
+		sed -i -e "s/enabled: yes/enabled: no/g" \
+			${mount_point:?}/etc/pkg/FreeBSD.conf
+		echo "Rest assured it is enabled in /usr/local/etc/pkg/repos"
+
+		if [ "$clean_package_cache" = "1" ] ; then
+			echo "Cleaning ${mount_point:?}/var/cache/pkg/"
+			find -s -f "${mount_point:?}/var/cache/pkg/" -- -mindepth 1 -delete
 		fi
-		[ -f "${mount_point:?}/usr/src/Makefile" ] || \
-			{ echo "/usr/src failed to copy" ; exit 1 ; }
-	fi # End include_src
+	fi # End packages
 
-	df -h | grep media
-	ls ${mount_point:?}
+
+#############
+# ADD USERS #
+#############
+
+	if [ "$add_users" = 1 ] ; then
+
+# Do we want the chroots of the original script?
+# Pulling from release/tools/arm.sub arm_create_user() and vagrant.conf
+
+# Only works on new users?
+#       /usr/sbin/pw -R ${mount_point:?} usermod root -w yes
+
+		# Pulling from rc.local.sh
+		echo ; echo Setting root password
+ 		echo -n 'root' | /usr/sbin/pw -R ${mount_point:?} \
+			usermod -n root -h 0
+
+		echo ; echo Adding user freebsd
+	        mkdir -p ${mount_point:?}/home/freebsd
+		/usr/sbin/pw -R ${mount_point:?} groupadd freebsd -g 1001
+
+# Note that csh is not installed by default, changing to /bin/sh
+	        /usr/sbin/pw -R ${mount_point:?} useradd freebsd \
+			-m -M 0755 -w yes -n freebsd -u 1001 -g 1001 -G 0 \
+			-c 'FreeBSD User' -d '/home/freebsd' -s '/bin/sh'
+
+		echo ; echo "Enabling sshd"
+		echo 'sshd_enable="YES"' >> ${mount_point:?}/etc/rc.conf
+	fi # End users
+
+
+########################
+# ENABLE CRASH DUMPING #
+########################
+
+	if [ "$enable_crash_dumping" = "1" ] ; then
+
+		echo "Enabling debug.debugger_on_panic=1"
+		echo "debug.debugger_on_panic=1" >> \
+			${mount_point:?}/etc/sysctl.conf || \
+			{ echo "Failed to configure sysctl.conf" ; exit 1 ; }
+		echo "Crash dumping can be tested with:"
+		echo "sysctl debug.kdb.panic=1"
+
+		if [ ! $(sysrc -R ${mount_point:?} -c dumpdev) ] ; then
+			echo "dumpdev not enabled in /etc/rc.conf"
+			echo "Enabling dumpdev=\"AUTO\""
+			sysrc -R ${mount_point:?} dumpdev=AUTO || \
+				{ echo "sysrc dumpdev=AUTO failed" ; exit 1 ; }
+		fi
+	fi
 fi # End mount_required
 
 
@@ -1793,6 +2045,7 @@ if [ "$boot_scripts" = 1 ] ; then
 		echo "Something went wrong"
 		exit 1
 	fi
+
 
 #########
 # BHYVE #
@@ -1901,10 +2154,8 @@ HERE
 #imagine.sh: cannot create /root/imagine-work/xen-/tmp/propagate/src/release/scripts/vm.zfs.img-amd64-zfs.sh: No such file or directory
 #imagine.sh: cannot create /root/imagine-work/xen-/tmp/propagate/src/release/scripts/vm.zfs.img-amd64-zfs.sh: No such file or directory
 
-
 # Should be conditional to not generate if mirrored
 # Solution appears to be two comma-separated strings in "disk"
-
 
 # DEBUG YOU SURE THIS IS A THING?
 			if [ "$custom_image_file" ] ; then
@@ -2027,11 +2278,27 @@ if [ "$keep_mounted" = 0 ] ; then
 			echo ; echo "Unmounting ${mount_point:?}"
 			umount ${mount_point:?} || \
 				{ echo "umount failed" ; exit 1 ; }
-#	elif [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
-	elif [ "$fs_type" = "zfs" ] ; then
+			# Going from custom image to a hardware device might
+			# skip work_dir, no? Where would a umount script go?
+#			echo ; echo "Generating ${mount_point:?} umount script"
+#echo "umount ${mount_point:?} || { echo umount failed ; exit 1 ; }" > 
+
+		elif [ "$fs_type" = "zfs" ] ; then
+			# Trying to do the right thing rather than export -f
+			# The EFI partition will not be caught by that and will
+			# trip up the dataset umount - umount EFI first
+		echo ; echo "Unmounting child datasets and directories"
+		umount $(mount|grep "on $mount_point"|grep efi|cut -w -f 1) || \
+			{ echo "umount EFI partition failed" ; exit 1 ; }
+
+		mount | grep "on $mount_point" | cut -w -f 1 | \
+        	       	while read _mp ; do
+				umount $_mp || \
+					{ echo "umount $_mp failed" ; exit 1 ; }
+			done
 
 			echo ; echo "Exporting $zpool_name"
-			echo ; echo Sleeping 10 seconds to be safe
+			echo ; echo "Sleeping 10 seconds to be safe"
 			sleep 10
 			zpool export $zpool_name || \
 				{ echo "zpool export failed" ; exit 1 ; }
@@ -2055,7 +2322,8 @@ else
 	# Prompt the user with how to unmount
 	if [ "$root_fs" = "freebsd-ufs" ] ; then
 		# Consider printf
-		echo ; echo Run 'umount ${mount_point:?}' when finished
+		echo : echo Unmount child directories and datasets and 
+		echo run 'umount ${mount_point:?}' when finished
 	fi
 
 #	if [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
