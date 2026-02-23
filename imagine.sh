@@ -1600,19 +1600,6 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		zpool_name="$zpool_newname"
 		zpool status -v $zpool_name
 
-
-# Resized but complete?
-#root@omnios:~# zpool list
-#NAME    SIZE  ALLOC   FREE  CKPOINT  EXPANDSZ   FRAG    CAP  DEDUP    HEALTH  ALTROOT
-#rpool  7.50G   918M  6.60G        -        2G     0%    11%  1.00x    ONLINE  -
-
-
-#zpool online -e rpool /dev/md0p2
-
-
-# DEBUG: BUG! /dev/gpt/rootfs$label_id1 FAILS ON OMNIOS!
-# Which should not be relabled
-
 	elif [ "$grow_required" = 1 ] ; then
 		echo ; echo Importing and expanding zpool $zpool_name
 
@@ -1786,13 +1773,8 @@ echo hopefully we can use ZFS mount and duh relative paths
                         [ "$_name" = "$target_input" ] && continue
                         [ "$_canmount" = "off" ] && continue
                         [ "$_mounted" = "yes" ] && continue
-echo looping!
 			zfs mount $_name
                 done
-# mount -t zfs $_name $mount_point/$( echo $_mp | cut -d / -f3-)
-
-mount | grep $zpool_name
-echo did the child datasets mount? ; read mount
 
 
 		if [ -f ${mount_point:?}/etc/fstab ] ; then
@@ -1818,6 +1800,10 @@ swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d /
 
 			echo ; echo "${mount_point:?}/etc/fstab reads:" 
 			cat ${mount_point:?}/etc/fstab
+
+
+			echo ; echo KLUGE: fsyncing ${mount_point:?}/etc/fstab
+			fsync ${mount_point:?}/etc/fstab
 
 		# YEP, we want an auto-swapper and maybe
 		# a utility to mount the EFI partition for updating
