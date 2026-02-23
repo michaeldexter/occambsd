@@ -1,29 +1,52 @@
 ## OccamBSD: An application of Occam's razor to FreeBSD
 a.k.a. "super svelte stripped down FreeBSD"
 
-## Imagine: Virtual and Hardware Machine Boot Image Imaging 
-a.k.a. "An unnecessarily-complex solution to what should be a simple problem"
+## Imagine: Virtual and Hardware Machine Boot Image Imaging at the block level
+a.k.a. "No one clicks 'next, next, next, finish' to install cloud systems, right?"
 
-## Propagate: "Packaged Base" Jails, Boot Environments, and VM-IMAGEs
-a.k.a. "Nope. Not waiting any longer for a packaged base"
+## Propagate: "Packaged Base" Jails and Boot Environments at the file level
+a.k.a. "bsdinstall(8) and bsdconfig(8) should do all this, right?"
 
 This evolving project incorporates several inter-related scripts with the broad goal of producing and/or deploying bootable FreeBSD, OmniOS, Debian, RouterOS, and Windows systems from source or downloaded boot images. Official OpenBSD boot images would be greatly appreciated.
 
 ```
 occambsd.sh		Builds a "svelte", purpose-build FreeBSD bootable disk image using the FreeBSD build(7) system
-profile-amd64-minimum*.txt	A minimum system configuration for use on a virtual machine for FreeBSD
-profile-amd64-zfs*.txt		The minimum configuration with ZFS support
-profile-amd64-hardware.txt	A minimum configuration with ZFS and hardware machine support, tested on a ThinkPad
-propagate.sh		Builds PkgBase jails, boot environments, and VM-IMAGEs
-imagine.sh		Images official and OccamBSD bootable disk images to hardware and virtual machine images, or dist sets or build objects to a boot environment
-autounattend_xml	A directory of Windows autounattend.xml files
+profile-*.txt		Build profiles for occambsd.sh
+imagine.sh		Images upstream bootable disk images to hardware and virtual machine images
+propagate.sh		Builds packaged base jails and boot environments
+autounattend_xml	A directory of Windows autounattend.xml files used by imagine.sh
 ```
 
-## Preface
+## Brief History
 
-The relationships of the components in this repo is complex.
+1991: "Unix makes perfect sense as 'behind the scenes of the computer', like working behind the camera"
+1998: "Red Hat Linux 5.2 is a halfway-decent Unix clone in which RPM "packaged base" accounts for most OS files but unleashes RPM Hell for third party software"
+1999: "Red Hat Linux 6.0 is a stunningly-bad Windows clone with that early GNOME release"
+1999: "Red Hat Linux 6.1 up2date finally allows online updating, better late than never"
+2002: "FreeBSD Jail in 4.7 mitigates RPM Hell and small Jails can be built with SKIPDIR and build options"
+2003: "FreeBSD 5.0 jls(8) and jexec(8) are awesome but wow is that sucker unstable"
+2003: FreeBSD 5.1 introduces AMD64 support
+2006: BSD.lv SysJail OpenBSD Jails, until systrace was removed
+2009: BSD.lv mult *went there*
+2012: FreeNAS 8.2 delivers OpenZFS v28
+2012: FreeBSD 9.0 delivers Clang/LLVM
+2014: FreeBSD 10.0 introduces the BHyVe come bhyve hypervisor
+2021: FreeBSD 13.0 introduces OpenZFS and working build options after years of bug reporting
+2023: FreeBSD 14.0 preserves working build options and introduces root-on-ZFS VM-IMAGES
+2025: FreeBSD 15.0 institutionalizes packaged base and adds bhyve/ARM64 but "Who broke the damn build options?"
 
-TL:DR: The author prefers to never use a "next, next, next, finish" installer again yet wants a selection of operating systems available with one or two commands.
+Finally, Jail, OpenZFS, bhyve and packaged base on AMD64 and ARM64 are here!
+
+"That only took 34 <expletive deleted> years"
+
+## Motivations
+
+* OpenZFS everywhere
+* Small Jail Containers and Virtual Machines
+* Never using a "next, next, next, finish" installer again
+* Easy deployment of FreeBSD, OmniOS, Debian, RouterOS, and Windows using or or two commands
+
+## Context
 
 There have been countless "Cloud" and "Virtual Machine" boot images or "appliances" produced for various operating systems over the years. These are often symptoms of the use of "feature-rich" virtual machine boot images formats such as QCOW2, VDI, VHD(X), and others. In OpenZFS environments, any such... "copy on write!", "snapshot", or compression features of a non-raw disk image format are  categorically obsoleted by OpenZFS below the POSIX layer. 
 
@@ -68,114 +91,103 @@ In short, to help deliver on the FreeBSD promise to provide a flexible, permissi
 
 ## Usage
 
-# occambsd.sh
+```
+-p <profile file> (Required)
+-s <source directory> (Default: /usr/src)
+-o <object directory> (Default: /usr/obj)
+-O <output directory> (Default: /tmp/occambsd)
+-w (Reuse the previous world objects)
+-k (Reuse the previous kernel objects)
+-a <additional build option to exclude>
+-b (Package base)
+-G (Use the GENERIC/stock world - increase image size as needed)
+-g (Use the GENERIC kernel)
+-P <patch directory> (NB! This will modify your sources!)
+-j (Build for Jail boot)
+-9 (Build for p9fs boot - 15.0-CURRENT only)
+-v (Generate VM image and boot scripts)
+-z (Generate ZFS VM image and boot scripts)
+-Z <size> (VM image siZe i.e. 500m - default is 2.9G)
+-S <size> (VM image Swap size i.e. 500m - default is 100M)
+-i (Generate disc1 and bootonly.iso ISOs)
+-m (Generate mini-memstick image)
+-n (No-op dry-run only generating configuration files)
+```
 
 By default, occambsd.sh will only perform a build using the specified profile and requires additional flags to generate Jail and Virtual Machine images.
 
 To build a root-on-ZFS Virtual Machine image using FreeBSD 14.0 or later:
 
 ```
-sudo sh occambsd.sh -v -z -p profile-amd64-zfs14.txt
+doas sh occambsd.sh -v -z -p profile-amd64-zfs14.txt
 ```
 
-The full occambsd.sh usage is:
-
-```
--p <profile file> (required)
--s <source directory> (Default: /usr/src)
--o <object directory> (Default: /usr/obj)
--O <output directory> (Default: /tmp/occambsd)
--w (Reuse the previous world objects)
--W (Reuse the previous world objects without cleaning)
--k (Reuse the previous kernel objects)
--K (Reuse the previous kernel objects without cleaning)
--a <additional build option to exclude>
--b (Package base)
--G (Use the GENERIC/stock world)
--g (Use the GENERIC kernel)
--j (Build for Jail boot)
--9 (Build for 9pfs boot)
--v (Generate VM image)
--z (Generate ZFS VM image)
--Z <size> (VM image siZe i.e. 500m - default is 5g)
--S <size> (VM image Swap size i.e. 500m - default is 1g)
--i (Generate disc1 and bootonly.iso ISOs)
--m (Generate mini-memstick image)
--n (No-op dry-run only generating configuration files)
-
-```
-
--p packaged base is experimental until further notice.
-
-The -W and -K options exist for use with WITH_META_MODE set in /etc/src-env.conf and the filemon.ko kernel module loaded.
-
-Want to aggressively build test FreeBSD?
-
-Simply execute a list of occambsd.sh commands with separate output directories, adjusting the exact names as appropriate:
-
-```
-sudo sh occambsd.sh -O /tmp/amd64-minimum -p profile-amd64-minimum.txt
-sudo sh occambsd.sh -O /tmp/amd64-hardware -p profile-amd64-hardware.txt
-sudo sh occambsd.sh -O /tmp/arm64-minimum -p profile-arm64-minimum.txt
-...
-
-```
-
-# propagate.sh
-
-See the USAGE section of the file for usage, notes, and caveats
-
+Status: OccamBSD needs testing and refactoring for FreeBSD 15.0
 
 # imagine.sh
 
-imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", or a custom-build 'make release' or OccamBSD vm.raw image. It can also retrieve and copy or image OmniOS, Debian, and RouterOS images, plus prepare Windows boot devices using autounattend.xml files. The resulting images can be booted in bhyve, QEMU, or Xen.
-
-Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts. Note the syntax in the EXAMPLES section of the script.
-
-## imagine.sh Output Layout
+## Usage
 
 ```
-/root/imagine-work		Working directory for imagine.sh operations
-/root/imagine-work/15.0-CURRENT	Directory of upstream, uncompressed images/src.txz
-/root/imagine-work/freebsd-amd64-15.0-CURRENT-zfs.raw	Example VM image
-/root/imagine-work/bhyve-15.0-CURRENT-amd64-zfs.sh	Related boot script
+-O <output directory> (Default: ~/imagine-work)
+-a <architecture> [ amd64 | arm64 | i386 | riscv ] (Default: Host)
+-r [ obj | /path/to/image | <version> | omnios | debian ]
+   obj i.e. /usr/obj/usr/src/<target>.<target_arch>/release/vm.ufs.raw
+   /path/to/image.raw for an existing image
+   <version> i.e. 15.0-RELEASE | 16.0-CURRENT | 15.0-ALPHAn|BETAn|RCn
+   (Default: Host)
+-o (Offline mode to re-use fetched releases)
+-t <target> [ img | /dev/<device> | /path/myimg ] (Default: img)
+-T <mirror target> [ img | /dev/<device> ]
+-f (FORCE imaging to a device without prompting for confirmation)
+-g <gigabytes> (grow image to gigabytes i.e. 10)
+-p "<packages>" (Quoted space-separated list)
+-c (Copy cached packages from the host to the target)
+-C (Clean package cache after installation)
+-u (Add root/root and freebsd/freebsd users and enable sshd)
+-d (Enable crash dumping)
+-m (Mount image and keep mounted for further configuration)
+-M <Mount point> (Default: /media)
+-V (Generate VMDK image wrapper)
+-v (Generate VM boot scripts)
+-n (Include tap0 e1000 network device in VM boot scripts)
+-U (Use a UFS image rather than ZFS image)
+-Z <new zpool name if conflicting i.e. with zroot>
+-A (Enable ZFS ARC cache to default rather than metadata)
+-x <autounattend.xml file for Windows> (Requires -i)
+-i <Full path to installation ISO file for Windows> (Requires -x)
+```
+imagine.sh downloads a FreeBSD official release, stable, or current "VM-IMAGE", or a custom-build 'make release' or OccamBSD vm.raw image. It can also retrieve image OmniOS, Debian, and RouterOS images, plus prepare Windows boot devices using autounattend.xml files. The resulting images can be booted in bhyve, QEMU, or Xen.
+
+Note that this requires use of the /media mount point, administrative privileges, and it creates /root/imagine-work for use for downloaded artifacts.
+
+## imagine.sh Output Layout Essentials
+
+```
+~/imagine-work			Working directory for imagine.sh operations
+~/imagine-work/15.0-RELEASE	Directory of upstream, uncompressed images/src.txz
+~/imagine-work/FreeBSD-amd64-15.0-RELEASE-zfs.raw	Example VM image
+~/imagine-work/bhyve-15.0-RELEASE-amd64-zfs.sh		Example bhyve boot script
 ```
 
-To download a FreeBSD 15.0-CURRENT "Latest" VM-IMAGE and generate boot scripts:
+To download a VM-IMAGE matching the host's version and generate boot scripts:
 
 ```
-sudo sh imagine.sh -r 15.0-CURRENT -v
+doas sh imagine.sh -v
 ```
 
 To download an OmniOS image (version embedded in the script for want of "Latest" aliases on the mirrors) and image it to a hardware device /dev/da0 :
 
 ```
-sudo sh imagine -r omnios -t /dev/da0
+doas sh imagine -r omnios -t /dev/da0
 ```
 
-The full occambsd.sh usage is:
-
+Note: OmniOS is slow to boot while performing cloud init operations that can be disabled with:
 ```
--O <output directory> (Default: /root/imagine-work)
--a <architecture> [ amd64 | arm64 | i386 | riscv ] (Default: Host)
--r [ obj | /path/to/image | <version> | omnios | debian ]
-obj i.e. /usr/obj/usr/src/<target>.<target_arch>/release/vm.ufs.raw
-/path/to/image.raw for an existing image
-<version> i.e. 14.0-RELEASE | 15.0-CURRENT | 15.0-ALPHAn|BETAn|RCn
--o (Offline mode to re-use fetched releases and src.txz)
--t <target> [ img | /dev/device | /path/myimg ] (Default: img)
--T <mirror target> [ img | /dev/device ]
--f (FORCE imaging to a device without asking)
--g <gigabytes> (grow image to gigabytes i.e. 10)
--s (Include src.txz or /usr/src as appropriate)
--m (Mount image and keep mounted for further configuration)
--V (Generate VMDK image wrapper)
--v (Generate VM boot scripts)
--z (Use a 14.0-RELEASE or newer root on ZFS image)
--Z <new zpool name>
--A (Set the ZFS ARC to only cache metadata)
--x <autounattend.xml file for Windows> (Requires -i and -g)
--i <Installation ISO file for Windows> (Requires -x and -g)
+svcadm disable svc:/system/cloud-init:initlocal
+svcadm disable svc:/system/cloud-init:init
+svcadm disable svc:/system/cloud-init:modules
+svcadm disable svc:/system/cloud-init:final
 ```
 
 # Example Scenario of using occambsd.sh with imagine.sh
@@ -183,15 +195,75 @@ obj i.e. /usr/obj/usr/src/<target>.<target_arch>/release/vm.ufs.raw
 Example usage on a FreeBSD 14.0 system with 'makefs -t zfs' support to produce a minimum root-on-ZFS image that is grown to 10GB in size and boots in seconds:
 
 ```
-sudo sh occambsd.sh -p profile-amd64-zfs.txt -v -z
-sudo sh imagine.sh -r obj -g 10 -v -z
+doas sh occambsd.sh -p profile-amd64-zfs.txt -v -z
+doas sh imagine.sh -r obj -g 10 -v -z
 ```
 
 # Example Window Usage
 
 ```
-sudo sh imagine.sh -x autounattend_xml/win2025.iso -i win2025.iso -g 30
+doas sh imagine.sh -x autounattend_xml/win2025.iso -i win2025.iso -g 30
 ```
+## Imagine and Propagate
+
+Elaborate example of using imagine.sh in conjunction with propagate.sh:
+```
+doas sh imagine.sh -r 16.0-CURRENT -t /dev/da0 -p "doas tmux got" -d -g 10 -u -Z mypool -v -n -m
+doas sh propagate.sh -r 15.0-STABLE -t mypool/ROOT/15.0-STABLE -n -p "doas tmux got"
+doas sh propagate.sh -r 16.0-CURRENT -t mypool/ROOT/16.0-CURRENT -n -b -p "doas tmux got"
+```
+Which breaks down, by flag:
+```
+-r Image the 15.0-RELEASE release of FreeBSD to a USB device attached at /dev/da0
+-p "doas tmux got" Install the doas, tmux and got packages
+-d Enable crash dumping
+-g Grow the image to 10GB
+-u Add the root and freebsd users, and enable sshd following the FreeBSD RPi/RockPro64/etc. "ISO" images
+-Z Rename the default zpool of "zroot" to "mypool"
+-v Create bhyve, QEMU, and Xen boot scripts (will only work with the device attached at /dev/da0)
+-n Add a e1000 network interface to the bhyve boot script
+-m Keep the image mounted for the next steps...
+
+-r 15.0-STABLE Install a 15.0-STABLE weekly snapshot
+-t Install to a new boot environment "mypool/ROOT/15.0-STABLE"
+-n Fully nest all datasets rather than use a single one
+-p "doas tmux got" Install the doas, tmux and got packages
+
+-r 16.0-CURRENT Install a 16.0-CURRENT weekly snapshot
+-t Install to a new boot environment "mypool/ROOT/16.0-CURRENT"
+-n Fully nest all datasets rather than use a single one
+-b Update the EFI boot code in case it is needed by 16.0-CURRENT
+-p "doas tmux got" Install the doas, tmux and got packages
+
+```
+
+Note the -c flag that copies packages from the host's package cache, saving on repeated retrievals. BE SURE TO GROW IMAGES ADEQUATELY TO RECEIVE THE PACKAGE CACHE.
+
+# propagate.sh
+
+## Usage
+
+```
+-r <release> (i.e. 15.0-RELEASE | 16.0-CURRENT Default: Host)
+-a <architecture> [ amd64 | arm64 ] (Default: Host)
+-t <target root> (Boot environment or Jail path - Required)
+   i.e. zroot/ROOT/pkgbase15, zroot/jails/pkgbase15 datasets or
+   /jails/myjail directory Default: /tmp/propagate/root)
+-n Create fully-nested datasets
+-q (quarterly package branch rather than latest)
+-m (Keep boot environment mounted for further configuration)
+-p "<additional packages>" (Quoted space-separated list)
+-s (Perform best-effort sideload of the current configuration)
+-c (Copy cached packages from the host to the target)
+-C (Clean package cache after installation)
+-G (Write a graph of base package selections and dependencies)
+-b (Install boot code)
+-d (Enable crash dumping)
+-u (Add root/root and freebsd/freebsd users and enable sshd)
+-o <output directory/work> (Default: /tmp/propagate)
+```
+
+## MISCELLANEOUS
 
 ## OccamBSD build results from an EPYC 7402p
 
