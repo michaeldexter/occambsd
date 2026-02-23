@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99
+# Version v.0.99.4
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
