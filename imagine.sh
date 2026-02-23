@@ -1775,9 +1775,6 @@ swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d /
 			echo ; echo "${mount_point:?}/etc/fstab reads:" 
 			cat ${mount_point:?}/etc/fstab
 
-			echo ; echo KLUGE: fsyncing ${mount_point:?}/etc/fstab
-			fsync ${mount_point:?}/etc/fstab
-
 		# YEP, we want an auto-swapper and maybe
 		# a utility to mount the EFI partition for updating
 
@@ -2064,6 +2061,7 @@ bhyve -c $vm_cores -m $vm_ram -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
 
 sleep 2
 bhyvectl --destroy --vm=$vm_name
+reset
 HERE
 			echo Note: $work_dir/$bhyve_script
 
