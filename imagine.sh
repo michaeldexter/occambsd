@@ -233,10 +233,10 @@ zpool_newname=""
 zroot_in_use=0
 zpool_newname_in_use=0
 zfs_arc_default=0
-label_id1=100			# We could let the user override these with -l
-label_id2=200			# and -L to avoid conficts
-#target_input="raw"		# Default not helpful if -x
-target_input="img"		# Default not helpful if -x
+label_id1=100
+label_id2=200
+label_conflict=0
+target_input="img"
 target_dev=""
 target_dev2=""
 target_type=""
@@ -508,6 +508,29 @@ if [ "$fs_type" = "zfs" ] && [ "$grow_required" = 1 ] ; then
 fi
 
 [ "$enable_crash_dumping" = "1" ] && packages="$packages gdb"
+
+# Label conflict resolution strategy one: trust /dev/gpt/
+# Check for anticipated conflicts and increment label_id1 and 2 until clear
+# Defaults: bootfs efiesp|efiboot swapfs rootfs
+
+[ -e /dev/gpt/rootfs$label_id1 ] && label_conflict=1
+[ -e /dev/gpt/efiboot$label_id1 ] && label_conflict=1
+[ -e /dev/gpt/swapfs$label_id1 ] && label_conflict=1
+
+# Determine if these tests are comprehensive enough
+
+if [ "$label_conflict" = 1 ] ; then
+	while : ; do
+		label_id1=$(($label_id1+1))
+		label_id2=$(($label_id2+1))
+
+		[ -e /dev/gpt/rootfs$label_id1 ] || \
+		[ -e /dev/gpt/efiboot$label_id1 ] || \
+		[ -e /dev/gpt/swapfs$label_id1 ] || break
+	done
+
+	echo ; echo "New label ID is $label_id1"
+fi
 
 
 ######################
@@ -1506,21 +1529,16 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 
 	# Remove digits from default labels and add a new ID
 	# The host could have root-on-RaidZ with many devices
-	# Using 100 and 200 set in $label_id1 and $label_id2
+	# Using 100 and 200 set in $label_id1 and $label_id2 unless incremented
 	# Glob to avoid the sub-shell?
 
-# SHOULD THIS BE relabel_required? Possibly a function?
-
 # Challenge: Free space handling - fortunately, it is probably at the end
-# Caveat to consider: Running imagine.sh from an imagine.sh installation will
-# conflict on disk labels. Could add a conflict test and increment in the loop
+
 	gpart show -l $target_dev | tail -n+2 | grep . \
 		| awk '{print $1,$2,$3,$4}' | \
 		while read _start _stop _id _label ; do
 			_label=$( echo $_label | tr -d "[:digit:]" )
 			[ "$_label" = "null" -o "$_label" = "free" ] && break
-# DEBUG: Test for existing ${_label}$label_id1 here, and presumably test again
-# But, you may need to update the fstab - or accept this and use UFS
 		gpart modify -i $_id -l ${_label}$label_id1 $target_dev || \
 			{ echo $target_dev part $_id relabel failed ; exit 1 ; }
 		done
