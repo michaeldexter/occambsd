@@ -412,7 +412,9 @@ while getopts O:a:r:ot:T:fg:p:cCudmM:VvnUZ:Ax:i: opts ; do
 		# Implying this for use as shorthand
 		fs_type="zfs"
 		zpool_rename=1
+		# Needed for the fstab handling
 		attachment_required=1
+		mount_required=1
 	;;
 
 	A)
@@ -1722,7 +1724,6 @@ if [ "$mount_required" = 1 ] ; then
 		fuse-ext2 $root_dev ${mount_point:?} -o rw+ || \
 			{ echo "$root_dev fuse-ext2 mount failed" ; exit 1 ; }
 
-#	elif [ "$root_fs" = "freebsd-zfs" ] ; then
 	elif [ "$fs_type" = "zfs" ] ; then
 
 		echo ; echo "Importing zpool $zpool_name for mounting"
@@ -1737,32 +1738,6 @@ if [ "$mount_required" = 1 ] ; then
 		zfs mount ${zpool_name}/ROOT/default || \
 		{ echo "${zpool_name}/ROOT/default failed to mount" ; exit 1 ; }
 
-
-
-
-
-# DEBUG bun NOT WORKING!
-
-#echo bun
-
-#Mounting child datasets
-#+ zfs list -rH -o mountpoint,name,canmount,mounted -s mountpoint zroot/ROOT/default
-#+ read _mp _name _canmount _mounted
-#+ [ zroot/ROOT/default '=' img ]
-#+ [ noauto '=' off ]
-#+ [ yes '=' yes ]
-#+ continue
-#+ read _mp _name _canmount _mounted
-#+ [ -f /media/etc/fstab ]
-#+ echo
-
-
-### OH! Of course...
-#exit 1 ; This is the STANDARD, non-nested LAYOUT!!!
-#Generate mount/umount scripts?!?
-echo hopefully we can use ZFS mount and duh relative paths
-# WHOOOPS WAS AIMING AT THE BOOT ENVIRONMENT
-
 		echo ; echo Mounting child datasets
                 # Syntax from propagate.sh for fully-nested datasets
                 # Inspired by /etc/rc.d/zfsbe
@@ -1775,7 +1750,6 @@ echo hopefully we can use ZFS mount and duh relative paths
                         [ "$_mounted" = "yes" ] && continue
 			zfs mount $_name
                 done
-
 
 		if [ -f ${mount_point:?}/etc/fstab ] ; then
 			echo ; echo Attempting to update the fstab
@@ -1800,7 +1774,6 @@ swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d /
 
 			echo ; echo "${mount_point:?}/etc/fstab reads:" 
 			cat ${mount_point:?}/etc/fstab
-
 
 			echo ; echo KLUGE: fsyncing ${mount_point:?}/etc/fstab
 			fsync ${mount_point:?}/etc/fstab
