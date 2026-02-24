@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.5
+# Version v.0.99.6
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -216,8 +216,9 @@ debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-
 #debian_amd64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.raw"
 #debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.raw"
 
-routeros_amd64_url="https://download.mikrotik.com/routeros/7.21/chr-7.21.img.zip"
-routeros_arm64_url="https://download.mikrotik.com/routeros/7.21/chr-7.21-arm64.img.zip"
+# Stable CHR rather than LongTerm, Testing, or Development
+routeros_amd64_url="https://download.mikrotik.com/routeros/7.21.3/chr-7.21.3.img.zip"
+routeros_arm64_url="https://download.mikrotik.com/routeros/7.21.3/chr-7.21.3-arm64.img.zip"
 
 memtest86_url="https://www.memtest86.com/downloads/memtest86-usb.zip"
 
