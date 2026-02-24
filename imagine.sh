@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.7
+# Version v.0.99.8
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -1888,6 +1888,7 @@ swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d /
 	if [ "$add_users" = 1 ] ; then
 
 # Do we want the chroots of the original script?
+# No. It will fail when installing to other architectures
 # Pulling from release/tools/arm.sub arm_create_user() and vagrant.conf
 
 # Only works on new users?
@@ -1918,19 +1919,24 @@ swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d /
 
 	if [ "$enable_crash_dumping" = "1" ] ; then
 
-		echo "Enabling debug.debugger_on_panic=1"
+		echo ; echo "Enabling debug.debugger_on_panic=1"
 		echo "debug.debugger_on_panic=1" >> \
 			${mount_point:?}/etc/sysctl.conf || \
 			{ echo "Failed to configure sysctl.conf" ; exit 1 ; }
-		echo "Crash dumping can be tested with:"
+		echo ; echo "Crash dumping can be tested with:"
 		echo "sysctl debug.kdb.panic=1"
 
-		if [ ! $(sysrc -R ${mount_point:?} -c dumpdev) ] ; then
-			echo "dumpdev not enabled in /etc/rc.conf"
-			echo "Enabling dumpdev=\"AUTO\""
-			sysrc -R ${mount_point:?} dumpdev=AUTO || \
-				{ echo "sysrc dumpdev=AUTO failed" ; exit 1 ; }
-		fi
+		# NOT USING sysrc as it depends on platform-dependent chroot
+#		if [ ! $(sysrc -R ${mount_point:?} -c dumpdev) ] ; then
+#			echo ; echo "dumpdev not enabled in /etc/rc.conf"
+#			echo "Enabling dumpdev=\"AUTO\""
+#			sysrc -R ${mount_point:?} dumpdev=AUTO || \
+#				{ echo "sysrc dumpdev=AUTO failed" ; exit 1 ; }
+#		fi
+			# KLUGE for now, may result in duplicate entries
+			# Work out grep with string containing quotation marks
+			echo "dumpdev=\"AUTO\"" >> ${mount_point:?}/etc/sysctl.conf || \
+				{ echo "dumpdev enable failed" ; exit 1 ; }
 	fi
 fi # End mount_required
 
