@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99
+# Version v.0.99.5
 
 # propagate.sh - Packaged Base installer to boot environments and jails
 
@@ -1077,5 +1077,3 @@ else
 	echo "umount ${mount_point:?}"
 	echo
 fi
-
-# No closing exit for use wrapped by other scripts

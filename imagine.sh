@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.4
+# Version v.0.99.5
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -205,6 +205,7 @@ release_image_url=""
 release_image_file=""
 #release_image_xz=""
 release_branch=""
+file_to_extract=""
 fs_type="zfs"
 #omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151054.cloud.raw.zst"
 omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151056/omnios-r151056.cloud.raw.zst"
@@ -323,8 +324,10 @@ while getopts O:a:r:ot:T:fg:p:cCudmM:VvnUZ:Ax:i: opts ; do
 		[ "$( id -u )" = 0 ] || { echo "Must be root" ; exit 1 ; } 
 		[ "$OPTARG" ] || f_usage
 		mirror_path="$OPTARG"
-		[ "$mirror_path" = "img" ] || [ -c "$mirror_path" ] || \
-			{ echo "Likely invalid -T input" ; exit 1 ; }
+		if [ ! "$mirror_path" = "img" ] ; then
+			[ -c "$mirror_path" ] || \
+			{ echo "Mirror target device not found" ; exit 1 ; }
+		fi
 		# Mounting is required for fstab modifications
 		mount_required=1
 		attachment_required=1
@@ -348,7 +351,8 @@ while getopts O:a:r:ot:T:fg:p:cCudmM:VvnUZ:Ax:i: opts ; do
 		[ "$( id -u )" = 0 ] || { echo "Must be root" ; exit 1 ; } 
 		[ "$OPTARG" ] || f_usage
 		packages="$OPTARG"
-		grow_required=1
+		# Strongly recommended but not required
+#		grow_required=1
 		mount_required=1
 		attachment_required=1
 	;;
@@ -455,7 +459,8 @@ done
 # Get the hardware device write warnings out of the way early
 
 if [ "$target_prefix" = "/dev/" ] ; then
-	[ -c "$target_input" ] || { echo "$target_input not found" ; exit 1 ; }
+	[ -c "$target_input" ] || \
+		{ echo "$target_input device not found" ; exit 1 ; }
 	if [ "$force" = 0 ] ; then
 		echo ; echo "WARNING! Writing to $target_input !" ; echo
 		diskinfo -v $target_input
@@ -466,15 +471,16 @@ if [ "$target_prefix" = "/dev/" ] ; then
 	fi
 fi
 
-if [ "$mirror_path" ] || [ "$mirror_path" = "img" ] ; then
-	[ -c "$mirror_path" ] || { echo "$mirror_path not found" ; exit 1 ; }
-	if [ "$force" = 0 ] ; then
-		echo "WARNING! Writing to $mirror_path !"
-		diskinfo -v $mirror_path
-		gpart show -l $mirror_path
-		echo ; echo "WARNING! Writing to $mirror_path !" ; echo
-		echo -n "Continue? (y/n): " ; read confirmation2
-		[ "$confirmation2" = "y" ] || exit 0
+if [ "$mirror_path" ] ; then
+	if [ ! "$mirror_path" = "img" ] ; then
+		if [ "$force" = 0 ] ; then
+			echo "WARNING! Writing to $mirror_path !"
+			diskinfo -v $mirror_path
+			gpart show -l $mirror_path
+			echo ; echo "WARNING! Writing to $mirror_path !" ; echo
+			echo -n "Continue? (y/n): " ; read confirmation2
+			[ "$confirmation2" = "y" ] || exit 0
+		fi
 	fi
 fi
 
@@ -1201,7 +1207,6 @@ case "$target_type" in
 
 # Might not have the ending .raw? .img?
 		;; # End image
-
 	dev)
 		if [ "$xml_file" ] ; then
 			echo "Preparing Windows ISO and boot script"
@@ -1210,7 +1215,8 @@ case "$target_type" in
 				# Used for "path" release input
 				file_to_extract="$release_input"
 			else
-	file_to_extract="${work_dir}/${release_name}/$release_image_file"
+#	file_to_extract="${work_dir}/${release_name}/$release_image_file"
+	file_to_extract="$release_image_file"
 			fi
 
 			f_extract "$file_to_extract" > "$target_dev" || \
@@ -1239,12 +1245,6 @@ esac
 # ATTACHMENT REQUIRED (More than copying a raw VM image) #
 ##########################################################
 
-#	MITIGATING LABEL CONFLICTS
-#	WHICH MEAN FSTAB ISSUES, SOMETIMES REGARDLESS OF OUR APPROACH
-#	WHY THE HECK TO FREEBSD MULTI-DISK SYSTEMS LOVE TO CHOKE ON efipart?
-#	"Why did my production system fail to boot because of something I do
-#		not need?
-
 # Image/device attachment is needed for:
 # -g Growth required (implied on hardware devices)
 # -Z Rename zpool
@@ -1260,8 +1260,6 @@ esac
 # Make images and hardware devices equal, unless only an unmodified copy
 # Image single or mirrored images or files
 # Goal: NO FIRST BOOT STEPS
-
-# NO MD DEVICES... clean up if advanced
 
 
 echo ; echo Status: Checking attachment_required
@@ -1477,7 +1475,6 @@ fi # End grow_required
 # The only simple ZFS case was to expand an image to an unmodified boot image
 
 # This is based on the root partitioning type but we know the input
-#if [ "$root_fs" = "freebsd-zfs" -o "$root_fs" = "apple-zfs" ] ; then
 if [ "$fs_type" = "zfs" -a "$attachment_required" = 1 ] ; then
 
 # Defaults: bootfs efiesp|efiboot swapfs rootfs
@@ -1518,7 +1515,6 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 			mdconfig -af "${target_path}.mirror" -u $md_id2 || \
 				{ echo mdconfig failed ; exit 1 ; }
 			mdconfig -lv
-# The device for now but needs to be the file for the boot script
 			target_dev2="/dev/md$md_id2"
 
 		fi # End if type=img or dev
@@ -1527,12 +1523,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 
 	echo ; echo Relabeling $target_dev
 
-	# Remove digits from default labels and add a new ID
-	# The host could have root-on-RaidZ with many devices
-	# Using 100 and 200 set in $label_id1 and $label_id2 unless incremented
-	# Glob to avoid the sub-shell?
-
-# Challenge: Free space handling - fortunately, it is probably at the end
+	# Host could have root-on-RaidZ with many similar partitions and devices
 
 	gpart show -l $target_dev | tail -n+2 | grep . \
 		| awk '{print $1,$2,$3,$4}' | \
@@ -1742,6 +1733,7 @@ if [ "$mount_required" = 1 ] ; then
 		fuse-ext2 $root_dev ${mount_point:?} -o rw+ || \
 			{ echo "$root_dev fuse-ext2 mount failed" ; exit 1 ; }
 
+#	elif [ "$root_fs" = "freebsd-zfs" ] ; then
 	elif [ "$fs_type" = "zfs" ] ; then
 
 		echo ; echo "Importing zpool $zpool_name for mounting"
@@ -1770,7 +1762,7 @@ if [ "$mount_required" = 1 ] ; then
                 done
 
 		if [ -f ${mount_point:?}/etc/fstab ] ; then
-			echo ; echo Attempting to update the fstab
+			echo ; echo Updating fstab
 			cp ${mount_point:?}/etc/fstab \
 				${mount_point:?}/etc/fstab.original
 efi_label=$( grep efiboot ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d / -f 4  )
@@ -1825,7 +1817,6 @@ swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d /
 
 		cp /var/cache/pkg/* "${mount_point:?}/var/cache/pkg/" || \
 			{ echo "Package copy failed" ; exit 1 ; }
-
 	fi
 
 	# Must mount would already be set
@@ -1885,12 +1876,7 @@ swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d /
 		echo ; echo "Temporarily disabling base repo in /etc/pkg"
 		sed -i -e "s/enabled: yes/enabled: no/g" \
 			${mount_point:?}/etc/pkg/FreeBSD.conf
-		echo "Rest assured it is enabled in /usr/local/etc/pkg/repos"
-
-		if [ "$clean_package_cache" = "1" ] ; then
-			echo "Cleaning ${mount_point:?}/var/cache/pkg/"
-			find -s -f "${mount_point:?}/var/cache/pkg/" -- -mindepth 1 -delete
-		fi
+		echo ; echo "It is enabled in /usr/local/etc/pkg/repos"
 	fi # End packages
 
 
@@ -2052,9 +2038,6 @@ else
 	storage_string="-s 2,nvme,$vm_device"
 fi
 
-#if [ "$vm_networking" = "1" ] ; then
-#fi
-
 			cat << HERE > "${work_dir}/$bhyve_script"
 #!/bin/sh
 [ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; } 
@@ -2196,6 +2179,7 @@ bhyve -c $vm_cores -m $vm_ram -o console=stdio \\
 
 sleep 2
 bhyvectl --destroy --vm=$vm_name
+reset
 HERE
 			echo Note: $work_dir/$bhyve_script
 
@@ -2248,6 +2232,12 @@ echo ; echo Status: Checking keep_mounted and mount_required on the way out
 if [ "$keep_mounted" = 0 ] ; then
 	# Confirm the checks
 	if [ "$mount_required" = 1 ] ; then
+		# Putting this here in case someone does something clever
+		if [ "$clean_package_cache" = 1 ] ; then
+			echo ; echo "Cleaning ${mount_point:?}/var/cache/pkg/"
+			find -s -f "${mount_point:?}/var/cache/pkg/" \
+				-- -mindepth 1 -delete
+		fi
 
 		if [ "$root_fs" = "freebsd-ufs" ] ; then
 			echo ; echo "Unmounting ${mount_point:?}"
@@ -2322,5 +2312,3 @@ if [ ! "$release_name" = "windows" ] ; then
 			{ echo image size stat failed ; exit 1 ; }
 	fi
 fi
-
-exit 0

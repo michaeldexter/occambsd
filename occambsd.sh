@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v0.99
+# Version v0.99.5
 
 f_usage() {
         echo ; echo "USAGE:"
@@ -922,6 +922,3 @@ cp "$obj_dir/$src_dir/${target}.$target_arch/release/mini-memstick.img" \
 		> "$work_dir/bhyve-cleanup-mini-memstick.sh"
 	echo "$work_dir/bhyve-cleanup-mini-memstick.sh"
 fi
-
-echo
-exit 0
