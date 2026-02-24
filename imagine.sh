@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.6
+# Version v.0.99.7
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -507,7 +507,7 @@ esac
 
 # Needed for ZFS handling
 if [ "$fs_type" = "zfs" ] && [ "$grow_required" = 1 ] ; then
-	if [ "$release_name" = "omnios" ] ; then
+	if [ "$release_input" = "omnios" ] ; then
 		mount_required=0
 	else # release_input is a version for FreeBSD
 		mount_required=1
