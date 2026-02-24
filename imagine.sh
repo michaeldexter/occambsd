@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.8
+# Version v.0.99.9
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -1805,6 +1805,22 @@ swap_label=$( grep swap ${mount_point:?}/etc/fstab | awk '{print $1}' | cut -d /
 # PACKAGE HANDLING #
 ####################
 
+#########################
+# POSSIBLE UPSTREAM BUG #
+#########################
+
+# Installing FreeBSD-set-src or one of its members appear to install but fail
+# The written property does not increase, snapshotting and fsync do not help
+# du -h -d1 output prior to unmounting:
+# 400M	/media/usr/src/sys
+# zfs get used output:
+#NAME           PROPERTY  VALUE  SOURCE
+#zroot/usr/src  used      420K   -
+
+# Workaround:
+zfs destroy ${zpool_name}/usr/src
+zfs create ${zpool_name}/usr/src
+
 	# Separating from selecting new packages to install
 	if [ "$copy_package_cache" = "1" ] ; then
 		echo ; echo "Copying /var/cache/pkg/ packages from the host"
@@ -2260,6 +2276,8 @@ if [ "$keep_mounted" = 0 ] ; then
 			# The EFI partition will not be caught by that and will
 			# trip up the dataset umount - umount EFI first
 		echo ; echo "Unmounting child datasets and directories"
+		# Just in case
+		sleep 3
 		umount $(mount|grep "on $mount_point"|grep efi|cut -w -f 1) || \
 			{ echo "umount EFI partition failed" ; exit 1 ; }
 
