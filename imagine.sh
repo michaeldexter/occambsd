@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.9
+# Version v.0.99.10
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -564,12 +564,13 @@ fi
 if [ "$xml_file" ] ; then
 	[ "$iso_file" ] || { echo "-x requires -i" ; exit 1 ; }
 
+	[ "$packages" ] && { echo "-p not supported with -x" ; exit 1 ; }
+
 	# Default is img
 	if [ "$target_input" = "img" ] ; then
 		[ "$grow_size" ] || \
 			{ echo "-x without -t requires -g" ; exit 1 ; }
 	fi
-	[ "$packages" ] || { echo "-p not supported with -x" ; exit 1 ; }
 	# Disable this as a second boot does the installation
 	grow_required=0
 
@@ -1003,11 +1004,11 @@ if [ "$xml_file" ] && [ "$iso_file" ] ; then
 	attachment_required=0
 
 	which 7z > /dev/null 2>&1 || \
-		{ echo "7-zip package not installed" ; exit 1 ; }
+		{ echo "archivers/7-zip package not installed" ; exit 1 ; }
 	which mkisofs > /dev/null 2>&1 || \
-		{ echo "cdrtools  package not installed" ; exit 1 ; }
+		{ echo "sysutils/cdrtools package not installed" ; exit 1 ; }
 	which xmllint > /dev/null 2>&1 || \
-		{ echo "libxml2 package not installed" ; exit 1 ; }
+		{ echo "textproc/libxml2 package not installed" ; exit 1 ; }
 
 	[ -d $work_dir/windows/iso ] || mkdir -p $work_dir/windows/iso
 
