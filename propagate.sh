@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.5
+# Version v.0.99.12
 
 # propagate.sh - Packaged Base installer to boot environments and jails
 
@@ -86,7 +86,7 @@ f_usage() {
 	echo ; echo "USAGE:"
 	echo "-r <release> (i.e. 15.0-RELEASE or 16.0-CURRENT Default: Host)"
 	echo "-a <architecture> [ amd64 | arm64 ] (Default: Host)"
-	echo "-t <target root> (Boot environment or Jail path - Required)"
+	echo "-t <target root> (Boot environment or Jail path)"
 	echo "   i.e. zroot/ROOT/pkgbase15, zroot/jails/pkgbase15 datasets or"
 	echo "   /jails/myjail directory Default: /tmp/propagate/root)"
 	echo "-n Create fully-nested datasets"
@@ -261,12 +261,10 @@ else # target is a dataset
 	zpool_bootfs=$( zpool get -pH -o value bootfs $zpool_name )
 	zpool_mountpoint=$( zfs get -pH mountpoint -o value $zpool_bootfs )
 
-echo ; echo DEBUG zpool_bootfs is $zpool_bootfs
-echo zpool_mountpoint is $zpool_mountpoint
-
+#echo ; echo DEBUG zpool_bootfs is $zpool_bootfs
+#echo zpool_mountpoint is $zpool_mountpoint
 
 	target_type="dataset"
-
 fi
 
 # "15.0", "16.0"
@@ -302,13 +300,13 @@ if [ "$target_type" = "directory" ] && [ "$nested_datasets" = "1" ] ; then
 	exit 1
 fi
 
-if [ "$target_type" = "directory"] && [ "$copy_package_cache" = "1" ] ; then
+if [ "$target_type" = "directory" ] && [ "$copy_package_cache" = "1" ] ; then
 	echo "-b boot code update only applies to datasets"
 	exit 1
 fi
 
 if [ "$release_branch" = "CURRENT" ] && [ "$package_branch" = "quarterly" ] ; then
-	echo $release_input cannot be used with quarterly packages
+	echo "$release_input cannot be used with quarterly packages"
 	exit 1 
 fi
 
@@ -336,22 +334,6 @@ if [ "$sideload" = "1" ] && [ "$add_users" = "1" ] ; then
 	echo "Sideloading and adding users are mutually exclusive"
 	exit 1
 fi
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ############################
@@ -619,11 +601,12 @@ if [ "$copy_package_cache" = "1" ] ; then
 
 	cp /var/cache/pkg/* "${mount_point:?}/var/cache/pkg/" || \
 		{ echo "Package copy failed" ; exit 1 ; }
-fi
 
 ls -l ${mount_point:?}/var/cache/pkg/ | tail
 du -h -d1 ${mount_point:?}/var/cache/pkg/
-echo DBUG HOW DID THAT GO? ; read go
+echo bun DEBUG HOW DID THAT GO? ; read go
+
+fi
 
 ###############
 # Install pkg #

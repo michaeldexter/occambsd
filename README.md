@@ -134,12 +134,14 @@ Status: OccamBSD needs testing and refactoring for FreeBSD 15.0
 -r [ obj | /path/to/image | <version> | omnios | debian ]
    obj i.e. /usr/obj/usr/src/<target>.<target_arch>/release/vm.ufs.raw
    /path/to/image.raw for an existing image
-   <version> i.e. 15.0-RELEASE | 16.0-CURRENT | 15.0-ALPHAn|BETAn|RCn
+   <version> i.e. 15.0-RELEASE | 16.0-CURRENT | 16.0-ALPHAn|BETAn|RCn
    (Default: Host)
 -o (Offline mode to re-use fetched releases)
 -t <target> [ img | /dev/<device> | /path/myimg ] (Default: img)
 -T <mirror target> [ img | /dev/<device> ]
 -f (FORCE imaging to a device without prompting for confirmation)
+-B u-boot-<board port/package> (u-Boot emBedded Board acroBatics)
+"(i.e. rockpro64)"
 -g <gigabytes> (grow image to gigabytes i.e. 10)
 -p "<packages>" (Quoted space-separated list)
 -c (Copy cached packages from the host to the target)
@@ -176,6 +178,14 @@ To download a VM-IMAGE matching the host's version and generate boot scripts:
 doas sh imagine.sh -v
 ```
 
+To generate a RockPro64 SBC image with root on ZFS, primarycache=metadata, root/root and freebsd/freebsd users, SSHd and NTPd enabled, four packages, and a VM boot script for use under qemu and bhyve/ARM64:
+
+```
+doas sh imagine.sh -a arm64 -B quartz64-a -u -p "doas tmux got openrsync" -v
+```
+
+Note that the "SBC" image is built using makefs(8) and mkimg(1) and currently on the quartz64-a, quartz64-b, pine64, and rockpro64 u-boot systems are supported.
+
 To download an OmniOS image (version embedded in the script for want of "Latest" aliases on the mirrors) and image it to a hardware device /dev/da0 :
 
 ```
@@ -192,7 +202,7 @@ svcadm disable svc:/system/cloud-init:final
 
 # Example Scenario of using occambsd.sh with imagine.sh
 
-Example usage on a FreeBSD 14.0 system with 'makefs -t zfs' support to produce a minimum root-on-ZFS image that is grown to 10GB in size and boots in seconds:
+Example usage on a FreeBSD 15.0 system with 'makefs -t zfs' support to produce a minimum root-on-ZFS image that is grown to 10GB in size and boots in seconds:
 
 ```
 doas sh occambsd.sh -p profile-amd64-zfs.txt -v -z
@@ -215,7 +225,7 @@ doas sh propagate.sh -r 16.0-CURRENT -t mypool/ROOT/16.0-CURRENT -n -b -p "doas 
 Which breaks down, by flag:
 ```
 -r Image the 15.0-RELEASE release of FreeBSD to a USB device attached at /dev/da0
--p "doas tmux got" Install the doas, tmux and got packages
+-p "doas tmux got openrsync" Install the doas, tmux, got, and openrsync packages
 -d Enable crash dumping
 -g Grow the image to 10GB
 -u Add the root and freebsd users, and enable sshd following the FreeBSD RPi/RockPro64/etc. "ISO" images
