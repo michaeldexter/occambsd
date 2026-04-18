@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.13
+# Version v.0.99.14
 
 # propagate.sh - Packaged Base installer to boot environments and jails
 
@@ -100,6 +100,7 @@ f_usage() {
 	echo "-b (Install boot code)"
 	echo "-u (Add root/root and freebsd/freebsd users and enable sshd)"
 	echo "-d (Enable crash dumping)"
+	echo "-9 (Enable p9fs jail root)"
 	echo "-o <output directory/work> (Default: /tmp/propagate)"
 	echo
 	exit 0
@@ -125,17 +126,19 @@ nested_datasets=0
 package_branch="latest"
 #FYI: "file:///usr/obj/usr/src/repo/FreeBSD:14:amd64/14.2/"
 install_boot_code=0
-enable_crash_dumping=0
 add_users=0
+enable_crash_dumping=0
 keep_mounted=0
+p9fs_root=0
 
 
 #############################
 # USER-OVERRIDABLE DEFAULTS #
 #############################
 
-target_input="/tmp/propagate/root" # Default to a jail
-mount_point="/tmp/propagate/root"  # at the default mount point
+# NEED TO CHANGE WITH VERSIONED JAIL/9P
+target_input="/tmp/propagate/root"
+mount_point="/tmp/propagate/root"
 work_dir="/tmp/propagate"
 additional_packages=""
 sideload=0
@@ -156,7 +159,7 @@ dump_device=""
 # USER INPUT #
 ##############
 
-while getopts r:a:t:nqmp:scCGbudo: opts ; do
+while getopts r:a:t:nqmp:scCGbud9o: opts ; do
 	case $opts in
 	r)
 		[ "$OPTARG" ] || f_usage
@@ -216,6 +219,9 @@ while getopts r:a:t:nqmp:scCGbudo: opts ; do
 	;;
 	d)
 		enable_crash_dumping=1
+	;;
+	9)
+		p9fs_root=1
 	;;
 	o)
 		[ "$OPTARG" ] || f_usage
@@ -285,8 +291,13 @@ ABI="FreeBSD:${VERSION_MAJOR}:$cpu_arch"
 # 16.x moves to 16.0-CURRENT
 VERSION_MINOR="$( echo "$release_version" | cut -d "." -f 2 )"
 
-echo ; echo "Setting work directory to $work_dir/$release_input"
-work_dir="$work_dir/$release_input"
+if [ "$target_type" = "directory" ] ; then
+	echo ; echo "Setting work directory to $work_dir/$release_input"
+	work_dir="$work_dir/$release_input"
+	target_input="$work_dir/root"
+	mount_point="$work_dir/root"
+
+fi
 
 # Decide if riscv is supported
 case "$hw_platform" in
@@ -328,6 +339,16 @@ if [ "$enable_crash_dumping" = "1" ] && [ ! "$target_type" = "dataset" ] ; then
 	exit 1
 fi
 
+if [ "$p9fs_root" = "1" ] && [ ! "$target_type" = "directory" ] ; then
+	echo "p9fs jail root does not support datasets"
+	exit 1
+fi
+
+if [ "$p9fs_root" = "1" ] && [ "$sideload" = "1" ] ; then
+	echo "p9fs jail root and sideloading are mutually-exclusive"
+	exit 1
+fi
+
 [ "$hw_platform" = "arm64" ] && \
 	pkg_sets="$pkg_sets FreeBSD-dtb"
 
@@ -355,8 +376,11 @@ fi
 	{ echo mkdir failed ; exit 1 ; }
 
 if [ "$target_type" = "directory" ] ; then
-#	pkg_sets="FreeBSD-set-minimal-jail FreeBSD-set-base-jail"
 	pkg_sets="FreeBSD-set-minimal-jail"
+
+	[ "$p9fs_root" = 1 ] && \
+pkg_sets="$pkg_sets FreeBSD-kernel-generic FreeBSD-bootloader FreeBSD-lib9p"
+#	pkg_sets="FreeBSD-set-minimal FreeBSD-kernel-generic FreeBSD-lib9p"
 
 	echo ; echo Creating root directory
 	[ -d "$target_input" ] || mkdir -p "$target_input"
@@ -1073,6 +1097,48 @@ HERE
 [ -f "$work_dir/jail-halt.sh" ] || \
 	{ echo "$work_dir/jail-halt.sh failed to create" ; exit 1 ; }
 fi # End jail
+
+
+#############
+# P9FS ROOT #
+#############
+
+if [ "$p9fs_root" = 1 ] ; then
+	echo ; echo "Configuring p9fs root"
+#	echo "p9fs_load=\"YES\"" > "${work_dir}/root/boot/loader.conf"
+	echo "virtio_p9fs_load=\"YES\"" > "${work_dir}/root/boot/loader.conf"
+	echo "vfs.root.mountfrom=\"p9fs:propagate\"" \
+		>> "${work_dir}/root/boot/loader.conf"
+	echo "propagate / p9fs rw 0 0" > "${work_dir}/root/etc/fstab"
+
+	echo ; echo "Generating $work_dir/bhyve-p9fs-boot.sh script"
+	cat << HERE > "$work_dir/bhyve-p9fs-boot.sh"
+#!/bin/sh
+[ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; }
+[ -e /dev/vmm/propagate ] && { bhyvectl --destroy --vm=propagate ; sleep 1 ; }
+
+kldstat -q -m vmm || kldload vmm
+sleep 1
+bhyveload -m 1024 -h $work_dir/root/ propagate
+sleep 1
+
+bhyve -D -m 1024 -A -H -l com1,stdio -s 31,lpc -s 0,hostbridge \\
+	-s 2,virtio-9p,propagate=$work_dir/root \\
+	propagate
+
+# Devices to consider:
+
+# -s 4,virtio-net,tap0 \\
+# -s 4,e1000,tap0 \\
+
+sleep 2
+bhyvectl --destroy --vm=propagate
+reset
+HERE
+
+	echo "$work_dir/bhyve-p9fs-boot.sh"
+
+fi # End p9fs_root
 
 
 ##################
