@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.12
+# Version v.0.99.13
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -177,6 +177,7 @@ f_usage() {
 	echo "-d (Enable crash dumping)"
 	echo "-m (Mount image and keep mounted for further configuration)"
 	echo "-M <Mount point> (Default: /media)"
+	echo "-I (Inject installation image, imagine.sh, and propagate.sh)"
 	echo "-V (Generate VMDK image wrapper)"
 	echo "-v (Generate VM boot scripts)"
 	echo "-n (Include tap0 e1000 network device in VM boot scripts)"
@@ -194,6 +195,8 @@ f_usage() {
 # INTERNAL VARIABLES AND DEFAULTS #
 ###################################
 
+path=$( dirname $0 )
+[ "$path" = "." ] && path=$( pwd )
 work_dir=~/imagine-work		# Default - fails if quoted
 hw_platform=$( uname -m )	# i.e. arm64
 cpu_arch=$( uname -p )		# i.e. aarch64
@@ -209,8 +212,10 @@ release_image_file=""
 #release_image_xz=""
 release_version=""
 VERSION_MAJOR=""
+VERSION_MINOR="" # Not used yet but synchronized with propagate.sh
 ABI=""
 release_branch=""
+release_url=""
 file_to_extract=""
 fs_type="zfs"
 #omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151054.cloud.raw.zst"
@@ -229,6 +234,8 @@ routeros_arm64_url="https://download.mikrotik.com/routeros/7.21.3/chr-7.21.3-arm
 memtest86_url="https://www.memtest86.com/downloads/memtest86-usb.zip"
 
 attachment_required=0
+mount_required=0
+keep_mounted=0
 root_fs=""
 root_part=""
 root_dev=""
@@ -259,13 +266,12 @@ u_boot_package=""
 #u_boot_output=""
 grow_required=0
 grow_size=""
+inject=0
 packages=""
 copy_package_cache=0
 clean_package_cache=0
 add_users=0
 enable_crash_dumping=0
-mount_required=0
-keep_mounted=0
 mount_point="/media"
 xml_file=""
 iso_file=""
@@ -292,7 +298,7 @@ md_id=42			# Default for easier cleanup if interrupted
 # USER INPUT AND VARIABLE OVERRIDES #
 #####################################
 
-while getopts O:a:r:ot:T:fB:g:p:cCudmM:VvnUZ:Ax:i: opts ; do
+while getopts O:a:r:ot:T:fB:g:p:cCudmM:IVvnUZ:Ax:i: opts ; do
 	case $opts in
 	O)
 		work_dir="$OPTARG"
@@ -338,8 +344,8 @@ while getopts O:a:r:ot:T:fB:g:p:cCudmM:VvnUZ:Ax:i: opts ; do
 			{ echo "Mirror target device not found" ; exit 1 ; }
 		fi
 		# Mounting is required for fstab modifications
-		mount_required=1
 		attachment_required=1
+		mount_required=1
 	;;
 
 	f)
@@ -389,8 +395,8 @@ while getopts O:a:r:ot:T:fB:g:p:cCudmM:VvnUZ:Ax:i: opts ; do
 		packages="$OPTARG"
 		# Strongly recommended but not required
 #		grow_required=1
-		mount_required=1
 		attachment_required=1
+		mount_required=1
 	;;
 
 	c)
@@ -403,20 +409,20 @@ while getopts O:a:r:ot:T:fB:g:p:cCudmM:VvnUZ:Ax:i: opts ; do
 
 	u)
 		add_users=1
-		mount_required=1
 		attachment_required=1
+		mount_required=1
 	;;
 
 	d)
 		enable_crash_dumping=1
-		mount_required=1
 		attachment_required=1
+		mount_required=1
 	;;
 
 	m)
+		attachment_required=1
 		mount_required=1
 		keep_mounted=1
-		attachment_required=1
 	;;
 
 	M)
@@ -424,6 +430,12 @@ while getopts O:a:r:ot:T:fB:g:p:cCudmM:VvnUZ:Ax:i: opts ; do
 		mount_point="$OPTARG"
 		[ -d "$mount_point" ] || \
 			{ echo "Mount point $mount_point missing" ; exit 1 ; }
+	;;
+
+	I)
+		inject=1
+		attachment_required=1
+		mount_required=1
 	;;
 
 	V)
@@ -873,33 +885,44 @@ elif [ -f "$release_input" ] ; then # if a path to an arbitrary image
 #####################
 
 else
-	# Release version i.e. 15.0-CURRENT
 	release_type="xz"
+	release_name="freebsd"
+
+	# Sync with propagate.sh
+	# release_input: 15.0-RELEASE, 15.0-STABLE, 16.0-CURRENT etc.
+	# Could validate this more
 	echo "$release_input" | grep -q "-" || \
 		{ echo "Invalid release" ; exit 1 ; }
 	echo "$release_input" | grep -q "FreeBSD" && \
 		{ echo "Invalid release" ; exit 1 ; }
-	release_name="freebsd"
+	# release_version: 15.0, 16.0, etc.
 	release_version=$( echo "$release_input" | cut -d "-" -f 1 )
 	# Further validate the numeric version?
-	release_build=$( echo "$release_input" | cut -d "-" -f 2 )
+	# release_branch: RELEASE, STABLE, CURRENT, RC, etc.
+	release_branch=$( echo "$release_input" | cut -d "-" -f 2 )
+	# release_abi: 15, 16
 	release_abi=$( echo "$release_version" | cut -d "." -f 1 )
-	# Pulled from propagate.sh
+	# VERSION_MAJOR: 15.0, 15.1, 16.0
 	VERSION_MAJOR=$( echo "$release_version" | cut -d "." -f 1 )
+	# ABI: FreeBSD:15:amd64, FreeBSD:16:arm64
 	ABI="FreeBSD:${VERSION_MAJOR}:$cpu_arch"
+	# VERSION_MINOR: "0", "1"
+	# cut -d "." -f 2 only works with a .N
+	# 16.x moves to 16.0-CURRENT
+	VERSION_MINOR="$( echo "$release_version" | cut -d "." -f 2 )"
 
-	case "$release_build" in
+	case "$release_branch" in
 		CURRENT|STABLE)
-			release_branch="snapshots"
+			release_url="snapshots"
 		;;
 		*)
-			release_branch="releases"
+			release_url="releases"
 			# This is a false assumption for ALPHA builds
 		;;
 	esac
 
 # THESE DIRECTORIES HAVE BEEN MOVING TARGETS OVER THE YEARS
-	release_image_url="https://download.freebsd.org/${release_branch}/VM-IMAGES/${release_input}/${cpu_arch}/Latest/FreeBSD-${release_input}-${arch_string}-${fs_type}.raw.xz"
+	release_image_url="https://download.freebsd.org/${release_url}/VM-IMAGES/${release_input}/${cpu_arch}/Latest/FreeBSD-${release_input}-${arch_string}-${fs_type}.raw.xz"
 
 	release_image_file="$( basename $release_image_url )"
 
@@ -2129,11 +2152,10 @@ if [ "$mount_required" = 1 ] ; then
 		[ -d ${mount_point:?}/usr/local/etc/pkg/repos ] || \
 			mkdir -p ${mount_point:?}/usr/local/etc/pkg/repos
 
-# Handled by RE
+# Handled by RE in the VM-IMAGE
 #		echo "Enabling base package repo"
 #		echo "FreeBSD-base: { enabled: yes }" > \
 #		${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-base.conf
-
 
 		echo ; echo "Installing pkg"
 		pkg \
@@ -2145,9 +2167,11 @@ if [ "$mount_required" = 1 ] ; then
 				{ echo "pkg install failed" ; exit 1 ; }
 
 # Consider a package upgrade here if using RELEASE images!
+# Which should be automatic if you install any package
 
+		# This saves the original configuration as FreeBSD.conf.original
 		echo ; echo "Temporarily enabling base repo in /etc/pkg"
-		sed -i -e "s/enabled: no/enabled: yes/g" \
+		sed -I .original "s/enabled: no/enabled: yes/g" \
 			${mount_point:?}/etc/pkg/FreeBSD.conf
 
 		echo ; echo "Updating existing base packages"
@@ -2159,7 +2183,6 @@ if [ "$mount_required" = 1 ] ; then
 			upgrade -y || \
 				{ echo "Package upgrade failed" ; exit 1 ; }
 
-		# Consider backing up FreeBSD.conf and restoring it
 		echo ; echo "Installing $packages"
 		pkg \
 			--option ABI="${ABI:?}" \
@@ -2169,11 +2192,10 @@ if [ "$mount_required" = 1 ] ; then
 			install -y $packages || \
 				{ echo "Package install failed" ; exit 1 ; }
 
-		# Consider backing up FreeBSD.conf and restoring it
-		echo ; echo "Temporarily disabling base repo in /etc/pkg"
-		sed -i -e "s/enabled: yes/enabled: no/g" \
-			${mount_point:?}/etc/pkg/FreeBSD.conf
-		echo ; echo "It is enabled in /usr/local/etc/pkg/repos"
+		echo ; echo "Restoring FreeBSD.conf.original"
+		mv ${mount_point:?}/etc/pkg/FreeBSD.conf.original \
+			${mount_point:?}/etc/pkg/FreeBSD.conf || \
+			{ echo "mv failed" ; exit 1 ; }
 	fi # End packages
 
 
@@ -2183,6 +2205,7 @@ if [ "$mount_required" = 1 ] ; then
 
 	if [ "$add_users" = 1 ] ; then
 
+# Sync with propagate.sh
 # Do we want the chroots of the original script?
 # No. It will fail when installing to other architectures
 # Pulling from release/tools/arm.sub arm_create_user() and vagrant.conf
@@ -2226,12 +2249,16 @@ if [ "$mount_required" = 1 ] ; then
 
 	if [ "$enable_crash_dumping" = 1 ] ; then
 
-		echo ; echo "Enabling debug.debugger_on_panic=1"
-		echo "debug.debugger_on_panic=1" >> \
-			${mount_point:?}/etc/sysctl.conf || \
+		echo ; echo Enabling crash dumping
+
+		if [ ! $(sysctl -n debug.debugger_on_panic) = "1" ] ; then
+			echo "Enabling debug.debugger_on_panic=1"
+			echo "debug.debugger_on_panic=1" >> \
+				${mount_point:?}/etc/sysctl.conf || \
 			{ echo "Failed to configure sysctl.conf" ; exit 1 ; }
-		echo ; echo "Crash dumping can be tested with:"
-		echo "sysctl debug.kdb.panic=1"
+			echo ; echo "Crash dumping can be tested with:"
+			echo "sysctl debug.kdb.panic=1"
+		fi
 
 		# NOT USING sysrc as it depends on platform-dependent chroot
 #		if [ ! $(sysrc -R ${mount_point:?} -c dumpdev) ] ; then
@@ -2240,8 +2267,6 @@ if [ "$mount_required" = 1 ] ; then
 #			sysrc -R ${mount_point:?} dumpdev=AUTO || \
 #				{ echo "sysrc dumpdev=AUTO failed" ; exit 1 ; }
 #		fi
-			# KLUGE for now, may result in duplicate entries
-			# Work out grep with string containing quotation marks
 		grep -q "dumpdev=\"AUTO\"" ${mount_point:?}/etc/rc.conf || \
 		echo "dumpdev=\"AUTO\"" >> ${mount_point:?}/etc/rc.conf
 
@@ -2249,13 +2274,52 @@ if [ "$mount_required" = 1 ] ; then
 			{ echo "dumpdev enable failed" ; exit 1 ; }
 	fi # End enable_crash_dumping
 
-
 	if [ -n "$u_boot_package" ] ; then
 		# This will fail on zpool 'freebsd' and could be smarter
 		sed -i -e "s/freebsd/$u_boot_package/g" \
 			${mount_point:?}/etc/rc.conf || \
 			{ echo rc.conf hostname change failed ; exit 1 ; }
 	fi
+
+#############
+# Injection #
+#############
+
+	if [ "$inject" = 1 ] ; then
+
+	# Test earlier if possible
+		# custom images could work but might be tricky with src dir
+		case ${release_name} in
+			#freebsd|custom)
+			freebsd)
+				continue
+			;;
+			*)
+				echo "-I inject only supports FreeBSD images"
+				exit 1
+			;;
+		esac
+
+		echo ; echo Injecting imagine.sh and propagate.sh
+
+		# This should not fail given that it is executing this
+
+		cp ${path}/imagine.sh ${mount_point:?}/root/ || \
+			{ echo cp failed ; exit 1 ; }
+
+		cp ${path}/propagate.sh ${mount_point:?}/root/ || \
+			{ echo cp failed ; exit 1 ; }
+
+		# Any reason to honor a custom work_dir?
+		echo ; echo Making ${mount_point:?}/root/imagine-work
+		mkdir -p ${mount_point:?}/root/imagine-work/${release_name} || \
+			{ echo mkdir failed ; exit 1 ; }
+		cp $release_image_file \
+			${mount_point:?}/root/imagine-work/${release_name}/ || \
+				{ echo cp failed ; exit 1 ; }
+		find ${mount_point:?}/root/
+	fi # End inject
+
 fi # End mount_required
 
 

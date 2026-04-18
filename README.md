@@ -122,7 +122,7 @@ To build a root-on-ZFS Virtual Machine image using FreeBSD 14.0 or later:
 doas sh occambsd.sh -v -z -p profile-amd64-zfs14.txt
 ```
 
-Status: OccamBSD needs testing and refactoring for FreeBSD 15.0
+Status: OccamBSD needs testing and refactoring for FreeBSD 15.0 and ARM64
 
 # imagine.sh
 
@@ -150,6 +150,7 @@ Status: OccamBSD needs testing and refactoring for FreeBSD 15.0
 -d (Enable crash dumping)
 -m (Mount image and keep mounted for further configuration)
 -M <Mount point> (Default: /media)
+-I (Inject installation image, imagine.sh, and propagate.sh)
 -V (Generate VMDK image wrapper)
 -v (Generate VM boot scripts)
 -n (Include tap0 e1000 network device in VM boot scripts)
@@ -178,7 +179,7 @@ To download a VM-IMAGE matching the host's version and generate boot scripts:
 doas sh imagine.sh -v
 ```
 
-To generate a RockPro64 SBC image with root on ZFS, primarycache=metadata, root/root and freebsd/freebsd users, SSHd and NTPd enabled, four packages, and a VM boot script for use under qemu and bhyve/ARM64:
+To generate a RockPro64 SBC image with root on ZFS, primarycache=metadata, root/root and freebsd/freebsd users, SSHd and NTPd enabled, four packages, and a VM boot script for use under QEMU and bhyve/ARM64:
 
 ```
 doas sh imagine.sh -a arm64 -B quartz64-a -u -p "doas tmux got openrsync" -v
@@ -268,10 +269,92 @@ Note the -c flag that copies packages from the host's package cache, saving on r
 -C (Clean package cache after installation)
 -G (Write a graph of base package selections and dependencies)
 -b (Install boot code)
--d (Enable crash dumping)
 -u (Add root/root and freebsd/freebsd users and enable sshd)
+-d (Enable crash dumping)
 -o <output directory/work> (Default: /tmp/propagate)
 ```
+
+## Imagine and Propagate Scenarios
+
+Imagine you have a new, UEFI-enabled ARM64 system and you wish to rapidly test FreeBSD 15.0-RELEASE, 15.0-STABLE, and 16.0-CURRENT jails and virtual machines on it. From an Internet-connected AMD64 system, run the following to create a bootable installer image:
+
+```
+doas sh imagine.sh -a arm64 -r 15.0-RELEASE -I -u -g 8 -v -Z installer
+```
+
+The flags explained:
+
+-a arm64 for the ARM64/aarch64 architecture
+-r 15.0-RELEASE for the FreeBSD VM-IMAGE release that the installer and new host will boot to
+-I to inject imagine.sh, propagate.sh, and the same compressed FreeBSD VM-IMAGE 
+-u Add default root/root and freebsd/freebsd users and enable SSHd and NTPd
+-p Add the tmux, qemu, and u-boot-bhyve-arm64 packages
+-g Grow the image to 8GB from the default of 5GB to accommodate the compressed VM-image and packages
+-v Create VM boot scripts to pre-flight the result
+-Z Rename the default "zroot" zpool to "installer"
+
+This should result in:
+
+~/imagine-work/FreeBSD-arm64-15.0-RELEASE-zfs.raw
+~/imagine-work/bhyve-15.0-RELEASE-arm64-zfs.sh
+~/imagine-work/qemu-15.0-RELEASE-arm64-zfs.sh
+
+Because you cannot boot an ARM64 VM on an AMD64 system, you can validate it using QEMU by running the "qemu-15.0-RELEASE-arm64-zfs.sh" script (requires the qemu package).
+
+If satisfied with the result, you can image to a "USB key" or USB-attached SSD at /dev/da0 with:
+
+```
+doas dd if=/root/imagine-work/FreeBSD-arm64-15.0-RELEASE-zfs.raw of=/dev/da0 bs=1m conv=sync ; gpart recovery /dev/da0
+
+```
+
+While the original imagine.sh command could be used with the -t flag to image directly to /dev/da0, the pool expansion it performs will be much slower and put more load on the device, possibly causing it to report write errors.
+
+Boot the ARM64 hardware system to this USB device and you should be able to log in as root with the password "root", or SSH into it as user freebsd with the password "freebsd".
+
+From there you can "imagine" it further to an internal SSD at /dev/nda0 with:
+
+```
+sh imagine.sh -t /dev/nda0 -u -d -p "tmux qemu u-boot-bhyve-arm64" -Z arm64
+
+```
+This invocation adds the -d flag that will enable crash dumping and use -Z to create a zpool name "arm64".
+
+If you are not sure what internal disks are available on the new system, you can list them with:
+
+```
+sysctl kern.disks
+```
+
+Upon successful imaging, reboot the system and you should be able to log in as root on the console or freebsd on the console or over SSH.
+
+Configure it to your liking and you and then create 15.0-STABLE and 16.0-CURRENT jails and boot environments as root with:
+
+```
+sh propagate.sh -r 15.0-STABLE -s
+sh propagate.sh -r 15.0-STABLE -s -t arm64/ROOT/15.0-STABLE -p "gdb tmux qemu u-boot-bhyve-arm64"
+sh propagate.sh -r 16.0-CURRENT -s
+sh propagate.sh -r 16.0-CURRENT -s -t arm64/ROOT/16.0-CURRENT -p "gdb tmux qemu u-boot-bhyve-arm64"
+
+The first command without the target -t will create a jail with:
+
+/tmp/propagate/15.0-STABLE/root
+/tmp/propagate/15.0-STABLE/jail-boot.sh
+/tmp/propagate/15.0-STABLE/jail-halt.sh
+
+These are the jail root directory and boot and halt scripts.
+
+Note that a 15.x jail can be booted on a 16.0 host.
+
+The -s flag "sideloads" the majority of the host's configuration into the destination and while it will not install packages, it will list the host's packages in /root/prime-packages.txt in the destination.
+
+The -p flag installs the gdb, tmux, qemu, and u-boot-bhyve-arm64 packages to the new boot ennvironment.
+
+You could use the -m flag to keep a new boot environment mounted and the boot environment set as a output directory with -O, but it is easier to reboot and select the new boot environment in the loader, and then run imagine.sh when ready.
+
+The result host, jails, and boot environments can be updated using pkg(8).
+
+The include bhyve, QEMU, and Xen boot scripts only provide basic validation, but the resulting raw images can be used in your virtualization environment of choice.
 
 ## MISCELLANEOUS
 

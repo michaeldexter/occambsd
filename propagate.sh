@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.12
+# Version v.0.99.13
 
 # propagate.sh - Packaged Base installer to boot environments and jails
 
@@ -98,8 +98,8 @@ f_usage() {
 	echo "-C (Clean package cache after installation)"
         echo "-G (Write a graph of base package selections and dependencies)"
 	echo "-b (Install boot code)"
-	echo "-d (Enable crash dumping)"
 	echo "-u (Add root/root and freebsd/freebsd users and enable sshd)"
+	echo "-d (Enable crash dumping)"
 	echo "-o <output directory/work> (Default: /tmp/propagate)"
 	echo
 	exit 0
@@ -156,7 +156,7 @@ dump_device=""
 # USER INPUT #
 ##############
 
-while getopts r:a:t:nqmp:scCGbduo: opts ; do
+while getopts r:a:t:nqmp:scCGbudo: opts ; do
 	case $opts in
 	r)
 		[ "$OPTARG" ] || f_usage
@@ -211,11 +211,11 @@ while getopts r:a:t:nqmp:scCGbduo: opts ; do
 	b)
 		install_boot_code=1
 	;;
-	d)
-		enable_crash_dumping=1
-	;;
 	u)
 		add_users=1
+	;;
+	d)
+		enable_crash_dumping=1
 	;;
 	o)
 		[ "$OPTARG" ] || f_usage
@@ -248,7 +248,7 @@ if [ "$target_prefix" = "/" ] ; then
 
 else # target is a dataset
 
-# DEBUG SHELLCHECK SUGGESTS QUOTING AFTER THE DOLLAR SIGN
+	# SHELLCHECK SUGGESTS QUOTING AFTER THE DOLLAR SIGN
 	zpool_name="$( echo "$target_input" | cut -d "/" -f 1 )"
 	#zpool get name "$( echo "$target_input" | cut -d "/" -f 1 )" \
 	zpool get name $zpool_name \
@@ -261,25 +261,32 @@ else # target is a dataset
 	zpool_bootfs=$( zpool get -pH -o value bootfs $zpool_name )
 	zpool_mountpoint=$( zfs get -pH mountpoint -o value $zpool_bootfs )
 
-#echo ; echo DEBUG zpool_bootfs is $zpool_bootfs
-#echo zpool_mountpoint is $zpool_mountpoint
-
 	target_type="dataset"
 fi
 
-# "15.0", "16.0"
+# Sync with imagine.sh
+# release_input: 15.0-RELEASE, 15.0-STABLE, 16.0-CURRENT  etc.
+# Could validate this more
+echo "$release_input" | grep -q "-" || \
+	{ echo "Invalid release" ; exit 1 ; }
+echo "$release_input" | grep -q "FreeBSD" && \
+	{ echo "Invalid release" ; exit 1 ; }
+# release_version: 15.0, 16.0, etc.
 release_version=$( echo "$release_input" | cut -d "-" -f 1 )
-
-# "RELEASE", "STABLE", "CURRENT", "RC*",  etc.
+# Further validate the numeric version?
+# release_branch: RELEASE, STABLE, CURRENT, RC, etc.
 release_branch=$( echo "$release_input" | cut -d "-" -f 2 )
-
-# "15", "16"
-VERSION_MAJOR="$( echo "$release_version" | cut -d "." -f 1 )"
-
-# "0", "1"
+# VERSION_MAJOR: 15.0, 15.1, 16.0
+VERSION_MAJOR=$( echo "$release_version" | cut -d "." -f 1 )
+# ABI: FreeBSD:15:amd64, FreeBSD:16:arm64
+ABI="FreeBSD:${VERSION_MAJOR}:$cpu_arch"
+# VERSION_MINOR: "0", "1"
 # cut -d "." -f 2 only works with a .N
 # 16.x moves to 16.0-CURRENT
 VERSION_MINOR="$( echo "$release_version" | cut -d "." -f 2 )"
+
+echo ; echo "Setting work directory to $work_dir/$release_input"
+work_dir="$work_dir/$release_input"
 
 # Decide if riscv is supported
 case "$hw_platform" in
@@ -300,10 +307,11 @@ if [ "$target_type" = "directory" ] && [ "$nested_datasets" = "1" ] ; then
 	exit 1
 fi
 
-if [ "$target_type" = "directory" ] && [ "$copy_package_cache" = "1" ] ; then
-	echo "-b boot code update only applies to datasets"
-	exit 1
-fi
+# Why?
+#if [ "$target_type" = "directory" ] && [ "$copy_package_cache" = "1" ] ; then
+#	echo "-c copy only applies to datasets"
+#	exit 1
+#fi
 
 if [ "$release_branch" = "CURRENT" ] && [ "$package_branch" = "quarterly" ] ; then
 	echo "$release_input cannot be used with quarterly packages"
@@ -350,7 +358,7 @@ if [ "$target_type" = "directory" ] ; then
 #	pkg_sets="FreeBSD-set-minimal-jail FreeBSD-set-base-jail"
 	pkg_sets="FreeBSD-set-minimal-jail"
 
-	echo Creating root directory
+	echo ; echo Creating root directory
 	[ -d "$target_input" ] || mkdir -p "$target_input"
 	[ -d "$target_input" ] || \
 		{ echo "mkdir $target_input failed" ; exit 1 ; }
@@ -358,9 +366,9 @@ if [ "$target_type" = "directory" ] ; then
 
 elif [ "$target_type" = "dataset" ] ; then
 
-	pkg_sets="FreeBSD-set-minimal FreeBSD-kernel-generic FreeBSD-bootloader"
+	pkg_sets="FreeBSD-set-minimal FreeBSD-kernel-generic FreeBSD-bootloader FreeBSD-ssh FreeBSD-bhyve FreeBSD-jail"
 
-	echo Creating root dataset
+	echo ; echo Creating root dataset
 	zfs get name "$target_input" > /dev/null 2>&1 || \
 	zfs create -o canmount=noauto -o mountpoint=/ \
 		"$target_input"
@@ -511,23 +519,15 @@ fi
 # Note that /etc/pkg/FreeBSD.conf will be overridden by FreeBSD-pkg-bootstrap
 echo ; echo Generating "${work_dir:?}/pkg/FreeBSD.conf"
 
+# STABLE and CURRENT are handled the same. Not sure about BETA and RC builds
 if [ "$release_branch" = "RELEASE" ] ; then
 	package_string="${VERSION_MAJOR}:${cpu_arch}/$package_branch"
 	kmods_string="${VERSION_MAJOR}:${cpu_arch}/kmods_${package_branch}_$VERSION_MINOR"
 	base_string="${VERSION_MAJOR}:${cpu_arch}/base_release_$VERSION_MINOR"
-elif [ "$release_branch" = "STABLE" ] ; then
-	package_string="${VERSION_MAJOR}:${cpu_arch}/$package_branch"
-	kmods_string="${VERSION_MAJOR}:${cpu_arch}/kmods_${package_branch}_$VERSION_MINOR"
-	base_string="${VERSION_MAJOR}:${cpu_arch}/base_latest"
-elif [ "$release_branch" = "CURRENT" ] ; then
+else
 	package_string="${VERSION_MAJOR}:${cpu_arch}/latest"
 	kmods_string="${VERSION_MAJOR}:${cpu_arch}/kmods_latest"
 	base_string="${VERSION_MAJOR}:${cpu_arch}/base_latest"
-else
-	# Observe the future behavior of ALPHAs, BETAs, and RCs - Treating like a RELEASE
-	package_string="${VERSION_MAJOR}:${cpu_arch}/$package_branch"
-	kmods_string="${VERSION_MAJOR}:${cpu_arch}/kmods_${package_branch}_$VERSION_MINOR"
-	base_string="${VERSION_MAJOR}:${cpu_arch}/base_release_$VERSION_MINOR"
 fi
 
 #if [ "$release_branch" = "CURRENT" ] ; then
@@ -540,7 +540,8 @@ fi
 # <<- will strip tab indenting
 # 'HERE' to not expand, allowing $ABI
 
-if [ "$VERSION_MAJOR" = "15" ] ; then
+# Is this short term for 15.0-RELEASE or long-term?
+if [ "$VERSION_MAJOR" = "15" -a "$release_branch" = "RELEASE" ] ; then
 	key_kluge="pkgbase-15"
 else
 	key_kluge="pkg"
@@ -573,17 +574,27 @@ HERE
 [ -f "${work_dir:?}/pkg/FreeBSD.conf" ] || \
 	{ echo FreeBSD.conf generation failed ; exit 1 ; }
 
-echo ; echo Enabling FreeBSD-base in /usr/local/etc/pkg/repos
+echo ; echo Enabling all pkg repo in /usr/local/etc/pkg/repos
 
 [ -d ${mount_point:?}/usr/local/etc/pkg/repos ] || \
 	mkdir -p ${mount_point:?}/usr/local/etc/pkg/repos
 
 # create a /usr/local/etc/pkg/repos/FreeBSD.conf file, e.g.:
-echo "FreeBSD-base: { enabled: yes }" > \
-	${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-base.conf
 
-[ -f "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-base.conf" ] || \
-	{ echo ${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD-base.conf failed ; exit 1 ; }
+echo "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/$package_branch\", enabled: yes }" > \
+	${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf
+
+# Needed?
+#echo "FreeBSD-ports-kmods: { enabled: yes }" >> \
+#	${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf
+
+#echo "FreeBSD-base: { enabled: yes }" >> \
+#	${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf
+
+[ -f "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf" ] || \
+	{ echo ${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf failed ; exit 1 ; }
+
+cat ${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf
 
 
 ########################
@@ -602,10 +613,8 @@ if [ "$copy_package_cache" = "1" ] ; then
 	cp /var/cache/pkg/* "${mount_point:?}/var/cache/pkg/" || \
 		{ echo "Package copy failed" ; exit 1 ; }
 
-ls -l ${mount_point:?}/var/cache/pkg/ | tail
-du -h -d1 ${mount_point:?}/var/cache/pkg/
-echo bun DEBUG HOW DID THAT GO? ; read go
-
+#	ls -l ${mount_point:?}/var/cache/pkg/ | tail
+#	du -h -d1 ${mount_point:?}/var/cache/pkg/
 fi
 
 ###############
@@ -641,7 +650,6 @@ pkg \
 # BASE INSTALL #
 ################
 
-
 echo ; echo "Installing base packages"
 
 	pkg \
@@ -666,10 +674,6 @@ if [ "$write_graph" = "1" ] ; then
 	    > "$graph_filename"
 	echo ; echo "This can be graphed with 'fdp -Tx11 ${work_dir:?}/dependency-graph.g' and similar"
 fi
-
-# Created by FreeBSD-pkg-bootstrap and no need to generate
-echo DEBUG the post-installation"${mount_point:?}/etc/pkg/FreeBSD.conf" reads:
-cat "${mount_point:?}/etc/pkg/FreeBSD.conf"
 
 # Q: Remove the temporary one in tmp/pkg?
 
@@ -763,6 +767,15 @@ if [ "$sideload" = "1" ] ; then
 		cp /etc/wpa_supplicant.conf "${mount_point:?}/etc/"
 	[ -f /etc/exports ] && \
 		cp /etc/exports "${mount_point:?}/etc/"
+	[ -f /etc/ssh/sshd_config ] && \
+		cp /etc/ssh/sshd_config "${mount_point:?}/etc/ssh/"
+	if [ -f /usr/local/etc/pkg/repos/FreeBSD.conf ] ; then
+		[ -d "${mount_point:?}/usr/local/etc/pkg/repos" ] || \
+			mkdir -p "${mount_point:?}/usr/local/etc/pkg/repos"
+		cp /usr/local/etc/pkg/repos/FreeBSD.conf \
+		"${mount_point:?}/usr/local/etc/pkg/repos/"
+	fi 
+
 	# Was failing on host keys
 	cp -rp /etc/ssh/* "${mount_point:?}/etc/ssh/"
 	cp -rp /root/.ssh "${mount_point:?}/root/"
@@ -847,16 +860,10 @@ fi # End if sideload
 # CLEAN CACHE #
 ###############
 
-#echo DEBUG checking the size of the pkg cache
-#	du -h -d 1 "${mount_point:?}/var/cache/pkg"
-
 if [ "$clean_package_cache" = "1" ] ; then
 	echo "Cleaning ${mount_point:?}/var/cache/pkg/"
 	find -s -f "${mount_point:?}/var/cache/pkg/" -- -mindepth 1 -delete
 fi
-
-#echo DEBUG checking the size of the pkg cache
-#	du -h -d 1 "${mount_point:?}/var/cache/pkg"
 
 
 ##############
@@ -887,36 +894,52 @@ if [ "$install_boot_code" = 1 ] ; then
 	#/dev/gpt/efiboot0 on /boot/efi (msdosfs, local)
 	#/dev/gpt/efiboot100 on /media/boot/efi (msdosfs, local)
 
-	# First look for an imagine.sh-adjusted EFI partition
-	if [ -e /dev/gpt/efiboot100 ] ; then
-		efi_part="/dev/gpt/efiboot100"
-	elif [ -e /dev/gpt/efiboot0 ] ; then
-		efi_part="/dev/gpt/efiboot0"
-	else
-		echo "Cannot determine EFI partition"
-		exit 1
-	fi
+#	# First look for an imagine.sh-adjusted EFI partition
+#	# Injection will cause this to fail
+#	if [ -e /dev/gpt/efiboot100 ] ; then
+#		efi_part="/dev/gpt/efiboot100"
+#	elif [ -e /dev/gpt/efiboot0 ] ; then
+#		efi_part="/dev/gpt/efiboot0"
+#	else
+#		echo "Cannot determine EFI partition"
+#		exit 1
+#	fi
+
+	efi_part=$( mount | grep efiboot | tail -1 | cut -d " " -f1 )
+	echo ; echo The efiboot partition appears to be $efi_part
+	[ -e "$efi_part" ] || { echo $efi_part failed to validate ; exit 1 ; }
+
 
 	# Could each member of RAIDZ have an EFI partition? Using the first
-	efi_mount=$(mount | grep $efi_part | tail -1 | cut -w -f 3)
+	# Would they be mounted?
+	efi_mount=$( mount | grep $efi_part | tail -1 | cut -w -f 3 )
 
-	if [ -f ${efi_mount}/efi/freebsd/loader.efi ; then
+	echo ; echo Backing up current EFI loaders
+	if [ -f ${efi_mount}/efi/freebsd/loader.efi ] ; then
 		echo "Found ${efi_mount}/efi/freebsd/loader.efi"
-		cp "${efi_mount}/efi/freebsd/loader.efi" \
+		cp -p "${efi_mount}/efi/freebsd/loader.efi" \
 			"${efi_mount}/efi/freebsd/loader.efi.bak"
 		host_efi_loaders="${efi_mount}/efi/freebsd/loader.efi"
 	fi
 
 	if [ -f ${efi_mount}/EFI/BOOT/bootx64.efi ] ; then
 		echo "Found ${efi_mount}/EFI/BOOT/bootx64.efi"
-		cp "${efi_mount}/EFI/BOOT/bootx64.efi" \
+		cp -p "${efi_mount}/EFI/BOOT/bootx64.efi" \
 			"${efi_mount}/EFI/BOOT/bootx64.efi.bak"
 	host_efi_loaders="$host_efi_loaders ${efi_mount}/EFI/BOOT/bootx64.efi"
 	fi
 
-	if [ -f ${efi_mount}/efi/boot/bootaa64.efi ; then
+# 15.0-RELEASE arm64
+	if [ -f ${efi_mount}/EFI/BOOT/bootaa64.efi ] ; then
+		echo "Found ${efi_mount}/EFI/BOOT/bootaa64.efi"
+		cp -p "${efi_mount}/EFI/BOOT/bootaa64.efi" \
+			"${efi_mount}/EFI/BOOT/bootaa64.efi.bak"
+	host_efi_loaders="$host_efi_loaders ${efi_mount}/EFI/BOOT/bootaa64.efi"
+	fi
+
+	if [ -f ${efi_mount}/efi/boot/bootaa64.efi ] ; then
 		echo "Found ${efi_mount}/efi/boot/bootaa64.efi"
-		cp "${efi_mount}/efi/boot/bootaa64.efi" \
+		cp -p "${efi_mount}/efi/boot/bootaa64.efi" \
 			"${efi_mount}/efi/boot/bootaa64.efi.bak"
 	host_efi_loaders="$host_efi_loaders ${efi_mount}/efi/boot/bootaa64.efi"
 	fi
@@ -931,12 +954,55 @@ if [ "$install_boot_code" = 1 ] ; then
 
 	for loader in $host_efi_loaders ; do
 
+	echo Copying ${mount_point:?}/boot/loader.efi
 	cp -a ${mount_point:?}/boot/loader.efi $loader || \
 		{ echo "loader.efi cp failed" ; exit 1 ; }
-		
-	cp -a ${mount_point:?}/boot/loader.efi $loader || \
-		{ echo "bootx64.efi cp failed" ; exit 1 ; }
 	done
+fi
+
+
+#############
+# ADD USERS #
+#############
+
+if [ "$add_users" = 1 ] ; then
+
+# Sync with imagine.sh
+# Do we want the chroots of the original script?
+# No. It will fail when installing to other architectures
+# Pulling from release/tools/arm.sub arm_create_user() and vagrant.conf
+
+# Only works on new users?
+#	/usr/sbin/pw -R ${mount_point:?} usermod root -w yes
+
+	# Pulling from rc.local.sh
+	echo ; echo Setting root password
+	echo -n 'root' | /usr/sbin/pw -R ${mount_point:?} \
+		usermod -n root -h 0 || \
+		{ echo Set root password failed ; exit 1 ; }
+
+	echo ; echo Adding user freebsd
+	mkdir -p ${mount_point:?}/home/freebsd
+	/usr/sbin/pw -R ${mount_point:?} groupadd freebsd -g 1001 || \
+		{ echo mkdir /home/freebsd failed ; exit 1 ; }
+
+# Note that csh is not installed by default, changing to /bin/sh
+	/usr/sbin/pw -R ${mount_point:?} useradd freebsd \
+		-m -M 0755 -w yes -n freebsd -u 1001 -g 1001 -G 0 \
+		-c 'FreeBSD User' -d '/home/freebsd' -s '/bin/sh' || \
+		{ echo useradd freebsd failed ; exit 1 ; }
+
+	ehco ; echo "Enabling sshd"
+	echo 'sshd_enable="YES"' >> ${mount_point:?}/etc/rc.conf || \
+		{ echo SSHd enable failed ; exit 1 ; }
+
+	# Enable ntpd while at it
+	if [ ! $( "grep -q ntpd ${mount_point:?}/etc/rc.conf" ) ] ; then
+		echo 'ntpd_enable="YES"' >> \
+			${mount_point:?}/etc/rc.conf
+		echo 'ntpd_sync_on_start="YES"' >> \
+			${mount_point:?}/etc/rc.conf
+	fi
 fi
 
 
@@ -948,51 +1014,28 @@ if [ "$enable_crash_dumping" = 1 ] ; then
 
 	echo ; echo Enabling crash dumping
 
-	if [ ! $(sysrc -R ${mount_point:?} -c dumpdev) ] ; then
-		echo "dumpdev not enabled in ${mount_point:?}/etc/rc.conf"
-		echo "Enabling dumpdev=\"AUTO\""
-		sysrc -R ${mount_point:?} dumpdev=AUTO || \
-			{ echo "sysrc dumpdev=AUTO failed" ; exit 1 ; }
-	fi
-
 	if [ ! $(sysctl -n debug.debugger_on_panic) = "1" ] ; then
 		echo "Enabling debug.debugger_on_panic=1"
-echo "debug.debugger_on_panic=1" >> ${mount_point:?}/etc/sysctl.conf || \
+		echo "debug.debugger_on_panic=1" >> \
+			${mount_point:?}/etc/sysctl.conf || \
 			{ echo "Failed to configure sysctl.conf" ; exit 1 ; }
-		echo "Crash dumping can be tested with:"
+		echo ; echo "Crash dumping can be tested with:"
 		echo "sysctl debug.kdb.panic=1"
 	fi
-fi
 
+	# NOT USING sysrc as it depends on platform-dependent chroot
+#	if [ ! $(sysrc -R ${mount_point:?} -c dumpdev) ] ; then
+#		echo "dumpdev not enabled in ${mount_point:?}/etc/rc.conf"
+#		echo "Enabling dumpdev=\"AUTO\""
+#		sysrc -R ${mount_point:?} dumpdev=AUTO || \
+#			{ echo "sysrc dumpdev=AUTO failed" ; exit 1 ; }
+#	fi
+	grep -q "dumpdev=\"AUTO\"" ${mount_point:?}/etc/rc.conf || \
+	echo "dumpdev=\"AUTO\"" >> ${mount_point:?}/etc/rc.conf
 
-#############
-# ADD USERS #
-#############
-
-if [ "$add_users" = 1 ] ; then
-
-# Do we want the chroots of the original script?
-# Pulling from release/tools/arm.sub arm_create_user() and vagrant.conf
-
-# Only works on new users?
-#	/usr/sbin/pw -R ${mount_point:?} usermod root -w yes
-
-	# Pulling from rc.local.sh
-	echo ; echo Setting root password
-	echo -n 'root' | /usr/sbin/pw -R ${mount_point:?} usermod -n root -h 0
-
-	echo ; echo Adding user freebsd
-	mkdir -p ${mount_point:?}/home/freebsd
-	/usr/sbin/pw -R ${mount_point:?} groupadd freebsd -g 1001
-
-# Note that csh is not installed by default, changing to /bin/sh
-	/usr/sbin/pw -R ${mount_point:?} useradd freebsd \
-		-m -M 0755 -w yes -n freebsd -u 1001 -g 1001 -G 0 \
-		-c 'FreeBSD User' -d '/home/freebsd' -s '/bin/sh'
-
-	ehco ; echo "Enabling sshd"
-	echo 'sshd_enable="YES"' >> ${mount_point:?}/etc/rc.conf
-fi
+	grep -q "dumpdev=\"AUTO\"" ${mount_point:?}/etc/rc.conf || \
+		{ echo "dumpdev enable failed" ; exit 1 ; }
+fi # End enable_crash_dumping
 
 
 ###############
@@ -1036,7 +1079,7 @@ fi # End jail
 # MOUNT HANDLING #
 ##################
 
-# DEBUG DECIDE ON CORRECT BEHAVIOR IF A JAIL ETC.
+# DECIDE ON CORRECT BEHAVIOR IF A JAIL ETC.
 
 if [ "$keep_mounted" = 0 ] ; then
 	if [ "$target_type" = "dataset" ] ; then
