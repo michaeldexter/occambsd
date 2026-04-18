@@ -271,6 +271,7 @@ Note the -c flag that copies packages from the host's package cache, saving on r
 -b (Install boot code)
 -u (Add root/root and freebsd/freebsd users and enable sshd)
 -d (Enable crash dumping)
+-9 (Enable p9fs VM/jail root)
 -o <output directory/work> (Default: /tmp/propagate)
 ```
 

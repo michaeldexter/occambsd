@@ -100,7 +100,7 @@ f_usage() {
 	echo "-b (Install boot code)"
 	echo "-u (Add root/root and freebsd/freebsd users and enable sshd)"
 	echo "-d (Enable crash dumping)"
-	echo "-9 (Enable p9fs jail root)"
+	echo "-9 (Enable p9fs VM/jail root)"
 	echo "-o <output directory/work> (Default: /tmp/propagate)"
 	echo
 	exit 0
