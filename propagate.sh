@@ -1111,6 +1111,8 @@ if [ "$p9fs_root" = 1 ] ; then
 		>> "${work_dir}/root/boot/loader.conf"
 	echo "propagate / p9fs rw 0 0" > "${work_dir}/root/etc/fstab"
 
+	echo "hostname=\"propagate\"" > ${work_dir:?}/root/etc/rc.conf
+
 	echo ; echo "Generating $work_dir/bhyve-p9fs-boot.sh script"
 	cat << HERE > "$work_dir/bhyve-p9fs-boot.sh"
 #!/bin/sh
