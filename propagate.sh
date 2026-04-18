@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.14
+# Version v.0.99.15
 
 # propagate.sh - Packaged Base installer to boot environments and jails
 
@@ -345,6 +345,11 @@ if [ "$p9fs_root" = "1" ] && [ ! "$target_type" = "directory" ] ; then
 fi
 
 if [ "$p9fs_root" = "1" ] && [ "$sideload" = "1" ] ; then
+	echo "p9fs jail root and sideloading are mutually-exclusive"
+	exit 1
+fi
+
+if [ "$p9fs_root" = "1" ] && [ ! "$hw_platform" = "amd64" ] ; then
 	echo "p9fs jail root and sideloading are mutually-exclusive"
 	exit 1
 fi
