@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.15
+# Version v.0.99.16
 
 # propagate.sh - Packaged Base installer to boot environments and jails
 
@@ -286,7 +286,7 @@ release_branch=$( echo "$release_input" | cut -d "-" -f 2 )
 VERSION_MAJOR=$( echo "$release_version" | cut -d "." -f 1 )
 # ABI: FreeBSD:15:amd64, FreeBSD:16:arm64
 ABI="FreeBSD:${VERSION_MAJOR}:$cpu_arch"
-# VERSION_MINOR: "0", "1"
+# VERSION_MINOR: "0", "1" etc.
 # cut -d "." -f 2 only works with a .N
 # 16.x moves to 16.0-CURRENT
 VERSION_MINOR="$( echo "$release_version" | cut -d "." -f 2 )"
@@ -318,12 +318,6 @@ if [ "$target_type" = "directory" ] && [ "$nested_datasets" = "1" ] ; then
 	exit 1
 fi
 
-# Why?
-#if [ "$target_type" = "directory" ] && [ "$copy_package_cache" = "1" ] ; then
-#	echo "-c copy only applies to datasets"
-#	exit 1
-#fi
-
 if [ "$release_branch" = "CURRENT" ] && [ "$package_branch" = "quarterly" ] ; then
 	echo "$release_input cannot be used with quarterly packages"
 	exit 1 
@@ -350,7 +344,7 @@ if [ "$p9fs_root" = "1" ] && [ "$sideload" = "1" ] ; then
 fi
 
 if [ "$p9fs_root" = "1" ] && [ ! "$hw_platform" = "amd64" ] ; then
-	echo "p9fs jail root and sideloading are mutually-exclusive"
+	echo "p9fs is only supported on amd64"
 	exit 1
 fi
 
@@ -519,7 +513,6 @@ fi
 ################
 
 # Following bsdinstall 15.0 - 16.0 appears to use the package keys
-# Note that a 15 Jail on 16 might fail for want of the pkgbase-15 keys
 
 echo ; echo Making ${mount_point:?}/usr/share/keys
 mkdir -p ${mount_point:?}/usr/share/keys
@@ -549,14 +542,14 @@ fi
 echo ; echo Generating "${work_dir:?}/pkg/FreeBSD.conf"
 
 # STABLE and CURRENT are handled the same. Not sure about BETA and RC builds
-if [ "$release_branch" = "RELEASE" ] ; then
-	package_string="${VERSION_MAJOR}:${cpu_arch}/$package_branch"
-	kmods_string="${VERSION_MAJOR}:${cpu_arch}/kmods_${package_branch}_$VERSION_MINOR"
-	base_string="${VERSION_MAJOR}:${cpu_arch}/base_release_$VERSION_MINOR"
-else
+if [ "$release_branch" = "CURRENT" -o "$release_branch" = "STABLE" ] ; then
 	package_string="${VERSION_MAJOR}:${cpu_arch}/latest"
 	kmods_string="${VERSION_MAJOR}:${cpu_arch}/kmods_latest"
 	base_string="${VERSION_MAJOR}:${cpu_arch}/base_latest"
+else
+	package_string="${VERSION_MAJOR}:${cpu_arch}/$package_branch"
+	kmods_string="${VERSION_MAJOR}:${cpu_arch}/kmods_${package_branch}_$VERSION_MINOR"
+	base_string="${VERSION_MAJOR}:${cpu_arch}/base_release_$VERSION_MINOR"
 fi
 
 #if [ "$release_branch" = "CURRENT" ] ; then
@@ -569,13 +562,14 @@ fi
 # <<- will strip tab indenting
 # 'HERE' to not expand, allowing $ABI
 
-# Is this short term for 15.0-RELEASE or long-term?
-if [ "$VERSION_MAJOR" = "15" -a "$release_branch" = "RELEASE" ] ; then
-	key_kluge="pkgbase-15"
-else
+# RELEASES HAVE SEPARATE KEYS THAT ONLY RE SIGNS
+if [ "$release_branch" = "CURRENT" -o "$release_branch" = "STABLE" ] ; then
 	key_kluge="pkg"
+else
+	key_kluge="pkgbase-${VERSION_MAJOR}"
 fi
 
+#cat <<- 'HERE' > "${work_dir:?}/pkg/FreeBSD.conf"
 cat <<- HERE > "${work_dir:?}/pkg/FreeBSD.conf"
 FreeBSD-ports: {
   url: "pkg+https://pkg.FreeBSD.org/FreeBSD:${package_string}",
@@ -603,22 +597,17 @@ HERE
 [ -f "${work_dir:?}/pkg/FreeBSD.conf" ] || \
 	{ echo FreeBSD.conf generation failed ; exit 1 ; }
 
-echo ; echo Enabling all pkg repo in /usr/local/etc/pkg/repos
+cat ${work_dir:?}/pkg/FreeBSD.conf
+
+echo ; echo Enabling FreeBSD-base repo in /usr/local/etc/pkg/repos
 
 [ -d ${mount_point:?}/usr/local/etc/pkg/repos ] || \
 	mkdir -p ${mount_point:?}/usr/local/etc/pkg/repos
 
 # create a /usr/local/etc/pkg/repos/FreeBSD.conf file, e.g.:
 
-echo "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/$package_branch\", enabled: yes }" > \
+echo "FreeBSD-base: { enabled: yes }" >> \
 	${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf
-
-# Needed?
-#echo "FreeBSD-ports-kmods: { enabled: yes }" >> \
-#	${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf
-
-#echo "FreeBSD-base: { enabled: yes }" >> \
-#	${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf
 
 [ -f "${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf" ] || \
 	{ echo ${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf failed ; exit 1 ; }
@@ -633,7 +622,7 @@ cat ${mount_point:?}/usr/local/etc/pkg/repos/FreeBSD.conf
 if [ "$copy_package_cache" = "1" ] ; then
 	echo ; echo "Copying /var/cache/pkg/ packages from the host"
 
-	# NOT INCLUDED IN THE UPSTREAM IMAGE
+	# NOT INCLUDED IN SOME UPSTREAM IMAGES
 	[ -d "${mount_point:?}/var/cache/pkg" ] || \
 		mkdir -p "${mount_point:?}/var/cache/pkg"
 	[ -d "${mount_point:?}/var/cache/pkg" ] || \
@@ -656,10 +645,11 @@ echo ; echo "Installing pkg with pkg update"
 ABI="FreeBSD:${VERSION_MAJOR}:${cpu_arch}"
 
 pkg \
+	--option OSVERSION="${VERSION_MAJOR}0${VERSION_MINOR}000" \
+	--option IGNORE_OSVERSION="yes" \
 	--option ABI="${ABI:?}" \
 	--rootdir "${mount_point:?}" \
 	--repo-conf-dir "${work_dir:?}/pkg" \
-	--option IGNORE_OSVERSION="yes" \
 		update || \
 		{ echo "pkg install failed" ; exit 1 ; }
 #	install -y -- pkg || \
@@ -667,10 +657,11 @@ pkg \
 # Repeating to install pkg itself as it cannot be done with base package sets
 
 pkg \
+	--option OSVERSION="${VERSION_MAJOR}0${VERSION_MINOR}000" \
+	--option IGNORE_OSVERSION="yes" \
 	--option ABI="${ABI:?}" \
 	--rootdir "${mount_point:?}" \
 	--repo-conf-dir "${work_dir:?}/pkg" \
-	--option IGNORE_OSVERSION="yes" \
 	install -y -- pkg || \
 		{ echo "pkg install failed" ; exit 1 ; }
 
@@ -679,16 +670,28 @@ pkg \
 # BASE INSTALL #
 ################
 
+echo ; echo "Upgrading base package repo"
+
+pkg \
+	--option OSVERSION="${VERSION_MAJOR}0${VERSION_MINOR}000" \
+	--option IGNORE_OSVERSION="yes" \
+	--option ABI="${ABI:?}" \
+	--rootdir "${mount_point:?}" \
+	--repo-conf-dir "${work_dir:?}/pkg" \
+	upgrade -r FreeBSD-base || \
+		{ echo "pkg upgrade failed" ; exit 1 ; }
+
 echo ; echo "Installing base packages"
 
-	pkg \
-		--option ABI="${ABI:?}" \
-		--rootdir "${mount_point:?}" \
-		--repo-conf-dir "${work_dir:?}/pkg" \
-		--option IGNORE_OSVERSION="yes" \
-		install -U -y --repository FreeBSD-base \
-		$pkg_sets || \
-			{ echo pkg install failed ; exit 1 ; }	
+pkg \
+	--option OSVERSION="${VERSION_MAJOR}0${VERSION_MINOR}000" \
+	--option IGNORE_OSVERSION="yes" \
+	--option ABI="${ABI:?}" \
+	--rootdir "${mount_point:?}" \
+	--repo-conf-dir "${work_dir:?}/pkg" \
+	install -U -y --repository FreeBSD-base \
+	$pkg_sets || \
+		{ echo pkg install failed ; exit 1 ; }	
 
 if [ "$write_graph" = "1" ] ; then
 	graph_filename="${work_dir:?}/dependency-graph.g"
@@ -717,6 +720,7 @@ fi
 if [ "$additional_packages" ] ; then
 	echo Installing additional packages
 	pkg \
+		--option OSVERSION="${VERSION_MAJOR}0${VERSION_MINOR}000" \
 		--option ABI="${ABI:?}" \
 		--option IGNORE_OSVERSION="yes" \
 		--rootdir "${mount_point:?}" \
@@ -779,7 +783,7 @@ done
 if [ "$sideload" = "1" ] ; then
 
 # Push a working configuration to a fresh installation
-	echo "Copying configuration files - missing ones will fail for now"
+	echo "Copying common configuration files"
 	[ -f /boot/loader.conf ] && cp /boot/loader.conf \
 		"${mount_point:?}/boot/"
 	[ -f /etc/fstab ] && cp /etc/fstab "${mount_point:?}/etc/"
@@ -788,6 +792,7 @@ if [ "$sideload" = "1" ] ; then
 	[ -f /etc/sysctl.conf ] && cp /etc/sysctl.conf "${mount_point:?}/etc/"
 	[ -f /etc/group ] && cp /etc/group "${mount_point:?}/etc/"
 	[ -f /etc/pwd.db ] && cp /etc/pwd.db "${mount_point:?}/etc/"
+	[ -f /etc/resolv.conf ] && cp /etc/resolv.conf "${mount_point:?}/etc/"
 	[ -f /etc/spwd.db ] && cp /etc/spwd.db "${mount_point:?}/etc/"
 	[ -f /etc/master.passwd ] && cp /etc/master.passwd \
 		"${mount_point:?}/etc/"
@@ -862,7 +867,6 @@ HERE
 		# These are pulled from the 14.2-RELEASE ZFS VM-IMAGE
 
 		echo ; echo "Copying in zpool root fstab"
-#		cp /etc/fstab ${mount_point:?}/etc/fstab || \
 		cp ${zpool_mountpoint}/etc/fstab ${mount_point:?}/etc/fstab || \
 			{ echo "fstab cp failed" ; exit 1 ; }
 		echo ; echo The fstab reads:
@@ -873,16 +877,6 @@ HERE
 	fi
 
 fi # End if sideload
-
-# Needs to be ARM64-aware
-#if [ ! "$target_type" = "directory" ] ; then
-#	echo Bootability smoke test
-#	[ -f $mount_point/boot/loader_lua.efi ] || \
-#		{ echo loader_lua.efi missing ; exit 1 ; }
-
-#	[ -f $mount_point/boot/lua/loader.lua ] || \
-#		{ echo loader.lua missing ; exit 1 ; }
-#fi
 
 
 ###############
@@ -1172,7 +1166,6 @@ if [ "$keep_mounted" = 0 ] ; then
 	fi
 else
 	echo ; echo "To unmount the target root, run:"
-#	echo "umount ${mount_point:?}/dev"
 	echo "umount ${mount_point:?}"
 	echo
 fi

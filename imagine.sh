@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.13
+# Version v.0.99.16
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -219,7 +219,8 @@ release_url=""
 file_to_extract=""
 fs_type="zfs"
 #omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151054.cloud.raw.zst"
-omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151056/omnios-r151056.cloud.raw.zst"
+#omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151056/omnios-r151056.cloud.raw.zst"
+omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151058/omnios-r151058.cloud.raw.zst"
 omnios_arm64_url="https://downloads.omnios.org/media/braich/braich-151055.raw.zst"
 
 debian_amd64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-amd64.raw"
@@ -1025,7 +1026,8 @@ target_path="${work_dir}/custom-${hw_platform}-${cpu_arch}-${u_boot_package}.img
 # Add release information to raw image name for reuse?
 		echo ; echo "Extracting root partition freebsd-${fs_type}.raw"
 #			Consier camdd ...
-		dd if=/dev/md${md_id}p3 of=freebsd-${fs_type}.raw bs=1m || \
+		dd if=/dev/md${md_id}p3 of=freebsd-${fs_type}.raw \
+		status=progress conv=sync bs=1m || \
 		{ echo "freebsd-${fs_type}.raw extraction failed" ; exit 1 ; }
 
 		echo ; echo "Detaching memory device $md_id"
@@ -1084,38 +1086,38 @@ target_path="${work_dir}/custom-${hw_platform}-${cpu_arch}-${u_boot_package}.img
 			quartz64-a)
 		dd if=/usr/local/share/u-boot/u-boot-quartz64-a/idbloader.img \
 			of=${work_dir}/u-boot-output.raw \
-				seek=64 bs=512 conv=sync,notrunc || \
-			{ echo u-boot dd failed ; exit 1 ; }
+			seek=64 bs=512 status=progress conv=sync,notrunc || \
+				{ echo u-boot dd failed ; exit 1 ; }
 		dd if=/usr/local/share/u-boot/u-boot-quartz64-a/u-boot.itb \
 			of=${work_dir}/u-boot-output.raw \
-				seek=16384 bs=512 conv=sync,notrunc || \
-					{ echo u-boot dd failed ; exit 1 ; }
+			seek=16384 bs=512 status=progress conv=sync,notrunc || \
+				{ echo u-boot dd failed ; exit 1 ; }
 		;;
 			quartz64-b)
 		dd if=/usr/local/share/u-boot/u-boot-quartz64-b/idbloader.img \
 			of=${work_dir}/u-boot-output.raw \
-				seek=64 bs=512 conv=sync,notrunc || \
-					{ echo u-boot dd failed ; exit 1 ; }
+			seek=64 bs=512 status=progress conv=sync,notrunc || \
+				{ echo u-boot dd failed ; exit 1 ; }
 		dd if=/usr/local/share/u-boot/u-boot-quartz64-b/u-boot.itb \
 			of=/dev/${work_dir}/u-boot-output.raw \
-				seek=16384 bs=512 conv=sync,notrunc || \
-					{ echo u-boot dd failed ; exit 1 ; }
+			seek=16384 bs=512 status=progress conv=sync,notrunc || \
+				{ echo u-boot dd failed ; exit 1 ; }
 		;;
 			pine64)
 	dd if=/usr/local/share/u-boot/u-boot-pine64/u-boot-sunxi-with-spl.bin \
 			of=${work_dir}/u-boot-output.raw \
-				seek=1 bs=128k conv=sync,notrunc || \
-					{ echo u-boot dd failed ; exit 1 ; }
+			seek=1 bs=128k status=progress conv=sync,notrunc || \
+				{ echo u-boot dd failed ; exit 1 ; }
 		;;
 			rockpro64) 
 		dd if=/usr/local/share/u-boot/u-boot-rockpro64/idbloader.img \
 			of=${work_dir}/u-boot-output.raw \
-				seek=64 bs=512 conv=sync,notrunc || \
-					{ echo u-boot dd failed ; exit 1 ; }
+			seek=64 bs=512 status=progress conv=sync,notrunc || \
+				{ echo u-boot dd failed ; exit 1 ; }
 		dd if=/usr/local/share/u-boot/u-boot-rockpro64/u-boot.itb \
 			of=${work_dir}/u-boot-output.raw \
-				seek=16384 bs=512 conv=sync,notrunc || \
-					{ echo u-boot dd failed ; exit 1 ; }
+			seek=16384 bs=512 status=progress conv=sync,notrunc || \
+				{ echo u-boot dd failed ; exit 1 ; }
 		;;
 			*)
 			{ echo Unexpected error ; exit 1 ; }
@@ -2433,7 +2435,7 @@ fi
 [ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; } 
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
 [ -f /usr/local/share/uefi-firmware/BHYVE_UEFI.fd ] || \\
-	{ echo \"BHYVE_UEFI.fd missing\" ; exit 1 ; }
+	{ echo "BHYVE_UEFI.fd missing" ; exit 1 ; }
 
 kldstat -q -m vmm || kldload vmm
 sleep 1
@@ -2557,7 +2559,7 @@ bhyve_script=bhyve-${release_input}-${hw_platform}-${fs_type}-${u_boot_package}.
 [ \$( id -u ) = 0 ] || { echo "Must be root" ; exit 1 ; }
 [ -e /dev/vmm/$vm_name ] && { bhyvectl --destroy --vm=$vm_name ; sleep 1 ; }
 [ -f /usr/local/share/u-boot/u-boot-bhyve-arm64/u-boot.bin ] || \\
-        { echo \"u-boot-bhyve-arm64 not installed\" ; exit 1 ; }
+        { echo "u-boot-bhyve-arm64 not installed" ; exit 1 ; }
 
 kldstat -q -m vmm || kldload vmm
 sleep 1
@@ -2588,7 +2590,7 @@ qemu_script=qemu-${release_input}-${hw_platform}-${fs_type}-${u_boot_package}.sh
 			cat << HERE > $work_dir/$qemu_script
 #!/bin/sh
 [ -f /usr/local/bin/qemu-system-aarch64 ] || \
-	{ echo qemu package not installed ; exit 1 ; }
+	{ echo "qemu package not installed" ; exit 1 ; }
 [ -f /usr/local/share/u-boot/u-boot-qemu-arm64/u-boot.bin ] || \\
 { echo \"u-boot-qemu-arm64 package not installed\" ; exit 1 ; }
 # pkg install qemu u-boot-qemu-arm64
