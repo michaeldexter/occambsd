@@ -82,6 +82,7 @@ additional_option=""
 package_base=0
 generic_world=0
 generic_kernel=0
+module_string=""
 patch_dir=""
 generate_jail=0
 generate_p9fs=0
@@ -427,6 +428,8 @@ echo kernel_modules reads $kernel_modules
 if [ -n "$kernel_modules" ] ; then
 	echo "makeoptions	MODULES_OVERRIDE=\"$kernel_modules\"" \
 		>> "$work_dir/OCCAMBSD"
+else
+	module_string="NO_MODULES=YES"
 fi
 
 echo kernel_modules reads $kernel_modules
@@ -555,6 +558,7 @@ else
 	/usr/bin/time -h env MAKEOBJDIRPREFIX="$obj_dir" \
 		make -C "$src_dir" -j"$buildjobs" \
 		buildkernel KERNCONFDIR="$kernconf_dir" KERNCONF="$kernconf" \
+		$module_string \
 		TARGET="$target" TARGET_ARCH="$target_arch" \
 			> "$log_dir/build-kernel.log" 2>&1 || \
 				{ echo "buildkernel failed" ; exit 1 ; }
