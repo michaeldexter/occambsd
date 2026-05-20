@@ -1,0 +1,12 @@
+# This profile appears to be the bare minimum buildable world and kernel
+# for FreeBSD 15.x RELEASE and STABLE
+
+target="amd64"
+target_arch="amd64"
+cpu="HAMMER"
+
+build_options="WITHOUT_AUTO_OBJ WITHOUT_UNIFIED_OBJDIR WITHOUT_INSTALLLIB WITHOUT_DYNAMICROOT"
+
+kernel_modules=""
+kernel_devices="pci loop ether"
+kernel_options="SCHED_ULE"
