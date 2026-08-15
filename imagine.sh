@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.16
+# Version v.0.99.17
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -801,9 +801,6 @@ elif [ "$release_input" = "debian" ] ; then
 # TEST AND FAIL EARLY - can only test after parsing -r input
 	[ "$packages" ] && \
 		{ echo "-s Packages not available with Debian" ; exit 1 ; }
-
-	[ "$fs_type" = "zfs" ] && \
-		{ echo "-z ZFS not available with Debian" ; exit 1 ; }
 
 	[ -n "$mirror_path" ] && \
 		{ echo "-T mirroring not supported with Debian" ; exit 1 ; }
@@ -1814,6 +1811,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		done
 #	fi
 	echo ; mdconfig -lv
+	echo ; echo The resulting $target_dev label reads:
 	echo ; gpart show -l $target_dev
 
 	if [ -n "$mirror_path" ] ; then
@@ -1856,6 +1854,7 @@ mdconfig -lv | grep -q "md$md_id2" > /dev/null 2>&1 && \
 		gpart modify -i $_id -l ${_label}$label_id2 $target_dev2 || \
 			{ echo $target_dev2 $_id relabel failed ; exit 1 ; }
 		done
+		echo ; echo The resulting $target_dev label reads:
 		echo ; gpart show -l $target_dev
 
 		# Is there any reason this should be by label or is this safer?
@@ -2237,8 +2236,9 @@ if [ "$mount_required" = 1 ] ; then
 			{ echo SSHd enable failed ; exit 1 ; }
 
 		# Enable ntpd while at it
-		if [ ! $( "grep -q ntpd ${mount_point:?}/etc/rc.conf" ) ] ; then
-			echo 'ntpd_enable="YES"' >> 								${mount_point:?}/etc/rc.conf
+		if [ ! $( grep -q ntpd ${mount_point:?}/etc/rc.conf > /dev/null 2>&1 ) ] ; then
+			echo 'ntpd_enable="YES"' >> \
+				${mount_point:?}/etc/rc.conf
 			echo 'ntpd_sync_on_start="YES"' >> \
 				${mount_point:?}/etc/rc.conf
 		fi
