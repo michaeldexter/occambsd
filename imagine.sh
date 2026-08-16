@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.17
+# Version v.0.99.18
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -221,7 +221,8 @@ fs_type="zfs"
 #omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151054.cloud.raw.zst"
 #omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151056/omnios-r151056.cloud.raw.zst"
 omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151058/omnios-r151058.cloud.raw.zst"
-omnios_arm64_url="https://downloads.omnios.org/media/braich/braich-151055.raw.zst"
+#omnios_arm64_url="https://downloads.omnios.org/media/braich/braich-151055.raw.zst"
+omnios_arm64_url="https://downloads.omnios.org/media/braich/braich-151059.raw.zst"
 
 debian_amd64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-amd64.raw"
 debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-arm64.raw"
@@ -229,8 +230,8 @@ debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-
 #debian_arm64_url="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.raw"
 
 # Stable CHR rather than LongTerm, Testing, or Development
-routeros_amd64_url="https://download.mikrotik.com/routeros/7.21.3/chr-7.21.3.img.zip"
-routeros_arm64_url="https://download.mikrotik.com/routeros/7.21.3/chr-7.21.3-arm64.img.zip"
+routeros_amd64_url="https://download.mikrotik.com/routeros/7.21.5/chr-7.21.5.img.zip"
+routeros_arm64_url="https://download.mikrotik.com/routeros/7.21.5/chr-7.21.5-arm64.img.zip"
 
 memtest86_url="https://www.memtest86.com/downloads/memtest86-usb.zip"
 
@@ -602,6 +603,11 @@ fi
 
 if [ "$target_prefix" = "/dev/" ] ; then
 	[ "$vmdk" = 0 ] || { echo "-v does not support devices" ; exit 1 ; }
+fi
+
+if [ "$release_input" = "debian" -o "routeros" ] ; then
+	# Override the default of "ZFS"
+	fs_type="ufs"
 fi
 
 if [ "$fs_type" = "ufs" ] && [ -n "$mirror_path" ] ; then
