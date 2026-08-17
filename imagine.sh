@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.18
+# Version v.0.99.19
 
 # imagine.sh - a disk image imager for virtual and hardware machines
 
@@ -170,6 +170,8 @@ f_usage() {
 	echo "-B u-boot-<board port/package> (u-Boot emBedded Board acroBatics)"
 	echo "(i.e. rockpro64)"
 	echo "-g <gigabytes> (grow image to gigabytes i.e. 10)"
+# Refactor: Working out swap growth acrobatics
+#	echo "-s <gigabytes> (grow swap partition to gigabytes i.e. 8)"
 	echo "-p \"<packages>\" (Quoted space-separated list)"
 	echo "-c (Copy cached packages from the host to the target)"
 	echo "-C (Clean package cache after installation)"
@@ -217,7 +219,7 @@ ABI=""
 release_branch=""
 release_url=""
 file_to_extract=""
-fs_type="zfs"
+fs_type="zfs"	# Default until overridden
 #omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/stable/omnios-r151054.cloud.raw.zst"
 #omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151056/omnios-r151056.cloud.raw.zst"
 omnios_amd64_url="https://us-west.mirror.omnios.org/downloads/media/r151058/omnios-r151058.cloud.raw.zst"
@@ -268,6 +270,7 @@ u_boot_package=""
 #u_boot_output=""
 grow_required=0
 grow_size=""
+swap_size=""
 inject=0
 packages=""
 copy_package_cache=0
@@ -389,6 +392,16 @@ while getopts O:a:r:ot:T:fB:g:p:cCudmM:IVvnUZ:Ax:i: opts ; do
 		[ "$grow_size" -gt 7 ] || \
 			{ echo "-g must be a number larger than 7" ; exit 1 ; }
 		attachment_required=1
+	;;
+
+	s)
+# Refactor: Working out swap growth acrobatics
+		swap_size="$OPTARG"
+		# Implied numeric validation
+		[ "$swap_size" -gt 2 ] || \
+			{ echo "-g must be a number larger than 2" ; exit 1 ; }
+		attachment_required=1
+		expansion_required=1
 	;;
 
 	p)
@@ -605,7 +618,7 @@ if [ "$target_prefix" = "/dev/" ] ; then
 	[ "$vmdk" = 0 ] || { echo "-v does not support devices" ; exit 1 ; }
 fi
 
-if [ "$release_input" = "debian" -o "routeros" ] ; then
+if [ "$release_input" = "debian" -o "$release_input" = "routeros" ] ; then
 	# Override the default of "ZFS"
 	fs_type="ufs"
 fi
@@ -650,6 +663,8 @@ fi
 
 [ -n "$mirror_path" ] && [ "$vmdk" = 1 ] && \
 	{ echo "Mirroring does not support VMDK" ; exit 1 ; }
+
+# Refactor: Determine that swap growth and image growth will not conflict
 
 
 #############
@@ -807,6 +822,9 @@ elif [ "$release_input" = "debian" ] ; then
 # TEST AND FAIL EARLY - can only test after parsing -r input
 	[ "$packages" ] && \
 		{ echo "-s Packages not available with Debian" ; exit 1 ; }
+
+	[ "$fs_type" = "zfs" ] && \
+		{ echo "-z ZFS not available with Debian" ; exit 1 ; }
 
 	[ -n "$mirror_path" ] && \
 		{ echo "-T mirroring not supported with Debian" ; exit 1 ; }
@@ -1076,6 +1094,12 @@ target_path="${work_dir}/custom-${hw_platform}-${cpu_arch}-${u_boot_package}.img
 	-p freebsd-${fs_type}/rootfs:=${work_dir}/freebsd-${fs_type}.raw \
 			-o ${work_dir}/u-boot-output.raw || \
 				{ echo "mkimg failed" ; exit 1 ; }
+
+#
+# Refactor: THIS IS THE ACROBATICS NEEDED FOR SWAP GROWTH
+# Determining the order of operations will be tricky
+# Note the streaming decompression to hardware device scenario
+#
 
 		[ -f ${work_dir}/u-boot-output.raw ] || \
 			{ echo mkimg failed ; exit ; }
