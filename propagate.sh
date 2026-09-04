@@ -1020,12 +1020,13 @@ if [ "$add_users" = 1 ] ; then
 		{ echo SSHd enable failed ; exit 1 ; }
 
 	# Enable ntpd while at it
-	if [ ! $( "grep -q ntpd ${mount_point:?}/etc/rc.conf" ) ] ; then
+# This nesting will not work as $mount_point will not be defined
+#	if [ ! $( "grep -q ntpd ${mount_point:?}/etc/rc.conf" ) ] ; then
 		echo 'ntpd_enable="YES"' >> \
 			${mount_point:?}/etc/rc.conf
 		echo 'ntpd_sync_on_start="YES"' >> \
 			${mount_point:?}/etc/rc.conf
-	fi
+#	fi
 fi
 
 
