@@ -26,7 +26,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Version v.0.99.16
+# Version v.0.99.17
 
 # propagate.sh - Packaged Base installer to boot environments and jails
 
@@ -1015,7 +1015,7 @@ if [ "$add_users" = 1 ] ; then
 		-c 'FreeBSD User' -d '/home/freebsd' -s '/bin/sh' || \
 		{ echo useradd freebsd failed ; exit 1 ; }
 
-	ehco ; echo "Enabling sshd"
+	echo ; echo "Enabling sshd"
 	echo 'sshd_enable="YES"' >> ${mount_point:?}/etc/rc.conf || \
 		{ echo SSHd enable failed ; exit 1 ; }
 
